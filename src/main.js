@@ -2667,7 +2667,7 @@ function civicCounts() {
   state.tiles.forEach((tl, i) => {
     if (!tl || tl.t === 'part' || (tl.cs && !tl.cs.to)) return;
     if (tl.t === 'service') c[tl.v] = (c[tl.v] || 0) + 1;
-    else if (tl.t === 'com' && (tl.v === 'gold' || tl.v === 'bank')) c.gold.push(i);
+    else if (tl.t === 'com' && (tl.v === 'gold' || tl.v === 'bank')) { c.gold.push(i); if (tl.v === 'bank') c.bank++; }
     else if (tl.t === 'com' && c[tl.v] !== undefined) c[tl.v]++;
     else if (tl.t === 'farm') c.farm++;
     else if (tl.t === 'ind') { if (fixedVariant(tl)) c[tl.v] = (c[tl.v] || 0) + 1; }
