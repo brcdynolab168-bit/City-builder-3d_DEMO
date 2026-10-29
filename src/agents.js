@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { pickVehicle } from './vehicles.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ---------------------------------------------------------------
@@ -143,8 +144,20 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     carCache[type] = r;
     return r;
   }
+  // ตัวแทนว่าง (ใช้กับโมเดล .glb ที่ไม่มีไฟ/ส่วนให้สลับวัสดุ)
+  const dummyMesh = () => { const m = new THREE.Mesh(new THREE.BufferGeometry(), M.lamp); m.visible = false; return m; };
+  function glbWrap(cat, extra = {}) {
+    const v = pickVehicle(cat);
+    if (!v) return null;
+    try {
+      const g = new THREE.Group();
+      g.add(v);
+      return { obj: g, headMesh: dummyMesh(), tailMesh: dummyMesh(), glb: true, ...extra };
+    } catch (e) { console.warn('โมเดล', cat, e); return null; }
+  }
   const CAR_TYPES = ['sedan', 'sedan', 'hatch', 'suv', 'pickup', 'hatch'];
   function makeCar(type = pick(CAR_TYPES), bodyMat = pick(M.car)) {
+    const gm = glbWrap('cars'); if (gm) return gm;
     const G = carGeos(type);
     const g = new THREE.Group();
     const bodyM = mesh(G.body, bodyMat);
@@ -161,34 +174,71 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     const key = grab ? 'g' + (i % 3) : i % BIKE_COLS.length;
     if (bikeCache[key]) return bikeCache[key];
     const [paint, jacket, helmet] = grab ? [0x00b14f, 0x00b14f, 0x00b14f] : BIKE_COLS[i % BIKE_COLS.length];
-    const b = [], lamps = [];
-    for (const z of [-0.07, 0.07]) {
-      b.push(part(cylGeo, 0x161616, 0, 0.026, z, 0.052, 0.014, 0.052, 0, 0, Math.PI / 2));
-      b.push(part(cylGeo, 0xb8bec4, 0, 0.026, z, 0.026, 0.016, 0.026, 0, 0, Math.PI / 2));
+    const base = [], lamps = [], sit = [], lie = [];
+    const PANTS_C = 0x2f3e4e;
+    // ล้อ (ยาง + ดุม) ฐานล้อ 0.17
+    for (const z of [-0.085, 0.088]) {
+      base.push(part(cylGeo, 0x141414, 0, 0.03, z, 0.06, 0.02, 0.06, 0, 0, Math.PI / 2));
+      base.push(part(cylGeo, 0xc3c9cf, 0, 0.03, z, 0.032, 0.024, 0.032, 0, 0, Math.PI / 2));
     }
-    b.push(part(boxGeo, paint, 0, 0.056, -0.005, 0.034, 0.05, 0.13));              // ตัวถัง/ถัง
-    b.push(part(boxGeo, 0x222222, 0, 0.088, -0.03, 0.034, 0.014, 0.075));          // เบาะ
-    b.push(part(boxGeo, paint, 0, 0.065, -0.085, 0.032, 0.03, 0.04));              // ท้าย
-    b.push(part(boxGeo, 0x888888, 0, 0.06, 0.06, 0.01, 0.075, 0.012, 0.35));       // โช้คหน้า
-    b.push(part(boxGeo, 0x222222, 0, 0.1, 0.07, 0.075, 0.009, 0.009));             // แฮนด์
-    // คนขับ
-    b.push(part(boxGeo, jacket, 0, 0.128, -0.025, 0.044, 0.06, 0.03, 0.35));       // ลำตัว
-    b.push(part(sphGeo, helmet, 0, 0.178, 0.0, 0.036, 0.038, 0.04));               // หมวกกันน็อก
-    b.push(part(boxGeo, 0x222222, 0, 0.176, 0.016, 0.03, 0.014, 0.01));            // กระจกหมวก
+    base.push(part(boxGeo, 0x8a9096, 0, 0.066, 0.082, 0.008, 0.08, 0.008, -0.3));           // โช้คหน้า
+    base.push(part(boxGeo, paint, 0, 0.07, 0.09, 0.03, 0.008, 0.055));                      // บังโคลนหน้า
+    base.push(part(boxGeo, paint, 0, 0.082, 0.05, 0.042, 0.075, 0.012, -0.3));              // บังลม/โล่หน้าขา
+    base.push(part(boxGeo, paint, 0, 0.118, 0.062, 0.042, 0.032, 0.03));                    // หัวไฟ
+    base.push(part(boxGeo, 0x202020, 0, 0.128, 0.04, 0.08, 0.008, 0.008));                  // แฮนด์
     for (const sx of [-1, 1]) {
-      b.push(part(boxGeo, jacket, sx * 0.026, 0.12, 0.02, 0.012, 0.012, 0.075, 0.2));  // แขน
-      b.push(part(boxGeo, 0x2f3e4e, sx * 0.024, 0.088, -0.02, 0.014, 0.014, 0.07, -0.4)); // ขา
+      base.push(part(boxGeo, 0x202020, sx * 0.042, 0.128, 0.04, 0.012, 0.012, 0.014));      // กริป
+      base.push(part(boxGeo, 0x9fb0bd, sx * 0.036, 0.15, 0.036, 0.016, 0.014, 0.004));      // กระจกมองข้าง
     }
-    lamps.push(part(boxGeo, 0xfff6d8, 0, 0.09, 0.082, 0.026, 0.02, 0.01));
-    lamps.push(part(boxGeo, 0xdd2a1a, 0, 0.066, -0.108, 0.026, 0.014, 0.008));
-    return (bikeCache[key] = { body: merge(b), lamps: merge(lamps) });
+    base.push(part(boxGeo, 0x252525, 0, 0.044, 0.0, 0.044, 0.008, 0.1));                    // พื้นวางเท้า
+    base.push(part(boxGeo, paint, 0, 0.062, -0.052, 0.036, 0.04, 0.08));                    // ถัง/ตัวถังกลาง
+    base.push(part(boxGeo, 0x222222, 0, 0.092, -0.05, 0.038, 0.016, 0.105));               // เบาะ
+    base.push(part(boxGeo, paint, 0, 0.074, -0.098, 0.034, 0.034, 0.05));                   // ฝาท้าย
+    base.push(part(boxGeo, 0x8a9096, 0, 0.098, -0.118, 0.034, 0.006, 0.04));                // ตะแกรงหลัง
+    base.push(part(cylGeo, 0xb8bec4, 0.027, 0.043, -0.08, 0.014, 0.075, 0.014, Math.PI / 2)); // ท่อไอเสีย
+    base.push(part(boxGeo, 0x303030, 0, 0.044, -0.03, 0.03, 0.03, 0.04));                   // เครื่องยนต์
+    // คนขับนั่งปกติ
+    sit.push(part(boxGeo, jacket, 0, 0.138, -0.048, 0.044, 0.066, 0.032, 0.28));            // ลำตัว
+    sit.push(part(sphGeo, helmet, 0, 0.188, -0.026, 0.04, 0.04, 0.042));                    // หมวกกันน็อก
+    sit.push(part(boxGeo, 0x1c1c1c, 0, 0.186, -0.007, 0.03, 0.012, 0.01));                  // กระจกหมวก
+    for (const sx of [-1, 1]) {
+      sit.push(part(boxGeo, jacket, sx * 0.032, 0.14, -0.0, 0.011, 0.011, 0.09, 0.12));      // แขน
+      sit.push(part(boxGeo, PANTS_C, sx * 0.024, 0.1, -0.012, 0.016, 0.016, 0.075, -0.12));  // ต้นขา
+      sit.push(part(boxGeo, PANTS_C, sx * 0.026, 0.066, 0.03, 0.015, 0.055, 0.015, 0.3));    // หน้าแข้ง
+    }
+    // คนขับนอนราบกับตัวรถ (ท่าซิ่ง)
+    lie.push(part(boxGeo, jacket, 0, 0.122, -0.04, 0.044, 0.03, 0.115));                    // ลำตัวนอนราบ
+    lie.push(part(sphGeo, helmet, 0, 0.135, 0.044, 0.04, 0.04, 0.042));                     // หัวยื่นไปหน้า
+    lie.push(part(boxGeo, 0x1c1c1c, 0, 0.135, 0.062, 0.03, 0.012, 0.01));
+    for (const sx of [-1, 1]) {
+      lie.push(part(boxGeo, jacket, sx * 0.03, 0.124, 0.02, 0.011, 0.011, 0.1, 0.05));       // แขนเหยียดตรง
+      lie.push(part(boxGeo, PANTS_C, sx * 0.02, 0.108, -0.125, 0.015, 0.015, 0.1, -0.08));   // ขาเหยียดไปข้างหลัง
+    }
+    lamps.push(part(boxGeo, 0xfff6d8, 0, 0.118, 0.079, 0.03, 0.02, 0.008));
+    lamps.push(part(boxGeo, 0xdd2a1a, 0, 0.078, -0.125, 0.026, 0.014, 0.008));
+    return (bikeCache[key] = { body: merge([...base, ...sit]), lie: merge([...base, ...lie]), lamps: merge(lamps) });
   }
-  function makeBike(grab = false) {
+  function makeBike(grab = false, stunt = false) {
+    const gm = glbWrap('bikes');
+    if (gm) {
+      const rig = new THREE.Group(); rig.position.set(0, 0.03, -0.085);
+      const inner = new THREE.Group(); inner.position.set(0, -0.03, 0.085);
+      inner.add(gm.obj.children[0]); rig.add(inner); gm.obj.add(rig);
+      return { ...gm, rig, bodyMesh: dummyMesh(), lieMesh: null, isBike: true, pitch: 0 };
+    }
     const G = bikeGeos((Math.random() * 12) | 0, grab);
     const g = new THREE.Group();
+    const rig = new THREE.Group();          // จุดหมุนอยู่ที่ล้อหลัง (ไว้ยกหน้า)
+    rig.position.set(0, 0.03, -0.085);
+    const inner = new THREE.Group();
+    inner.position.set(0, -0.03, 0.085);
     const lamps = mesh(G.lamps, M.lamp, false);
-    g.add(mesh(G.body, M.vc, false), lamps);
-    return { obj: g, headMesh: lamps, tailMesh: lamps, isBike: true };
+    const body = mesh(G.body, M.vc, false);
+    inner.add(body, lamps);
+    let lie = null;
+    if (stunt) { lie = mesh(G.lie, M.vc, false); lie.visible = false; inner.add(lie); }
+    rig.add(inner); g.add(rig);
+    return { obj: g, rig, bodyMesh: body, lieMesh: lie, headMesh: lamps, tailMesh: lamps, isBike: true, pitch: 0 };
   }
 
   // ---------- รถเมล์ ----------
@@ -209,6 +259,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     return (busCache[i] = { body: merge(b), lamps: merge(lamps) });
   }
   function makeBus() {
+    const gm = glbWrap('buses'); if (gm) return gm;
     const G = busGeos((Math.random() * 3) | 0);
     const g = new THREE.Group();
     const lamps = mesh(G.lamps, M.lamp, false);
@@ -218,6 +269,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   // แท็กซี่/แกร็บ: รถปกติ + ป้ายไฟบนหลังคา
   function makeTaxiLike(grab) {
     const made = grab ? makeCar(pick(CAR_TYPES), M.grab) : makeCar('sedan', pick(M.taxi));
+    if (made.glb) return made;
     const sign = new THREE.Mesh(boxGeo, grab ? M.roofSignG : M.roofSign);
     sign.scale.set(0.05, 0.02, 0.03); sign.position.set(0, 0.168, -0.01);
     made.obj.add(sign);
@@ -410,8 +462,13 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     const full = mesh(G.full, M.fur, false); full.visible = false; g.add(full);
     return { obj: g, legs, lodParts, full, near: true };
   }
-  const makeDog = () => makeQuad(dogGeos(Math.floor(Math.random() * 12)), 0.048, 0.014, 0.03);
-  const makeCat = () => makeQuad(catGeos(Math.floor(Math.random() * 10)), 0.038, 0.01, 0.022);
+  const glbAnimal = cat => {
+    const v = pickVehicle(cat); if (!v) return null;
+    const g = new THREE.Group(); g.add(v);
+    return { obj: g, legs: [0, 1, 2, 3].map(() => new THREE.Group()), lodParts: [], full: null, near: true, glb: true };
+  };
+  const makeDog = () => glbAnimal('dogs') || makeQuad(dogGeos(Math.floor(Math.random() * 12)), 0.048, 0.014, 0.03);
+  const makeCat = () => glbAnimal('cats') || makeQuad(catGeos(Math.floor(Math.random() * 10)), 0.038, 0.01, 0.022);
 
   // ---------- เส้นทาง ----------
   const walkable = (kind, x, z) => {
@@ -460,7 +517,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       if (role === 'bus') { made = makeBus(); speed = 0.7 + Math.random() * 0.1; }
       else if (role === 'taxi') { made = makeTaxiLike(false); speed = 0.9 + Math.random() * 0.15; }
       else if (role === 'grab') { const bk = Math.random() < 0.45; made = bk ? makeBike(true) : makeTaxiLike(true); speed = 1 + Math.random() * 0.2; if (bk) lat = 0.2; }
-      else if (role === 'rbike') { made = makeBike(); speed = 1.9 + Math.random() * 0.6; lat = 0.2; }
+      else if (role === 'rbike') { made = makeBike(false, true); speed = 1.9 + Math.random() * 0.6; lat = 0.2; }
       else if (role === 'rcar') { made = makeCar(pick(['sedan', 'hatch'])); speed = 1.7 + Math.random() * 0.5; }
       else if (Math.random() < 0.22) { made = makeBike(); role = 'bike'; speed = 1.1 + Math.random() * 0.25; lat = 0.2; }
       else made = makeCar();
@@ -905,15 +962,36 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       const d = opts[(Math.random() * opts.length) | 0];
       const n = kind === 'bike' ? 4 + Math.floor(Math.random() * 4) : 3 + Math.floor(Math.random() * 3);
       const ttl = 28 + Math.random() * 14;
+      let prev = null;
       for (let i = 0; i < n; i++) {
         const a = createAgent('car', x, z, d, kind === 'bike' ? 'rbike' : 'rcar');
-        a.s = Math.min(0.92, i * 0.17); a.ttl = ttl;
+        a.ttl = ttl; a.stuntT = Math.random() * 3;
+        if (kind === 'bike' && i % 2 === 1 && prev) {   // ขับคู่ ขนานกัน คนละฝั่งเลน ความเร็วเท่ากัน
+          a.pair = prev; prev.pair = a; a.side = -1; a.s = prev.s; a.speed = prev.speed;
+        } else a.s = Math.min(0.92, Math.floor(i / 2) * 0.3);
+        prev = a;
         agents.car.push(a);
       }
       events.push({ e: 'pack', kind, x, z, axis: d[0] !== 0 ? 'row' : 'col', n });
       return true;
     }
     return false;
+  }
+
+
+  // ท่าโชว์ของเด็กแว้น: ยกหน้า (wheelie) / นอนขับ / ขับปกติ สลับกันเป็นช่วงๆ
+  function stuntUpdate(a, dt, sdt) {
+    if (a.crash) { a.rig.rotation.x = 0; return; }
+    a.stuntT -= dt;
+    if (a.stuntT <= 0) {
+      if (a.stunt) { a.stunt = null; a.stuntT = 1.5 + Math.random() * 3; }
+      else { const r = Math.random(); a.stunt = r < 0.5 ? 'wheelie' : r < 0.82 ? 'lying' : null; a.stuntT = a.stunt ? 2.5 + Math.random() * 2.2 : 1.2 + Math.random() * 2; }
+      const lie = a.stunt === 'lying';
+      if (a.lieMesh) { a.lieMesh.visible = lie; a.bodyMesh.visible = !lie; }
+    }
+    const target = a.stunt === 'wheelie' ? 0.62 : 0;
+    a.pitch += (target - a.pitch) * Math.min(1, dt * 4.5);
+    a.rig.rotation.x = -a.pitch;
   }
 
   function update(dt, night, gameSpeed, env = {}) {
@@ -944,7 +1022,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       a.speedNow = a.speed * wetSlow * signalFactor(a);
       if (checkpoint && a.x === checkpoint.x && a.z === checkpoint.z) { a.speedNow *= 0.3; if (a.s > 0.4 && a.s < 0.5 && !a.chk) { a.chk = true; checkpoint.stopped++; } }
       for (const o of cars) {
-        if (o === a || o.d[0] !== a.d[0] || o.d[1] !== a.d[1]) continue;
+        if (o === a || o.d[0] !== a.d[0] || o.d[1] !== a.d[1] || o.pair === a) continue;
         let gap = null;
         if (o.x === a.x && o.z === a.z && o.s > a.s) gap = o.s - a.s;
         else if (o.x === a.x + a.d[0] && o.z === a.z + a.d[1]) gap = 1 - a.s + o.s;
@@ -960,6 +1038,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
         if (a.kind !== 'car') a.speedNow = a.speed * signalFactor(a);
         if (!a.crash && sdt > 0 && !advance(a, sdt)) { removeAgent(a); removed = true; continue; }
         place(a);
+        if (a.role === 'rbike' && a.rig) stuntUpdate(a, dt, sdt);
         if (a.full && cam) {
           // ระยะจากกล้อง: ไกลมาก = ซ่อน, ไกล = โมเดลรวมชิ้นเดียว ไม่แกว่งแขนขา, ใกล้ = เคลื่อนไหวเต็ม
           const dx = a.obj.position.x - cam.x, dy = a.obj.position.y - cam.y, dz = a.obj.position.z - cam.z;

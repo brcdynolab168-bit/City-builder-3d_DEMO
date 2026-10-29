@@ -10,6 +10,7 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { createAgents } from './agents.js';
 import { createWeather } from './weather.js';
 import { createWildlife } from './wildlife.js';
+import { VEH_RE, addVehicleModel, vehicleCount } from './vehicles.js';
 import { ICON, mountIcons } from './icons.js';
 import { createMinimap } from './minimap.js';
 import { createDrag } from './dragrace.js';
@@ -1132,6 +1133,12 @@ async function loadModels() {
   const jobs = [];
   let ok = 0;
   for (const [path, url] of Object.entries(modelUrls)) {
+    const vm = path.match(VEH_RE);
+    if (vm) {
+      jobs.push(loader.loadAsync(url).then(gltf => { addVehicleModel(vm[1].toLowerCase(), gltf.scene); ok++; })
+        .catch(err => console.warn('โหลดโมเดลไม่สำเร็จ:', path, err)));
+      continue;
+    }
     const m = path.match(MODEL_RE);
     if (!m) continue;
     const type = m[1].toLowerCase();
@@ -3178,6 +3185,7 @@ el.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
   painting = true;
   updateHover(e);
+  if (currentTool === 'select') boatClick(e);
   if (hoverTile && currentTool === 'select') mosqueClick(hoverTile.x, hoverTile.z);
   if (hoverTile) applyTool(hoverTile.x, hoverTile.z);
 });
@@ -3482,7 +3490,11 @@ load();
 applyControlMode(settings.mode);
 applyQuality(settings.quality); // สร้างเมืองครั้งแรกตามระดับกราฟิก
 loadModels().then(n => {
-  if (n > 0) { console.info(`โหลดโมเดล .glb แล้ว ${n} ไฟล์`); rebuildAll(); }
+  if (n > 0) {
+    console.info(`โหลดโมเดล .glb แล้ว ${n} ไฟล์`);
+    if (vehicleCount() > 0) { try { wildlife.useModels(); agents.clear(); } catch (e) { console.warn('ใช้โมเดลยานพาหนะไม่สำเร็จ', e); } }
+    rebuildAll();
+  }
 });
 selectTool('road');
 updateHUD();
@@ -3518,45 +3530,76 @@ function refreshAudioStats() {
   updateAzan(sp.mosque || 0);
 }
 
-// เสียงอาซานจาก YouTube (ฝังเครื่องเล่นซ่อนไว้ ไม่ได้ดาวน์โหลดไฟล์) ดังขึ้นเมื่อซูมเข้าใกล้มัสยิด
-let ytPlayer = null, ytReady = false, ytLoading = false;
-function ensureAzan() {
-  if (ytLoading) return;
-  ytLoading = true;
+// เสียงจาก YouTube (ฝังเครื่องเล่นซ่อนไว้ ไม่ได้ดาวน์โหลดไฟล์): อาซานที่มัสยิด / เสียงเรือ
+const yt = { loading: false, queue: [] };
+function ytWhenReady(cb) {
+  if (window.YT && window.YT.Player) { cb(); return; }
+  yt.queue.push(cb);
+  if (yt.loading) return;
+  yt.loading = true;
   try {
-    const host = document.createElement('div');
-    host.id = 'ytAzan';
-    host.style.cssText = 'position:fixed;width:2px;height:2px;left:-10px;bottom:-10px;opacity:0;pointer-events:none';
-    document.body.appendChild(host);
-    window.onYouTubeIframeAPIReady = () => {
-      ytPlayer = new window.YT.Player('ytAzan', { videoId: '6R44AxFn1p4', playerVars: { controls: 0, loop: 1, playlist: '6R44AxFn1p4', playsinline: 1, disablekb: 1 }, events: { onReady: () => { ytReady = true; } } });
-    };
+    window.onYouTubeIframeAPIReady = () => { yt.queue.splice(0).forEach(f => f()); };
     const s = document.createElement('script');
     s.src = 'https://www.youtube.com/iframe_api';
     document.head.appendChild(s);
   } catch (e) { /* ออฟไลน์/ถูกบล็อก = ข้ามไป */ }
 }
-let azanOn = false;
+function makeYTSound(videoId, hostId) {
+  const o = { player: null, ready: false, started: false, on: false };
+  o.ensure = () => {
+    if (o.started) return;
+    o.started = true;
+    try {
+      const host = document.createElement('div');
+      host.id = hostId;
+      host.style.cssText = 'position:fixed;width:2px;height:2px;left:-10px;bottom:-10px;opacity:0;pointer-events:none';
+      document.body.appendChild(host);
+      ytWhenReady(() => {
+        o.player = new window.YT.Player(hostId, { videoId, playerVars: { controls: 0, loop: 1, playlist: videoId, playsinline: 1, disablekb: 1 }, events: { onReady: () => { o.ready = true; } } });
+      });
+    } catch (e) {}
+  };
+  o.sync = vol => {          // vol 0..1
+    if (o.on && !menu.isOpen) o.ensure();
+    if (!o.ready) return;
+    try {
+      if (o.on && !menu.isOpen) {
+        o.player.setVolume(Math.round(Math.max(0, Math.min(1, vol)) * 80));
+        if (o.player.getPlayerState() !== 1) { if (o.seekRand) { o.player.seekTo(Math.random() * 20, true); o.seekRand = false; } o.player.playVideo(); }
+      } else if (o.player.getPlayerState() === 1) o.player.pauseVideo();
+    } catch (e) {}
+  };
+  return o;
+}
+const azan = makeYTSound('6R44AxFn1p4', 'ytAzan');
+const boatSnd = makeYTSound('4kMJYNKc77w', 'ytBoat');
 function updateAzan(w) {
-  if (azanOn && !menu.isOpen) ensureAzan();
-  if (!ytReady) return;
-  try {
-    if (azanOn && !menu.isOpen) {
-      ytPlayer.setVolume(Math.round(Math.max(0.25, Math.min(1, w)) * 75));   // ซูมใกล้มัสยิดจะดังขึ้น
-      if (ytPlayer.getPlayerState() !== 1) ytPlayer.playVideo();
-    } else if (ytPlayer.getPlayerState() === 1) ytPlayer.pauseVideo();
-  } catch (e) {}
+  azan.sync(Math.max(0.25, Math.min(1, w)));   // ซูมใกล้มัสยิดจะดังขึ้น
+  boatSnd.sync(0.65);
 }
 // กดมัสยิด 3 ครั้งติดกัน (โหมดดูเมือง) = เปิดเสียงอาซาน, กดอีกครั้ง = ปิด
 const mq = { n: 0, t: 0, mi: -1 };
 function mosqueClick(x, z) {
   const mi = masterOf(idx(x, z)), tl = state.tiles[mi];
   if (!tl || tl.t !== 'service' || tl.v !== 'mosque') { mq.n = 0; return; }
-  if (azanOn) { azanOn = false; mq.n = 0; addNews('info', ['azan.off', {}]); return; }
+  if (azan.on) { azan.on = false; mq.n = 0; addNews('info', ['azan.off', {}]); return; }
   const now = performance.now();
   mq.n = (mq.mi === mi && now - mq.t < 800) ? mq.n + 1 : 1;
   mq.mi = mi; mq.t = now;
-  if (mq.n >= 3) { mq.n = 0; azanOn = true; ensureAzan(); addNews('info', ['azan.on', {}]); }
+  if (mq.n >= 3) { mq.n = 0; azan.on = true; azan.ensure(); addNews('info', ['azan.on', {}]); }
+}
+// กดเรือ 3 ครั้งติดกัน = เปิดเสียงเรือ (เริ่มจากจุดสุ่ม), กดเรือ 1 ครั้ง = ปิด
+const bq = { n: 0, t: 0 };
+function boatClick(e) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+  raycaster.setFromCamera(mouse, camera);
+  if (!wildlife.hit(raycaster)) { bq.n = 0; return false; }
+  if (boatSnd.on) { boatSnd.on = false; bq.n = 0; addNews('info', ['boat.off', {}]); return true; }
+  const now = performance.now();
+  bq.n = now - bq.t < 800 ? bq.n + 1 : 1; bq.t = now;
+  if (bq.n >= 3) { bq.n = 0; boatSnd.on = true; boatSnd.seekRand = true; boatSnd.ensure(); addNews('info', ['boat.on', {}]); }
+  return true;
 }
 
 let fpsFrames = 0;

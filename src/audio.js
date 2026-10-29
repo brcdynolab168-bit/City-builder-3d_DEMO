@@ -194,6 +194,7 @@ export function createAudio() {
     f.connect(g); pan(g, rnd() * 2 - 1).connect(ambLP);
   }
   function siren(v) {
+    v *= 0.4;   // เบาลง
     const t = ctx.currentTime;
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = 'sine';

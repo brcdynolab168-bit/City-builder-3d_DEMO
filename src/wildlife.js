@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { pickVehicle, hasVehicle } from './vehicles.js';
 import { riverZ, SEA_Y } from './terrain.js';
 
 // ---------------------------------------------------------------
@@ -70,16 +71,16 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
   try {
     const cv = document.createElement('canvas'); cv.width = 64; cv.height = 128;
     const c = cv.getContext('2d');
-    const gr = c.createLinearGradient(0, 0, 0, 128);
-    gr.addColorStop(0, 'rgba(255,255,255,0.75)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    const gr = c.createLinearGradient(0, 128, 0, 0);
+    gr.addColorStop(0, 'rgba(255,255,255,0.8)'); gr.addColorStop(0.4, 'rgba(255,255,255,0.32)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
     c.fillStyle = gr;
-    c.beginPath(); c.moveTo(32 - 5, 0); c.lineTo(32 + 5, 0); c.lineTo(64, 128); c.lineTo(0, 128); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(32 - 5, 128); c.lineTo(32 + 5, 128); c.lineTo(64, 0); c.lineTo(0, 0); c.closePath(); c.fill();
     wakeTex = new THREE.CanvasTexture(cv);
   } catch (e) { wakeTex = null; }
   const wakeMat = wakeTex ? new THREE.MeshBasicMaterial({ map: wakeTex, transparent: true, depthWrite: false }) : M.wake;
   const mat2 = (c, o) => mat(c, { roughness: 0.6, ...o });
   const C = {
-    wood: mat2(0x8a5a35), woodD: mat2(0x5e3d22), white: mat2(0xf1efe6), blue: mat2(0x2f6fb0), red: mat2(0xb23a2e), green: mat2(0x2e8b57),
+    deck: mat2(0xc9a46a), wood: mat2(0x8a5a35), woodD: mat2(0x5e3d22), white: mat2(0xf1efe6), blue: mat2(0x2f6fb0), red: mat2(0xb23a2e), green: mat2(0x2e8b57),
     yellow: mat2(0xe8b92c), grey: mat2(0x6d7680), dark: mat2(0x2a2f36), glass: mat2(0x9fd4e8, { roughness: 0.2 }),
     cont: [0xc0392b, 0x2e86c1, 0xe1b12c, 0x27ae60].map(c => mat2(c)),
     skin: mat2(0xe0b48c), shirt: mat2(0x3b8f6a), lamp: new THREE.MeshBasicMaterial({ color: 0xffe8a0 }),
@@ -87,20 +88,21 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
   const sph = new THREE.SphereGeometry(0.5, 8, 6);
   const A = (g, geo, m, sx, sy, sz, px, py, pz) => { const o = mesh(geo, m, sx, sy, sz, px, py, pz); g.add(o); return o; };
   function hull(g, L, W, mat, tall = 0.12) {
-    A(g, boxGeo, mat, W, tall, L * 0.78, 0, tall / 2, -L * 0.04);
-    A(g, boxGeo, mat, W * 0.62, tall, L * 0.2, 0, tall / 2, L * 0.4).rotation.y = 0;   // หัวเรือแคบ
-    A(g, boxGeo, mat, W * 0.3, tall * 0.9, L * 0.1, 0, tall / 2 + 0.01, L * 0.54);
+    A(g, boxGeo, mat, W, tall, L * 0.72, 0, tall / 2, -L * 0.06);
+    const d = W * 0.7071;
+    A(g, boxGeo, mat, d, tall, d, 0, tall / 2, L * 0.3).rotation.y = Math.PI / 4;   // หัวเรือแหลม
+    A(g, boxGeo, C.deck, W * 0.86, 0.012, L * 0.66, 0, tall + 0.006, -L * 0.05);   // พื้นดาดฟ้า
   }
   const TYPES = {
     fishing(g, o) { // เรือประมง: ท้องเรือไม้ ห้องคนขับหน้า เสาและแขนอวน ไฟตกปลา
       hull(g, 1.5, 0.46, C.blue, 0.16);
-      A(g, boxGeo, C.white, 0.4, 0.2, 0.34, 0, 0.26, 0.28);
-      A(g, boxGeo, C.glass, 0.34, 0.07, 0.02, 0, 0.3, 0.46);
-      A(g, boxGeo, C.red, 0.46, 0.03, 0.42, 0, 0.37, 0.28);
-      A(g, cylGeo, C.woodD, 0.03, 0.8, 0.03, 0, 0.55, -0.2);
-      const boom = A(g, cylGeo, C.woodD, 0.02, 0.7, 0.02, 0.2, 0.52, -0.3); boom.rotation.z = -0.9;
+      A(g, boxGeo, C.white, 0.36, 0.2, 0.34, 0, 0.26, 0.2);
+      A(g, boxGeo, C.glass, 0.3, 0.07, 0.02, 0, 0.3, 0.375);
+      A(g, boxGeo, C.red, 0.42, 0.03, 0.4, 0, 0.37, 0.2);
+      A(g, cylGeo, C.woodD, 0.03, 0.55, 0.03, 0, 0.42, -0.2);
+      for (const sd of [-1, 1]) { const boom = A(g, cylGeo, C.woodD, 0.016, 0.42, 0.016, sd * 0.13, 0.5, -0.2); boom.rotation.z = -sd * 0.75; }   // แขนอวนสองข้าง
       A(g, boxGeo, C.grey, 0.3, 0.02, 0.36, 0, 0.17, -0.4);
-      o.lamp = A(g, sph, C.lamp, 0.07, 0.07, 0.07, 0, 0.42, 0.28);
+      o.lamp = A(g, sph, C.lamp, 0.07, 0.07, 0.07, 0, 0.42, 0.2);
       o.len = 1.5;
     },
     longtail(g, o) { // เรือหางยาว
@@ -151,7 +153,7 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
     ['fishing', 1.25, 0.9], ['fishing', 1.25, 0.8], ['longtail', 1.1, 1.8], ['longtail', 1.1, 1.6], ['sail', 1.35, 0.9],
     ['row', 1.3, 0.45], ['row', 1.3, 0.38], ['barge', 1, 0.55], ['ferry', 1.15, 1.1],
   ];
-  const LANES = [-1.15, -0.65, -0.2, 0.3, 0.8, 1.2, -0.9, 0.55, 0.05];
+  const LANES = [0.85, 0.85, 0.4, 1.25, 0.85, 1.25, 1.25, 0.4, 0.4];   // ระยะจากกลางแม่น้ำ (เรือเดินสวนกันคนละฝั่ง)
   PLAN.forEach(([kind, sc, sp], i) => {
     if (!withBoats) return;
     const g = new THREE.Group(), inner = new THREE.Group();
@@ -167,8 +169,54 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
     g.scale.setScalar(sc);
     root.add(g);
     const dir = i % 2 ? -1 : 1;
-    boats.push({ ...o, kind, g, inner, x: X0 + 4 + (i * 5.3) % (X1 - X0 - 8), speed: sp * rnd(0.9, 1.1), dir, hd: dir > 0 ? 0 : Math.PI, lane: LANES[i], ph: Math.random() * 10, cool: 0 });
+    const bx = X0 + 4 + (i * 5.3) % (X1 - X0 - 8), zp0 = 0.3 * Math.cos(bx * 0.1 + 0.6) + 0.378 * Math.cos(bx * 0.27 + 2);
+    boats.push({ ...o, kind, g, inner, x: bx, speed: sp * rnd(0.9, 1.1), v: sp, dir, hd: Math.atan2(dir, dir * zp0), laneAbs: LANES[i], lat: LANES[i] * dir, ph: Math.random() * 10, cool: 0 });
   });
+
+  // เรือจอดริมตลิ่ง: สุ่มตำแหน่ง/ชนิดใหม่ทุกครั้งที่เริ่มเกม
+  const docked = [];
+  if (withBoats) {
+    const kinds = ['fishing', 'longtail', 'row', 'row', 'longtail', 'fishing'];
+    const used = [];
+    for (let k = 0; k < 3 + Math.floor(Math.random() * 2); k++) {
+      let x = 0, ok = false;
+      for (let tries = 0; tries < 20 && !ok; tries++) {
+        x = rnd(X0 + 3, X1 - 6);
+        ok = !blocked(x) && !blocked(x + 1.5) && !blocked(x - 1.5) && used.every(u => Math.abs(u - x) > 4.5);
+      }
+      if (!ok) continue;
+      used.push(x);
+      const kind = kinds[(Math.random() * kinds.length) | 0];
+      const g = new THREE.Group(), inner = new THREE.Group();
+      g.add(inner);
+      const o = { seed: k + 20 };
+      TYPES[kind](inner, o);
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const zp = 0.3 * Math.cos(x * 0.1 + 0.6) + 0.378 * Math.cos(x * 0.27 + 2);
+      g.scale.setScalar(kind === 'row' ? 1.3 : 1.2);
+      g.rotation.y = Math.atan2(1, zp) + (Math.random() < 0.5 ? 0 : Math.PI);
+      root.add(g);
+      docked.push({ g, inner, x, z: riverZ(x) + side * 1.5, ph: Math.random() * 10, oars: o.oars });
+    }
+  }
+  // ใช้โมเดล .glb แทนเรือที่สร้างจากโค้ด (เรียกหลังโหลดไฟล์เสร็จ) -- เรือลากจูงพ่วง/เรือเฟอร์รี่ใช้ความยาวของตัวเอง
+  function useModels() {
+    if (!hasVehicle('boats')) return 0;
+    let n = 0;
+    for (const b of [...boats, ...docked]) {
+      const v = pickVehicle('boats');
+      if (!v) continue;
+      while (b.inner.children.length) b.inner.remove(b.inner.children[0]);
+      const len = b.len || 1.3;
+      v.scale.multiplyScalar(len / 1.3);
+      b.inner.add(v);
+      b.oars = null; b.lamp = null;
+      n++;
+    }
+    return n;
+  }
+  const pickables = [...boats.map(b => b.g), ...docked.map(b => b.g)];
+  function hit(raycaster) { return pickables.length > 0 && raycaster.intersectObjects(pickables, true).length > 0; }
 
   let t = 0;
 
@@ -204,10 +252,18 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
       b.cool -= dt;
       if (b.cool <= 0 && blocked(b.x + b.dir * (1.2 + b.len * 0.8))) { b.dir = -b.dir; b.cool = 4; }
       if (b.x > X1) { b.dir = -1; b.cool = 2; } else if (b.x < X0) { b.dir = 1; b.cool = 2; }
-      b.x += b.speed * b.dir * dt;
+      let v = b.speed;
+      for (const o of boats) {   // ตามเรือคันหน้าในเลนเดียวกัน ไม่ให้ทับกัน
+        if (o === b || o.dir !== b.dir || Math.abs(o.laneAbs - b.laneAbs) > 0.3) continue;
+        const gap = (o.x - b.x) * b.dir;
+        if (gap > 0 && gap < 0.9 + (o.len + b.len) * 0.55) v = Math.min(v, o.speed * 0.9);
+      }
+      b.v += (v - b.v) * Math.min(1, dt * 1.5);
+      b.x += b.v * b.dir * dt;
+      b.lat += (b.laneAbs * b.dir - b.lat) * Math.min(1, dt * 0.8);
       const x = b.x;
       const zp = 0.3 * Math.cos(x * 0.1 + 0.6) + 0.378 * Math.cos(x * 0.27 + 2); // อนุพันธ์ของ riverZ
-      const z = riverZ(x) + b.lane;
+      const z = riverZ(x) + b.lat;
       const want = Math.atan2(b.dir, b.dir * zp);
       let dh = want - b.hd; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
       b.hd += dh * Math.min(1, dt * 1.8);
@@ -221,5 +277,12 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
     }
   }
 
-  return { update };
+  function updateDocked() {
+    for (const d of docked) {
+      d.g.position.set(d.x, SEA_Y + 0.012 + Math.sin(t * 1.4 + d.ph) * 0.012, d.z);
+      d.inner.rotation.z = Math.sin(t * 1.1 + d.ph) * 0.03;
+      d.inner.rotation.x = Math.sin(t * 0.9 + d.ph * 2) * 0.02;
+    }
+  }
+  return { update: (dt, env) => { update(dt, env); updateDocked(); }, hit, useModels };
 }

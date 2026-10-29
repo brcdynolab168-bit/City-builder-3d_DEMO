@@ -29,3 +29,22 @@ src/models/
 - Kenney: https://kenney.nl/assets (มีชุด City Kit Commercial / Suburban / Industrial)
 - Quaternius: https://quaternius.com
 - Poly Pizza: https://poly.pizza
+
+## โมเดล รถ / มอไซค์ / รถเมล์ / เรือ / หมา / แมว
+
+วางไฟล์ `.glb` ในโฟลเดอร์เหล่านี้ (ใส่หลายไฟล์ได้ เกมจะสุ่มใช้):
+
+    src/models/cars/    รถเก๋ง กระบะ แท็กซี่ ฯลฯ   (ใช้กับรถยนต์ทุกคันที่วิ่ง)
+    src/models/bikes/   มอเตอร์ไซค์
+    src/models/buses/   รถเมล์
+    src/models/boats/   เรือ (ใช้แทนเรือทุกลำในแม่น้ำ)
+    src/models/dogs/    หมา
+    src/models/cats/    แมว
+
+- เกมจะจัดโมเดลให้เอง: กึ่งกลาง วางบนพื้น หันแกนยาวไปทางหน้า-หลัง และย่อ/ขยายตามขนาดเกม
+- ถ้าหัวรถหันผิดทาง แก้ค่า `VEH_YAW` ใน `src/vehicles.js` (เช่น `cars: Math.PI`)
+- ปรับขนาดที่ `VEH_LEN` ในไฟล์เดียวกัน
+- ถ้าโฟลเดอร์ไหนว่าง เกมใช้โมเดลที่สร้างจากโค้ดเหมือนเดิม
+- ใช้ไฟล์เล็ก (low-poly, < 1 MB ต่อไฟล์) เพราะมีรถหลายสิบคันพร้อมกัน
+- แหล่งโมเดลฟรี (ตรวจสอบสัญญาอนุญาตเอง): Kenney.nl (Car Kit, CC0), Quaternius (CC0), Poly Pizza
+- รถที่ใช้โมเดล .glb จะไม่มีป้ายไฟแท็กซี่/ไฟหน้าไฟท้ายแยก และมอไซค์สายซิ่งจะไม่มีท่านอนขับ
