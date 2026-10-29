@@ -19,6 +19,7 @@ import { createAudio } from './audio.js';
 import { createMenu } from './menu.js';
 import { createBig, FOOT } from './big.js';
 import { createSky, periodKey } from './sky.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ---------------------------------------------------------------
 // เริ่มเกม: อ่านช่องเซฟที่ใช้อยู่ แล้วเลือกแผนที่ก่อนสร้างภูมิประเทศ
@@ -204,7 +205,7 @@ function load() {
     if (typeof state.tod === 'number') tod = state.tod;
     return;
   }
-  seedStarterCity();
+  state = newState();   // เกมใหม่ = แผนที่ว่างเปล่า ไม่มีอะไรเลย
   tod = state.tod;
   save();
 }
@@ -268,6 +269,8 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false; // อัปเดตเงาเป็นช่วงๆ (ดูใน loop) ลดภาระ GPU
+let lastShadowAt = 0, baseRatio = 1, dynScale = 1, dynCool = 0;
 let gpuName = '';
 try {
   const gl = renderer.getContext();
@@ -1562,10 +1565,59 @@ function addRoadSigns(g, x, z, r, r2) {
   }
 }
 
+// ---------------------------------------------------------------
+// ลดจำนวน draw call: รวมชิ้นส่วนนิ่งของแต่ละช่องที่ใช้วัสดุเดียวกันเป็นก้อนเดียว
+// (ข้ามต้นไม้ที่แกว่ง และชิ้นที่ใช้วัสดุหลายชั้น)
+// ---------------------------------------------------------------
+const _inv = new THREE.Matrix4(), _rel = new THREE.Matrix4();
+function mergeStatic(g, skip) {
+  g.updateMatrixWorld(true);
+  _inv.copy(g.matrixWorld).invert();
+  const groups = new Map();
+  const dead = [];
+  g.traverse(o => {
+    if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || Array.isArray(o.material) || !o.geometry) return;
+    for (let p = o; p && p !== g; p = p.parent) if (skip.has(p)) return;
+    const key = o.material.uuid + (o.castShadow ? 'c' : '') + (o.receiveShadow ? 'r' : '');
+    let e = groups.get(key);
+    if (!e) groups.set(key, e = { mat: o.material, cast: o.castShadow, recv: o.receiveShadow, list: [] });
+    e.list.push(o);
+  });
+  for (const e of groups.values()) {
+    if (e.list.length < 2) continue;
+    const geos = [];
+    let indexed = e.list.every(o => o.geometry.index), ok = true;
+    const attrs = Object.keys(e.list[0].geometry.attributes).sort().join();
+    for (const o of e.list) {
+      if (Object.keys(o.geometry.attributes).sort().join() !== attrs) { ok = false; break; }
+    }
+    if (!ok) continue;
+    for (const o of e.list) {
+      let geo = o.geometry.clone();
+      if (!indexed && geo.index) geo = geo.toNonIndexed();
+      _rel.multiplyMatrices(_inv, o.matrixWorld);
+      geo.applyMatrix4(_rel);
+      geos.push(geo);
+    }
+    const merged = mergeGeometries(geos, false);
+    for (const geo of geos) geo.dispose();
+    if (!merged) continue;
+    const mm = new THREE.Mesh(merged, e.mat);
+    mm.castShadow = e.cast; mm.receiveShadow = e.recv;
+    mm.userData.merged = true;
+    g.add(mm);
+    dead.push(...e.list);
+  }
+  for (const o of dead) o.parent.remove(o);
+}
+function disposeTile(g) {
+  g.traverse(o => { if (o.userData.merged) o.geometry.dispose(); });
+}
+
 function buildTile(x, z) {
   if (!inBounds(x, z)) return;
   const i = idx(x, z);
-  if (meshes[i]) { tileGroup.remove(meshes[i]); meshes[i] = null; }
+  if (meshes[i]) { disposeTile(meshes[i]); tileGroup.remove(meshes[i]); meshes[i] = null; }
   swayTiles.delete(i);
   const t = state.tiles[i];
   if (!t) return;
@@ -1694,6 +1746,7 @@ function buildTile(x, z) {
     }
   }
 
+  try { mergeStatic(g, new Set(swayList.map(s => s.obj))); } catch (err) { console.warn('merge ข้าม:', err); }
   meshes[i] = g;
   tileGroup.add(g);
   if (swayList.length) swayTiles.set(i, swayList);
@@ -2066,8 +2119,7 @@ document.querySelectorAll('#speed button').forEach(b => {
 $('reset').onclick = () => {
   if (!confirm(t('confirm.reset'))) return;
   state = newState();
-  seedStarterCity();
-  for (let i = 0; i < N * N; i++) { if (meshes[i]) { tileGroup.remove(meshes[i]); meshes[i] = null; } }
+  for (let i = 0; i < N * N; i++) { if (meshes[i]) { disposeTile(meshes[i]); tileGroup.remove(meshes[i]); meshes[i] = null; } }
   swayTiles.clear();
   agents.clear();
   agents.invalidate();
@@ -2319,7 +2371,9 @@ function applyQuality(key) {
   saveSettings();
 
   const ratio = Math.min(window.devicePixelRatio || 1, q.pixelRatio);
+  baseRatio = ratio; dynScale = 1;
   renderer.setPixelRatio(ratio);
+  renderer.shadowMap.needsUpdate = true;
   renderer.setSize(window.innerWidth, window.innerHeight);
   if (composer) { composer.setPixelRatio(ratio); composer.setSize(window.innerWidth, window.innerHeight); }
 
@@ -2567,6 +2621,7 @@ function loop(now) {
   controls.target.y = 0.4;
 
   controls.update();
+  if (now - lastShadowAt > 66) { lastShadowAt = now; renderer.shadowMap.needsUpdate = true; }
   if (useBloom) {
     bloomPass.strength = 0.15 + 0.7 * nightLevel;
     composer.render();
@@ -2588,6 +2643,20 @@ function loop(now) {
     $('wxText').textContent = t('wx.' + weather.label());
     $('temp').textContent = Math.round(tempC) + '°C';
     $('windv').textContent = t('wind', { n: Math.round(8 + W.wind * 42) });
+    // ปรับความละเอียดภาพอัตโนมัติ: ถ้า FPS ตก ลดความละเอียดลงทีละนิด ถ้าเหลือแรงก็เพิ่มกลับ
+    const fpsNow = fpsFrames / fpsTime;
+    dynCool -= fpsTime;
+    if (dynCool <= 0 && !menu.isOpen) {
+      let ns = dynScale;
+      if (fpsNow < 38 && dynScale > 0.55) ns = Math.max(0.55, dynScale - 0.15);
+      else if (fpsNow > 58 && dynScale < 1) ns = Math.min(1, dynScale + 0.1);
+      if (ns !== dynScale) {
+        dynScale = ns; dynCool = 2;
+        const r = Math.max(0.6, baseRatio * dynScale);
+        renderer.setPixelRatio(r); renderer.setSize(window.innerWidth, window.innerHeight);
+        if (composer) { composer.setPixelRatio(r); composer.setSize(window.innerWidth, window.innerHeight); }
+      }
+    }
     fpsFrames = 0; fpsTime = 0;
   }
   requestAnimationFrame(loop);
