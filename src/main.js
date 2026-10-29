@@ -7,6 +7,9 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { createAgents } from './agents.js';
+import { createWeather } from './weather.js';
+import { ICON, mountIcons } from './icons.js';
+import { terrainH, terrainColor, fbm, hash2, SEA_Y, WATER_LIMIT } from './terrain.js';
 
 // ---------------------------------------------------------------
 // ค่าตั้งต้น / เครื่องมือ
@@ -15,19 +18,81 @@ const N = 48; // ขนาดแผนที่ N x N ช่อง
 const SAVE_KEY = 'mini-city-3d-save-v1';
 const START_MONEY = 20000;
 const DAY_LENGTH_SEC = 180; // เวลาจริงที่ใช้ต่อ 1 วัน (กลางวัน→กลางคืน)
+const BRIDGE_Y = 0.2;       // ความสูงพื้นสะพาน
 
 const TOOLS = {
-  select:   { label: '👆 ดูเมือง',     cost: 0 },
-  road:     { label: '🛣️ ถนน',         cost: 10 },
-  res:      { label: '🏠 ที่อยู่อาศัย', cost: 20 },
-  com:      { label: '🏬 พาณิชย์',      cost: 30 },
-  ind:      { label: '🏭 อุตสาหกรรม',   cost: 30 },
-  power:    { label: '⚡ โรงไฟฟ้า',     cost: 500 },
-  park:     { label: '🌳 สวน',          cost: 50 },
-  bulldoze: { label: '🚜 รื้อ',          cost: 5 },
+  select:   { label: 'ดูเมือง',        cost: 0,   tip: 'เลื่อนดูเมือง ไม่สร้างอะไร' },
+  road:     { label: 'ถนน',            cost: 10,  tip: 'ถนน (บนแม่น้ำ = สะพาน $40) ทางแยกมีไฟจราจรและทางม้าลายให้เอง' },
+  res:      { label: 'ที่อยู่อาศัย',    cost: 20,  tip: 'โซนที่อยู่อาศัย ต้องติดถนน มีไฟและน้ำ' },
+  com:      { label: 'พาณิชย์',         cost: 30,  tip: 'โซนร้านค้า/สำนักงาน' },
+  ind:      { label: 'อุตสาหกรรม',      cost: 30,  tip: 'โซนโรงงาน' },
+  power:    { label: 'โรงไฟฟ้า',        cost: 500, tip: 'ผลิตไฟ 120 หน่วย' },
+  water:    { label: 'โรงประปา',        cost: 400, tip: 'ผลิตน้ำ 120 หน่วย ต้องตั้งใกล้แม่น้ำ/ทะเล (ภายใน 3 ช่อง)' },
+  park:     { label: 'สวน',            cost: 50,  tip: 'สวนสาธารณะ ผู้คนมาเดินเล่น ที่อยู่อาศัยรอบๆโตเร็วขึ้น' },
+  bulldoze: { label: 'รื้อ',            cost: 5,   tip: 'รื้อถอน' },
 };
 const TOOL_KEYS = Object.keys(TOOLS);
 const ZONES = ['res', 'com', 'ind'];
+
+// ตารางตามระดับตึก (ดัชนี = เลเวล 0..3): คน / งาน / ไฟ / น้ำ ต่อช่อง
+const POP_PER  = [0, 5, 28, 80];   // บ้านเดี่ยว → อพาร์ตเมนต์ → คอนโดสูง
+const JOBS_COM = [0, 6, 20, 60];
+const JOBS_IND = [0, 10, 28, 70];
+const POWER_USE = { res: [0, 2, 6, 14], com: [0, 3, 8, 20], ind: [0, 4, 12, 30] };
+const WATER_USE = { res: [0, 3, 9, 22], com: [0, 2, 6, 15], ind: [0, 4, 12, 28] };
+const POWER_CAP = 120;
+const WATER_CAP = 120;
+
+// ถนนในเมืองตั้งชื่อตามแนวแถว/คอลัมน์ (ใช้บนป้ายชื่อถนน)
+const STREET_NAMES = ['สุขุมวิท', 'พหลโยธิน', 'ราชดำเนิน', 'สีลม', 'สาทร', 'เพชรบุรี', 'รัชดาภิเษก', 'ลาดพร้าว',
+  'พระราม 4', 'วิภาวดี', 'เจริญกรุง', 'พญาไท', 'อโศก', 'ศรีนครินทร์', 'บางนา', 'ทองหล่อ', 'นราธิวาส', 'ประชาชื่น'];
+const rowName = z => STREET_NAMES[((z % STREET_NAMES.length) + STREET_NAMES.length) % STREET_NAMES.length];
+const colName = x => STREET_NAMES[(((x * 5 + 3) % STREET_NAMES.length) + STREET_NAMES.length) % STREET_NAMES.length];
+
+// ---------------------------------------------------------------
+// ภูมิประเทศ: ความสูงที่มุมแต่ละช่อง (เหมือนกับ mesh พื้นดิน)
+// ---------------------------------------------------------------
+const GN = N + 1;
+const vertH = new Float32Array(GN * GN);
+for (let vz = 0; vz < GN; vz++) for (let vx = 0; vx < GN; vx++) vertH[vz * GN + vx] = terrainH(vx - N / 2, vz - N / 2);
+const tileMaxH = new Float32Array(N * N);
+const tileMinH = new Float32Array(N * N);
+const tileIsWater = new Uint8Array(N * N);
+for (let z = 0; z < N; z++) {
+  for (let x = 0; x < N; x++) {
+    const a = vertH[z * GN + x], b = vertH[z * GN + x + 1], c = vertH[(z + 1) * GN + x], d = vertH[(z + 1) * GN + x + 1];
+    tileMaxH[z * N + x] = Math.max(a, b, c, d);
+    tileMinH[z * N + x] = Math.min(a, b, c, d);
+    tileIsWater[z * N + x] = (a + b + c + d) / 4 < WATER_LIMIT ? 1 : 0;
+  }
+}
+const isWaterTile = (x, z) => x >= 0 && z >= 0 && x < N && z < N && tileIsWater[z * N + x] === 1;
+// ความสูงพื้นสะพาน: ใกล้ฝั่งให้เท่าความสูงริมตลิ่ง เพื่อไม่ให้ทางต่อกันเป็นขั้นบันได
+const bridgeYArr = new Float32Array(N * N);
+for (let z = 0; z < N; z++) {
+  for (let x = 0; x < N; x++) {
+    if (!tileIsWater[z * N + x]) continue;
+    let m = -1;
+    for (let dz = -2; dz <= 2; dz++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const xx = x + dx, zz = z + dz;
+        if (xx < 0 || zz < 0 || xx >= N || zz >= N || tileIsWater[zz * N + xx]) continue;
+        m = Math.max(m, tileMaxH[zz * N + xx]);
+      }
+    }
+    bridgeYArr[z * N + x] = m > 0 ? Math.max(0.3, m) : BRIDGE_Y + 0.3;
+  }
+}
+// ความสูงพื้นของช่อง (ใช้วางอาคาร ถนน และตัวละคร)
+function tileY(x, z) {
+  if (x < 0 || z < 0 || x >= N || z >= N) return 0;
+  const i = z * N + x;
+  return tileIsWater[i] ? bridgeYArr[i] : tileMaxH[i];
+}
+function nearWater(x, z, r) {
+  for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (isWaterTile(x + dx, z + dz)) return true;
+  return false;
+}
 
 // ---------------------------------------------------------------
 // สถานะเกม
@@ -52,7 +117,11 @@ function load() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return;
     const s = JSON.parse(raw);
-    if (s && Array.isArray(s.tiles) && s.tiles.length === N * N) state = s;
+    if (s && Array.isArray(s.tiles) && s.tiles.length === N * N) {
+      // เมืองที่เซฟจากรุ่นก่อน (พื้นราบ): อะไรที่ตกอยู่บนแม่น้ำใหม่ ให้ลบทิ้ง ยกเว้นถนน (กลายเป็นสะพาน)
+      s.tiles.forEach((t, i) => { if (t && tileIsWater[i] && t.t !== 'road') s.tiles[i] = null; });
+      state = s;
+    }
   } catch {}
 }
 
@@ -115,15 +184,19 @@ const SETTINGS_KEY = 'mini-city-3d-settings-v1';
 const QUALITY = {
   low: {
     label: 'ต่ำ', desc: 'เบาที่สุด: ไม่มีเงา รถไม่กี่คัน เหมาะกับเครื่องช้า',
-    pixelRatio: 1, shadows: false, shadowSize: 0, bloom: false, cars: 8, people: 0, pets: 0, details: 0,
+    // cars/people/pets = เพดานจำนวนสูงสุดของระดับนี้ (จำนวนจริงขึ้นกับประชากรเมือง)
+    pixelRatio: 1, shadows: false, shadowSize: 0, bloom: false, cars: 14, people: 10, pets: 0, details: 0,
+    rain: 800, forest: 0,
   },
   med: {
-    label: 'กลาง', desc: 'สมดุล: เงานุ่ม ไฟถนน รถ ผู้คน และสัตว์เลี้ยงพอเหมาะ',
-    pixelRatio: 1.5, shadows: true, shadowSize: 2048, bloom: false, cars: 35, people: 30, pets: 8, details: 1,
+    label: 'กลาง', desc: 'สมดุล: เงานุ่ม ไฟจราจร ป้าย ฝน ป่าไม้ รถ ผู้คน และสัตว์เลี้ยงพอเหมาะ',
+    pixelRatio: 1.5, shadows: true, shadowSize: 2048, bloom: false, cars: 60, people: 70, pets: 16, details: 1,
+    rain: 3000, forest: 1800,
   },
   high: {
-    label: 'สูง', desc: 'สมจริงสุด: เงาละเอียด แสงเรืองตอนกลางคืน ไฟถนนเยอะ รถ ผู้คน หมา แมว จำนวนมาก',
-    pixelRatio: 2, shadows: true, shadowSize: 4096, bloom: true, cars: 80, people: 80, pets: 24, details: 2,
+    label: 'สูง', desc: 'สมจริงสุด: เงาละเอียด แสงเรืองกลางคืน ฝนหนา ป่าเต็มภูเขา ไฟจราจรและป้ายครบ รถ คน หมา แมว จำนวนมาก',
+    pixelRatio: 2, shadows: true, shadowSize: 4096, bloom: true, cars: 150, people: 160, pets: 40, details: 2,
+    rain: 7000, forest: 4000,
   },
 };
 const settings = { quality: 'med', mode: 'trackpad' };
@@ -151,8 +224,49 @@ try {
   composer = null;
 }
 
+// สภาพอากาศ: เมฆ ฝน ลม ฟ้าแลบ
+const weather = createWeather({ scene, getFocus: () => controls.target });
+
+// ---------------------------------------------------------------
+// ไฟจราจร: ทางแยก (ถนนติดกัน 3 ทิศขึ้นไป) มีไฟ 3 ชุดเวลาเหลื่อมกัน
+// รอบละ 21 วินาทีเกม: แนว x เขียว → แนว z เขียว สลับกัน มีไฟเหลืองและแดงทั้งหมดคั่น
+// ---------------------------------------------------------------
+const SIG_GREEN = 8, SIG_YELLOW = 1.5, SIG_ALLRED = 1;
+const SIG_HALF = SIG_GREEN + SIG_YELLOW + SIG_ALLRED;
+const SIG_CYCLE = SIG_HALF * 2;
+const SIG_OFFSET = [0, 7, 14];
+let sigClock = 0;
+const sigGroup = (x, z) => (((x + 2 * z) % 3) + 3) % 3;
+
+function roadArms(x, z) {
+  let n = 0;
+  if (isType(x + 1, z, 'road')) n++;
+  if (isType(x - 1, z, 'road')) n++;
+  if (isType(x, z + 1, 'road')) n++;
+  if (isType(x, z - 1, 'road')) n++;
+  return n;
+}
+const isJunction = (x, z) => isType(x, z, 'road') && roadArms(x, z) >= 3;
+
+// สถานะไฟของแนว axis ('x' | 'z') ที่ทางแยก (x,z): 'g' เขียว, 'y' เหลือง, 'r' แดง, null = ไม่มีไฟ
+function signalState(x, z, axis) {
+  if (!isJunction(x, z)) return null;
+  const p = (sigClock + SIG_OFFSET[sigGroup(x, z)]) % SIG_CYCLE;
+  const first = p < SIG_HALF;
+  if ((axis === 'x') !== first) return 'r';
+  const q = first ? p : p - SIG_HALF;
+  if (q < SIG_GREEN) return 'g';
+  if (q < SIG_GREEN + SIG_YELLOW) return 'y';
+  return 'r';
+}
+
 // รถ ผู้คน หมา แมว
-const agents = createAgents({ scene, N, tileType: (x, z) => tileAt(x, z)?.t ?? null });
+const agents = createAgents({
+  scene, N,
+  tileType: (x, z) => tileAt(x, z)?.t ?? null,
+  groundY: tileY,
+  signal: signalState,
+});
 
 // ---------------------------------------------------------------
 // เท็กซ์เจอร์ที่สร้างจากโค้ด (canvas)
@@ -221,33 +335,193 @@ const M = {
   trunk: std(0x6b4a2b),
   leaf: [0x2e7d32, 0x3b8f3f, 0x4f9d44, 0x5c8f2e].map(c => std(c, { flatShading: true, roughness: 1 })),
   awning: [0xc0392b, 0x2e86c1, 0x1e8449, 0xd68910].map(c => std(c)),
+  plinth: std(0x8a8578, { roughness: 1 }),
+  pole: std(0x4a4f55, { metalness: 0.6, roughness: 0.45 }),
+  housing: std(0x181b1f, { roughness: 0.6 }),
+  stopLine: std(0xf4f4f0, { roughness: 0.7 }),
+  tank: std(0x9fb4c4, { metalness: 0.35, roughness: 0.45 }),
 };
 
-// พื้นดิน เกาะ และน้ำรอบเมือง
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(N, N),
-  new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1 })
-);
-ground.rotation.x = -Math.PI / 2;
+// หลอดไฟจราจร 3 กลุ่ม × 2 แนว × (แดง/เหลือง/เขียว) อัปเดตความสว่างทุกเฟรม
+const SIG_COLORS = { r: [0xff3b30, 0x3a0a08], y: [0xffc021, 0x3a2b05], g: [0x2ee86b, 0x07351a] };
+const signalMats = [0, 1, 2].map(() => ({
+  x: Object.fromEntries(Object.entries(SIG_COLORS).map(([k, c]) => [k, new THREE.MeshStandardMaterial({ color: c[1], emissive: c[0], emissiveIntensity: 0, roughness: 0.4 })])),
+  z: Object.fromEntries(Object.entries(SIG_COLORS).map(([k, c]) => [k, new THREE.MeshStandardMaterial({ color: c[1], emissive: c[0], emissiveIntensity: 0, roughness: 0.4 })])),
+}));
+function updateSignalLamps() {
+  for (let g = 0; g < 3; g++) {
+    for (const axis of ['x', 'z']) {
+      const p = (sigClock + SIG_OFFSET[g]) % SIG_CYCLE;
+      const first = p < SIG_HALF;
+      let st = 'r';
+      if ((axis === 'x') === first) {
+        const q = first ? p : p - SIG_HALF;
+        st = q < SIG_GREEN ? 'g' : q < SIG_GREEN + SIG_YELLOW ? 'y' : 'r';
+      }
+      const m = signalMats[g][axis];
+      m.r.emissiveIntensity = st === 'r' ? 3.2 : 0;
+      m.y.emissiveIntensity = st === 'y' ? 3.2 : 0;
+      m.g.emissiveIntensity = st === 'g' ? 3.2 : 0;
+    }
+  }
+}
+
+// ป้ายจราจร/ป้ายชื่อถนน วาดจาก canvas (แคชไว้ใช้ซ้ำ)
+const FONT = '"Leelawadee UI","Tahoma","Noto Sans Thai",sans-serif';
+const signMatCache = new Map();
+function signMat(key, draw, w = 128, h = 128) {
+  let m = signMatCache.get(key);
+  if (m) return m;
+  const t = canvasTex(w, h, draw);
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  m = new THREE.MeshStandardMaterial({ map: t, roughness: 0.55, metalness: 0.1, side: THREE.DoubleSide });
+  signMatCache.set(key, m);
+  return m;
+}
+const trafficSign = {
+  speed(n) {
+    return signMat('speed' + n, (g, w, h) => {
+      g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+      g.beginPath(); g.arc(w / 2, h / 2, w * 0.46, 0, Math.PI * 2); g.fillStyle = '#d32f2f'; g.fill();
+      g.beginPath(); g.arc(w / 2, h / 2, w * 0.34, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill();
+      g.fillStyle = '#111'; g.font = `bold ${w * 0.36}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(String(n), w / 2, h / 2 + 4);
+    });
+  },
+  park() {
+    return signMat('park', (g, w, h) => {
+      g.fillStyle = '#1565c0'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#fff'; g.lineWidth = 6; g.strokeRect(5, 5, w - 10, h - 10);
+      g.fillStyle = '#fff'; g.font = `bold ${w * 0.7}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('P', w / 2, h / 2 + 6);
+    });
+  },
+  ped() {
+    return signMat('ped', (g, w, h) => {
+      g.fillStyle = '#1565c0'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#fff'; g.lineWidth = 6; g.strokeRect(5, 5, w - 10, h - 10);
+      // สามเหลี่ยมขาว + คนข้ามถนน
+      g.beginPath(); g.moveTo(w / 2, 18); g.lineTo(w - 20, h - 22); g.lineTo(20, h - 22); g.closePath();
+      g.fillStyle = '#fff'; g.fill();
+      g.strokeStyle = '#111'; g.fillStyle = '#111'; g.lineWidth = 6; g.lineCap = 'round';
+      g.beginPath(); g.arc(w / 2, 56, 6, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.moveTo(w / 2, 64); g.lineTo(w / 2, 88); g.moveTo(w / 2, 70); g.lineTo(w / 2 - 12, 82);
+      g.moveTo(w / 2, 70); g.lineTo(w / 2 + 12, 80); g.moveTo(w / 2, 88); g.lineTo(w / 2 - 9, 104); g.moveTo(w / 2, 88); g.lineTo(w / 2 + 9, 102); g.stroke();
+    });
+  },
+  name(text) {
+    return signMat('name' + text, (g, w, h) => {
+      g.fillStyle = '#0b6b3a'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#fff'; g.lineWidth = 4; g.strokeRect(4, 4, w - 8, h - 8);
+      g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = `bold ${h * 0.42}px ${FONT}`;
+      g.fillText('ถ.' + text, w / 2, h / 2 + 3);
+    }, 320, 64);
+  },
+};
+const planeGeo = new THREE.PlaneGeometry(1, 1);
+
+// ทางม้าลาย: แถบขาวบนพื้นโปร่งใส (ใช้ซ้ำทุกทางแยก)
+const zebraMat = new THREE.MeshStandardMaterial({
+  map: canvasTex(128, 128, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = '#f4f4ee';
+    const n = 7, bw = w / (n * 2 - 1);
+    for (let i = 0; i < n; i++) g.fillRect(i * bw * 2, 0, bw, h);
+  }),
+  transparent: true, alphaTest: 0.5, roughness: 0.75, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+});
+zebraMat.map.wrapS = zebraMat.map.wrapT = THREE.ClampToEdgeWrapping;
+
+// ---------------------------------------------------------------
+// ภูมิประเทศ: เนิน แม่น้ำ ทะเล ภูเขา (ทั้งหมดสร้างจากฟังก์ชัน terrainH)
+// ---------------------------------------------------------------
+const TERRAIN_SIZE = 200;
+const detailTex = noiseTex('#d6d6d6', ['rgba(0,0,0,.10)', 'rgba(255,255,255,.12)', 'rgba(0,0,0,.06)'], 256, TERRAIN_SIZE / 6);
+const terrainGeo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SIZE);
+terrainGeo.rotateX(-Math.PI / 2);
+{
+  const pos = terrainGeo.attributes.position;
+  const col = new Float32Array(pos.count * 3);
+  const rgb = [0, 0, 0];
+  for (let i = 0; i < pos.count; i++) {
+    const wx = pos.getX(i), wz = pos.getZ(i);
+    const h = terrainH(wx, wz);
+    pos.setY(i, h);
+    terrainColor(h, fbm(wx * 0.9 + 7, wz * 0.9 + 3, 2), rgb);
+    col[i * 3] = rgb[0]; col[i * 3 + 1] = rgb[1]; col[i * 3 + 2] = rgb[2];
+  }
+  terrainGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  terrainGeo.computeVertexNormals();
+}
+const ground = new THREE.Mesh(terrainGeo, new THREE.MeshStandardMaterial({ map: detailTex, vertexColors: true, roughness: 1 }));
 ground.receiveShadow = true;
 scene.add(ground);
 
-const island = new THREE.Mesh(new THREE.BoxGeometry(N + 0.5, 0.7, N + 0.5), M.soil);
-island.position.y = -0.36;
-island.receiveShadow = true;
-scene.add(island);
-
-const sea = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), M.water);
+// น้ำ (ทะเล + แม่น้ำ) ลายคลื่นเลื่อนตามลม
+const waterTex = canvasTex(256, 256, (g, w, h) => {
+  const r = mulberry32(4242);
+  g.fillStyle = '#dfeef4'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 700; i++) {
+    g.fillStyle = r() < 0.5 ? 'rgba(255,255,255,.55)' : 'rgba(110,160,190,.30)';
+    g.fillRect(r() * w, r() * h, 6 + r() * 22, 1 + r() * 2);
+  }
+});
+waterTex.repeat.set(110, 110);
+const waterMat = new THREE.MeshStandardMaterial({
+  color: 0x2f86a6, map: waterTex, roughness: 0.1, metalness: 0.15, transparent: true, opacity: 0.84,
+});
+const sea = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), waterMat);
 sea.rotation.x = -Math.PI / 2;
-sea.position.y = -0.5;
+sea.position.y = SEA_Y;
 sea.receiveShadow = true;
 scene.add(sea);
 
-const grid = new THREE.GridHelper(N, N, 0x000000, 0x000000);
-grid.material.opacity = 0.07;
-grid.material.transparent = true;
-grid.position.y = 0.012;
-scene.add(grid);
+// เส้นตารางช่อง วิ่งตามความสูงพื้นดิน
+{
+  const pts = [];
+  const H = (x, z) => vertH[z * GN + x] + 0.025;
+  for (let z = 0; z <= N; z++) for (let x = 0; x < N; x++) pts.push(x - N / 2, H(x, z), z - N / 2, x + 1 - N / 2, H(x + 1, z), z - N / 2);
+  for (let x = 0; x <= N; x++) for (let z = 0; z < N; z++) pts.push(x - N / 2, H(x, z), z - N / 2, x - N / 2, H(x, z + 1), z + 1 - N / 2);
+  const gg = new THREE.BufferGeometry();
+  gg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  const grid = new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.08 }));
+  scene.add(grid);
+}
+
+// ป่าสนบนภูเขา/เนินรอบเมือง (instanced) จำนวนตามระดับกราฟิก
+const forest = (() => {
+  const trunkGeo = new THREE.CylinderGeometry(0.05, 0.08, 0.5, 5); trunkGeo.translate(0, 0.25, 0);
+  const coneA = new THREE.ConeGeometry(0.5, 1.0, 6); coneA.translate(0, 0.95, 0);
+  const coneB = new THREE.ConeGeometry(0.36, 0.8, 6); coneB.translate(0, 1.55, 0);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4126, roughness: 1 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true });
+  const FMAX = 4000;
+  const meshes = [new THREE.InstancedMesh(trunkGeo, trunkMat, FMAX), new THREE.InstancedMesh(coneA, leafMat, FMAX), new THREE.InstancedMesh(coneB, leafMat, FMAX)];
+  const rnd = mulberry32(20241029);
+  const dummy = new THREE.Object3D();
+  const color = new THREE.Color();
+  let placed = 0;
+  for (let tries = 0; tries < 80000 && placed < FMAX; tries++) {
+    const x = (rnd() - 0.5) * 190, z = (rnd() - 0.5) * 190;
+    if (Math.abs(x) < N / 2 + 1 && Math.abs(z) < N / 2 + 1) continue; // ไม่ปลูกในพื้นที่เมือง
+    const h = terrainH(x, z);
+    if (h < 0.35 || h > 9.5) continue;
+    if (fbm(x * 0.08 + 5, z * 0.08 + 5, 3) < 0.42) continue;
+    const s = 0.9 + rnd() * 1.1;
+    dummy.position.set(x, h - 0.05, z);
+    dummy.rotation.set(0, rnd() * 6.28, 0);
+    dummy.scale.set(s, s * (0.9 + rnd() * 0.4), s);
+    dummy.updateMatrix();
+    color.setRGB(0.12 + rnd() * 0.12, 0.30 + rnd() * 0.2, 0.14 + rnd() * 0.1);
+    for (const m of meshes) { m.setMatrixAt(placed, dummy.matrix); if (m !== meshes[0]) m.setColorAt(placed, color); }
+    placed++;
+  }
+  for (const m of meshes) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; m.frustumCulled = false; scene.add(m); }
+  return {
+    setCount(n) { const c = Math.min(n, placed); meshes.forEach(m => { m.count = c; m.visible = c > 0; }); },
+  };
+})();
 
 // ---------------------------------------------------------------
 // กลางวัน / กลางคืน
@@ -259,30 +533,58 @@ const tmpColor = new THREE.Color();
 const facadeMats = []; // วัสดุหน้าต่างอาคาร (ไฟติดตอนกลางคืน)
 let tod = 0.36; // เวลาในวัน 0..1 (0.5 = เที่ยง)
 
+const C_GREY = new THREE.Color(0x7d8791);
+const C_FLASH = new THREE.Color(0xdfe8ff);
+let lampLevel = 0;   // ความสว่างของไฟ (กลางคืน หรือฟ้ามืดครึ้มตอนฝน)
+let tempC = 30;      // อุณหภูมิ (°C)
+
 function updateSky(dt) {
   tod = (tod + dt / DAY_LENGTH_SEC) % 1;
+  const W = weather.state;
   const ang = (tod - 0.25) * Math.PI * 2;
   const elev = Math.sin(ang);
   sun.position.set(Math.cos(ang) * 40, Math.max(elev, 0.08) * 40 + 2, 16);
   const day = THREE.MathUtils.smoothstep(elev, -0.12, 0.28);
-  sun.intensity = 2.3 * day;
-  hemi.intensity = 0.18 + 0.65 * day;
-  scene.environmentIntensity = 0.12 + 0.45 * day;
+
+  // เมฆและฝนบังแสงอาทิตย์
+  const dim = 1 - 0.55 * W.cloud - 0.2 * W.rain;
+  sun.intensity = 2.3 * day * dim;
+  hemi.intensity = (0.18 + 0.65 * day) * (1 + 0.15 * W.cloud) + W.flash * 2.5;
+  scene.environmentIntensity = (0.12 + 0.45 * day) * (1 - 0.3 * W.cloud) + W.flash * 0.8;
   renderer.toneMappingExposure = 0.85 + 0.25 * day;
 
   tmpColor.copy(C_NIGHT).lerp(C_DAY, day);
   const warm = THREE.MathUtils.clamp(1 - Math.abs(elev) / 0.3, 0, 1) * 0.55;
-  tmpColor.lerp(C_WARM, warm);
+  tmpColor.lerp(C_WARM, warm * (1 - 0.7 * W.cloud));
+  // ท้องฟ้าเทาตามเมฆ/ฝน
+  const grey = tmpColor2.copy(C_GREY).multiplyScalar(0.1 + 0.9 * day);
+  tmpColor.lerp(grey, Math.min(0.85, W.cloud * 0.7 + W.rain * 0.25));
+  tmpColor.lerp(C_FLASH, W.flash * 0.5);
   scene.background.copy(tmpColor);
   scene.fog.color.copy(tmpColor);
+  scene.fog.near = 70 - 52 * W.rain;
+  scene.fog.far = 170 - 80 * W.rain - 25 * W.cloud;
   sun.color.setHex(0xfff1d6).lerp(C_WARM, warm * 0.8);
 
   const night = 1 - day;
-  for (const m of facadeMats) m.emissiveIntensity = night * 1.3;
-  M.lampGlow.emissiveIntensity = night * 3;
+  lampLevel = Math.min(1, night + day * (0.35 * W.cloud + 0.45 * W.rain));
+  for (const m of facadeMats) m.emissiveIntensity = lampLevel * 1.3;
+  M.lampGlow.emissiveIntensity = lampLevel * 3;
   nightLevel = night;
+
+  // ถนนเปียก: เข้มขึ้นและเงาสะท้อนมากขึ้น
+  M.road.roughness = 0.95 - 0.6 * W.wet;
+  M.road.color.setRGB(1 - 0.3 * W.wet, 1 - 0.3 * W.wet, 1 - 0.26 * W.wet);
+
+  // อุณหภูมิ: ร้อนสุดบ่าย เย็นลงตอนฝน
+  tempC = 26 + 9 * THREE.MathUtils.clamp(elev, 0, 1) - 4.5 * W.rain - 2 * W.cloud;
   return night;
 }
+const tmpColor2 = new THREE.Color();
+const clockText = () => {
+  const m = Math.floor(tod * 24 * 60);
+  return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+};
 
 // ---------------------------------------------------------------
 // หน้าต่างอาคาร: สร้างเท็กซ์เจอร์ผนัง + ไฟกลางคืนจากโค้ด
@@ -370,6 +672,7 @@ const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const cylGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
 const coolGeo = new THREE.CylinderGeometry(0.26, 0.4, 1, 24);
 const icoGeo = new THREE.IcosahedronGeometry(0.5, 1);
+const coneGeo = new THREE.ConeGeometry(0.5, 1, 16);
 
 const hash = (x, z) => {
   let h = (Math.imul(x + 1, 73856093) ^ Math.imul(z + 1, 19349663)) >>> 0;
@@ -433,11 +736,18 @@ function roofCap(parent, w, d, y) {
   put(parent, boxGeo, M.roofFlat, 0, y + 0.015, 0, w + 0.04, 0.03, d + 0.04);
   return y + 0.03;
 }
+// ต้นไม้แกว่งตามลม: เก็บ pivot ไว้ต่อช่อง (ล้างทิ้งเมื่อช่องถูกสร้างใหม่)
+const swayTiles = new Map();
+let swayList = null;
 function addTree(parent, px, pz, s, r) {
-  put(parent, cylGeo, M.trunk, px, 0.04 + 0.11 * s, pz, 0.06 * s, 0.22 * s, 0.06 * s);
+  const pivot = new THREE.Group();
+  pivot.position.set(px, 0, pz);
+  parent.add(pivot);
+  put(pivot, cylGeo, M.trunk, 0, 0.04 + 0.11 * s, 0, 0.06 * s, 0.22 * s, 0.06 * s);
   const top = 0.04 + 0.22 * s;
-  put(parent, icoGeo, pick(M.leaf, r), px, top + 0.14 * s, pz, 0.36 * s, 0.32 * s, 0.36 * s, r * 6);
-  put(parent, icoGeo, pick(M.leaf, r + 0.37), px + 0.05 * s, top + 0.3 * s, pz - 0.03 * s, 0.24 * s, 0.22 * s, 0.24 * s, r * 3);
+  put(pivot, icoGeo, pick(M.leaf, r), 0, top + 0.14 * s, 0, 0.36 * s, 0.32 * s, 0.36 * s, r * 6);
+  put(pivot, icoGeo, pick(M.leaf, r + 0.37), 0.05 * s, top + 0.3 * s, -0.03 * s, 0.24 * s, 0.22 * s, 0.24 * s, r * 3);
+  if (swayList) swayList.push({ obj: pivot, ph: r * 40, k: 0.6 + 0.8 * hash(Math.round(px * 100), Math.round(pz * 100)) });
 }
 
 // ---------------------------------------------------------------
@@ -592,6 +902,21 @@ function buildPowerPlant(bg) {
   put(bg, cylGeo, M.stack, 0.36, y0 + 0.6, 0.2, 0.07, 1.2, 0.07);
 }
 
+function buildWaterPlant(bg) {
+  const y0 = 0.03;
+  // อาคารปั๊ม + ถังตกตะกอนทรงกลม + หอถังสูงขาตั้ง
+  const top = block(bg, 0.5, 2, 0.4, FM.office[1], 0.2, y0, 0.28);
+  roofCap(bg, 0.5, 0.4, top);
+  put(bg, cylGeo, M.tank, -0.22, y0 + 0.06, 0.2, 0.46, 0.12, 0.46);
+  put(bg, cylGeo, M.water, -0.22, y0 + 0.125, 0.2, 0.4, 0.012, 0.4);
+  put(bg, cylGeo, M.tank, -0.24, y0 + 0.06, -0.26, 0.3, 0.12, 0.3);
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    put(bg, cylGeo, M.metal, 0.3 + sx * 0.07, y0 + 0.28, -0.26 + sz * 0.07, 0.016, 0.56, 0.016);
+  }
+  put(bg, cylGeo, M.tank, 0.3, y0 + 0.66, -0.26, 0.3, 0.2, 0.3);
+  put(bg, coneGeo, M.tank, 0.3, y0 + 0.82, -0.26, 0.31, 0.12, 0.31);
+}
+
 // ---------------------------------------------------------------
 // สร้าง mesh ของแต่ละช่อง
 // ---------------------------------------------------------------
@@ -599,16 +924,125 @@ const tileGroup = new THREE.Group();
 scene.add(tileGroup);
 const meshes = new Array(N * N).fill(null);
 
+// ---------------------------------------------------------------
+// อุปกรณ์ถนน: ไฟจราจร ทางม้าลาย เส้นหยุด ป้ายจราจร/ป้ายชื่อถนน
+// (พื้นผิวถนนอยู่สูง 0.06 จากฐานช่อง)
+// ---------------------------------------------------------------
+const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const ROAD_TOP = 0.06;
+
+function flatMesh(parent, mat, px, py, pz, sx, sz, ry = 0) {
+  const m = new THREE.Mesh(planeGeo, mat);
+  m.rotation.set(-Math.PI / 2, 0, ry);
+  m.position.set(px, py, pz);
+  m.scale.set(sx, sz, 1);
+  m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+
+// เสาไฟจราจร 1 ต้นต่อทางเข้าแต่ละด้าน (ชิดซ้ายของรถที่วิ่งเข้ามา) หันหน้าไฟเข้าหารถ
+function addSignalHeads(g, x, z, details) {
+  const grp = sigGroup(x, z);
+  for (const [dx, dz] of DIRS4) {
+    if (!isType(x + dx, z + dz, 'road')) continue;
+    const axis = dx !== 0 ? 'x' : 'z';
+    const pole = new THREE.Group();
+    pole.position.set(dx * 0.43 - dz * 0.455, ROAD_TOP, dz * 0.43 + dx * 0.455);
+    pole.rotation.y = Math.atan2(dx, dz);
+    g.add(pole);
+    put(pole, cylGeo, M.pole, 0, 0.25, 0, 0.014, 0.5, 0.014);
+    put(pole, boxGeo, M.housing, 0, 0.32, 0.012, 0.05, 0.15, 0.036);
+    const lm = signalMats[grp][axis];
+    put(pole, boxGeo, lm.r, 0, 0.365, 0.033, 0.03, 0.03, 0.008);
+    put(pole, boxGeo, lm.y, 0, 0.32, 0.033, 0.03, 0.03, 0.008);
+    put(pole, boxGeo, lm.g, 0, 0.275, 0.033, 0.03, 0.03, 0.008);
+    if (details >= 1) {
+      // ป้ายชื่อถนนที่กำลังจะตัดผ่าน
+      const cross = axis === 'x' ? colName(x) : rowName(z);
+      const blade = new THREE.Mesh(planeGeo, trafficSign.name(cross));
+      blade.scale.set(0.27, 0.054, 1);
+      blade.position.set(0, 0.545, 0);
+      pole.add(blade);
+    }
+  }
+}
+
+// ทางม้าลายพาดผ่านถนนทุกด้านของทางแยก
+function addCrosswalks(g, x, z) {
+  for (const [dx, dz] of DIRS4) {
+    if (!isType(x + dx, z + dz, 'road')) continue;
+    const grp = new THREE.Group();
+    if (dx !== 0) grp.rotation.y = Math.PI / 2;
+    flatMesh(grp, zebraMat, 0, ROAD_TOP + 0.004, (dx !== 0 ? dx : dz) * 0.435, 0.7, 0.12);
+    g.add(grp);
+  }
+}
+
+// เส้นหยุดบนช่องถนนที่ติดทางแยก (เลนซ้ายของรถที่กำลังวิ่งเข้าทางแยก)
+function addStopLines(g, x, z) {
+  for (const [dx, dz] of DIRS4) {
+    if (!isJunction(x + dx, z + dz)) continue;
+    if (dx !== 0) put(g, boxGeo, M.stopLine, dx * 0.465, ROAD_TOP + 0.003, -dx * 0.2, 0.03, 0.004, 0.34);
+    else put(g, boxGeo, M.stopLine, dz * 0.2, ROAD_TOP + 0.003, dz * 0.465, 0.34, 0.004, 0.03);
+  }
+}
+
+function addSignPost(g, mat, px, pz, faceDx, faceDz) {
+  const post = new THREE.Group();
+  post.position.set(px, ROAD_TOP, pz);
+  post.rotation.y = Math.atan2(faceDx, faceDz);
+  g.add(post);
+  put(post, cylGeo, M.pole, 0, 0.13, 0, 0.012, 0.26, 0.012);
+  const board = new THREE.Mesh(planeGeo, mat);
+  board.scale.set(0.11, 0.11, 1);
+  board.position.set(0, 0.29, 0.01);
+  post.add(board);
+}
+
+// ป้ายข้างทาง: ป้ายเตือนคนข้ามถนนก่อนถึงทางแยก, ป้ายจำกัดความเร็ว, ป้ายที่จอดรถ
+function addRoadSigns(g, x, z, r, r2) {
+  if (roadArms(x, z) !== 2) return;
+  const h = isType(x + 1, z, 'road') && isType(x - 1, z, 'road');
+  const v = isType(x, z + 1, 'road') && isType(x, z - 1, 'road');
+  if (!h && !v) return; // ถนนเลี้ยว ไม่ตั้งป้าย
+  // ติดทางแยก → ป้ายคนข้ามถนน สำหรับรถที่วิ่งเข้าหาทางแยก
+  for (const [dx, dz] of DIRS4) {
+    if (!isJunction(x + dx, z + dz)) continue;
+    if (r < 0.7) addSignPost(g, trafficSign.ped(), dz * 0.455 - dx * 0.2, -dx * 0.455 - dz * 0.2, -dx, -dz);
+  }
+  // กลางช่วงถนน: จำกัดความเร็ว / ที่จอดรถ
+  if (r2 < 0.14) {
+    const dir = (r < 0.5 ? 1 : -1) * 1;
+    const [dx, dz] = h ? [dir, 0] : [0, dir];
+    const mat = r2 < 0.09 ? trafficSign.speed(r < 0.5 ? 40 : 60) : trafficSign.park();
+    addSignPost(g, mat, dz * 0.455, -dx * 0.455, -dx, -dz);
+  }
+}
+
 function buildTile(x, z) {
   if (!inBounds(x, z)) return;
   const i = idx(x, z);
   if (meshes[i]) { tileGroup.remove(meshes[i]); meshes[i] = null; }
+  swayTiles.delete(i);
   const t = state.tiles[i];
   if (!t) return;
 
   const g = new THREE.Group();
-  g.position.set(x - N / 2 + 0.5, 0, z - N / 2 + 0.5);
+  const ty = tileY(x, z);
+  g.position.set(x - N / 2 + 0.5, ty, z - N / 2 + 0.5);
+  swayList = [];
   const r = hash(x, z);
+
+  // ฐานรองใต้ช่อง ปิดช่องว่างบนพื้นลาด / เสาสะพานเมื่ออยู่เหนือน้ำ
+  if (tileIsWater[i]) {
+    put(g, boxGeo, M.concrete, 0, -0.06, 0, 0.98, 0.12, 0.98); // พื้นสะพาน
+    const pl = ty + 0.5; // เสาลงถึงท้องน้ำ
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) put(g, cylGeo, M.concrete, sx * 0.38, -pl / 2, sz * 0.38, 0.1, pl, 0.1);
+  } else {
+    const ph = Math.max(0.06, ty - tileMinH[i] + 0.08);
+    put(g, boxGeo, M.plinth, 0, -ph / 2 + 0.005, 0, 0.99, ph, 0.99);
+  }
   const r2 = hash(x * 3 + 1, z * 5 + 2);
   const rot = () => facing(x, z, r);
 
@@ -637,6 +1071,20 @@ function buildTile(x, z) {
       put(g, cylGeo, M.metal, sx * 0.45, 0.17, sz * 0.45, 0.012, 0.26, 0.012);
       put(g, boxGeo, M.lampGlow, sx * 0.45, 0.31, sz * 0.45, 0.05, 0.012, 0.035);
     }
+    // ไฟจราจร + ทางม้าลายที่ทางแยก, เส้นหยุดและป้ายบนถนนที่ติดทางแยก
+    if (isJunction(x, z)) {
+      addCrosswalks(g, x, z);
+      addSignalHeads(g, x, z, details);
+    } else {
+      addStopLines(g, x, z);
+      if (details >= 1) addRoadSigns(g, x, z, r, r2);
+    }
+  } else if (t.t === 'water') {
+    put(g, boxGeo, M.walk, 0, 0.015, 0, 0.96, 0.03, 0.96);
+    const bg = new THREE.Group();
+    bg.rotation.y = facing(x, z, r);
+    g.add(bg);
+    buildWaterPlant(bg);
   } else if (ZONES.includes(t.t)) {
     put(g, boxGeo, M.zone[t.t], 0, 0.015, 0, 0.94, 0.03, 0.94);
     const lv = t.lv;
@@ -690,13 +1138,21 @@ function buildTile(x, z) {
 
   meshes[i] = g;
   tileGroup.add(g);
+  if (swayList.length) swayTiles.set(i, swayList);
+  swayList = null;
 }
 
 function refresh(x, z) {
   agents.invalidate();
   buildTile(x, z);
-  // สร้างช่องข้างเคียงใหม่ด้วย (ถนนต่อกัน + อาคารหันหน้าเข้าหาถนน)
-  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) buildTile(x + dx, z + dz);
+  // สร้างช่องรอบๆ ใหม่ด้วย: ถนนต่อกัน, อาคารหันหน้าเข้าหาถนน, ทางแยกเกิดใหม่ (ไฟ ทางม้าลาย เส้นหยุด)
+  // ระยะ 2 ช่อง เพราะเส้นหยุด/ป้ายอยู่บนช่องที่ติดกับทางแยก
+  for (let dz = -2; dz <= 2; dz++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      if ((dx === 0 && dz === 0) || Math.abs(dx) + Math.abs(dz) > 2) continue;
+      buildTile(x + dx, z + dz);
+    }
+  }
 }
 function rebuildAll() {
   for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) buildTile(x, z);
@@ -712,6 +1168,12 @@ function toast(msg) {
   toastEl.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1400);
+}
+
+// ราคาจริง: ถนนบนน้ำ = สะพานแพงกว่า
+function buildCost(tool, x, z) {
+  if (tool === 'road' && isWaterTile(x, z)) return 40;
+  return TOOLS[tool].cost;
 }
 
 function applyTool(x, z) {
@@ -730,8 +1192,11 @@ function applyTool(x, z) {
     return;
   }
   if (cur) return; // วางทับของเดิมไม่ได้ ต้องรื้อก่อน
-  if (state.money < cost) return toast('เงินไม่พอ');
-  state.money -= cost;
+  const cost2 = buildCost(currentTool, x, z);
+  if (isWaterTile(x, z) && currentTool !== 'road') return toast('สร้างบนน้ำไม่ได้ (ทำได้แค่สะพาน)');
+  if (currentTool === 'water' && !nearWater(x, z, 3)) return toast('โรงประปาต้องอยู่ใกล้แม่น้ำหรือทะเล (ภายใน 3 ช่อง)');
+  if (state.money < cost2) return toast('เงินไม่พอ');
+  state.money -= cost2;
   state.tiles[i] = { t: currentTool, lv: 0 };
   refresh(x, z);
   updateHUD();
@@ -744,23 +1209,31 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const adjRoad = (x, z) => isType(x + 1, z, 'road') || isType(x - 1, z, 'road') || isType(x, z + 1, 'road') || isType(x, z - 1, 'road');
 
 function computeStats() {
-  const s = { pop: 0, jobsCom: 0, jobsInd: 0, powerCap: 0, powerUse: 0, roads: 0, parks: 0, plants: 0, comLv: 0, indLv: 0 };
-  for (const t of state.tiles) {
-    if (!t) continue;
-    if (t.t === 'res') { s.pop += t.lv * 8; s.powerUse += t.lv * 2; }
-    else if (t.t === 'com') { s.jobsCom += t.lv * 6; s.powerUse += t.lv * 3; s.comLv += t.lv; }
-    else if (t.t === 'ind') { s.jobsInd += t.lv * 8; s.powerUse += t.lv * 4; s.indLv += t.lv; }
-    else if (t.t === 'road') s.roads++;
-    else if (t.t === 'park') s.parks++;
-    else if (t.t === 'power') { s.plants++; s.powerCap += 60; }
-  }
+  const s = {
+    pop: 0, jobsCom: 0, jobsInd: 0, powerCap: 0, powerUse: 0, waterCap: 0, waterUse: 0,
+    roads: 0, bridges: 0, parks: 0, plants: 0, wplants: 0, comLv: 0, indLv: 0, junctions: 0,
+  };
+  state.tiles.forEach((t, i) => {
+    if (!t) return;
+    const lv = t.lv || 0;
+    if (t.t === 'res') { s.pop += POP_PER[lv]; s.powerUse += POWER_USE.res[lv]; s.waterUse += WATER_USE.res[lv]; }
+    else if (t.t === 'com') { s.jobsCom += JOBS_COM[lv]; s.powerUse += POWER_USE.com[lv]; s.waterUse += WATER_USE.com[lv]; s.comLv += lv; }
+    else if (t.t === 'ind') { s.jobsInd += JOBS_IND[lv]; s.powerUse += POWER_USE.ind[lv]; s.waterUse += WATER_USE.ind[lv]; s.indLv += lv; }
+    else if (t.t === 'road') { s.roads++; if (tileIsWater[i]) s.bridges++; if (isJunction(i % N, Math.floor(i / N))) s.junctions++; }
+    else if (t.t === 'park') { s.parks++; s.waterUse += 1; }
+    else if (t.t === 'power') { s.plants++; s.powerCap += POWER_CAP; }
+    else if (t.t === 'water') { s.wplants++; s.waterCap += WATER_CAP * (1 + 0.15 * weather.state.rain); } // ฝนตก น้ำดิบมากขึ้น
+  });
+  // อากาศร้อนคนใช้น้ำมากขึ้น ฝนตกใช้น้อยลง
+  s.waterUse = Math.round(s.waterUse * clamp(1 + (tempC - 30) * 0.02 - 0.15 * weather.state.rain, 0.7, 1.3));
+  s.waterCap = Math.round(s.waterCap);
   s.jobs = s.jobsCom + s.jobsInd;
-  s.income = s.pop * 1.2 + s.comLv * 6 + s.indLv * 8;
-  s.expense = s.roads * 0.5 + s.plants * 20 + s.parks * 2;
+  s.income = s.pop * 0.45 + s.jobsCom * 0.9 + s.jobsInd * 0.8;
+  s.expense = s.roads * 0.5 + s.bridges * 1.5 + s.plants * 20 + s.wplants * 15 + s.parks * 2 + s.junctions * 0.5;
   s.net = s.income - s.expense;
-  const workD = clamp((s.pop + 12 - s.jobs) / 60, 0, 1);
+  const workD = clamp((s.pop + 20 - s.jobs) / 90, 0, 1);
   s.demand = {
-    res: clamp((s.jobs + 16 - s.pop) / 60, 0, 1),
+    res: clamp((s.jobs + 25 - s.pop) / 90, 0, 1),
     com: workD,
     ind: workD * 0.8,
   };
@@ -770,6 +1243,7 @@ function computeStats() {
 function tick() {
   const s = computeStats();
   const powered = s.powerCap > s.powerUse;
+  const watered = s.waterCap > s.waterUse;
 
   // ช่องที่อยู่ใกล้สวน (รัศมี 3) โตเร็วขึ้น
   const nearPark = new Set();
@@ -791,7 +1265,7 @@ function tick() {
         if (t.lv > 0) { t.lv = 0; buildTile(x, z); }
         continue;
       }
-      if (!powered || t.lv >= 3) continue;
+      if (!powered || !watered || t.lv >= 3) continue;
 
       let p = 0.04 + 0.22 * s.demand[t.t];
       if (t.t === 'res' && nearPark.has(i)) p += 0.05;
@@ -813,9 +1287,13 @@ function updateHUD(s = computeStats()) {
   $('money').textContent = '$' + Math.floor(state.money).toLocaleString();
   $('pop').textContent = s.pop.toLocaleString();
   $('jobs').textContent = s.jobs.toLocaleString();
+  const hasZone = state.tiles.some(t => t && ZONES.includes(t.t));
   const pw = $('power');
   pw.textContent = `${s.powerUse}/${s.powerCap}`;
-  pw.classList.toggle('bad', s.powerUse >= s.powerCap && s.powerUse > 0);
+  pw.classList.toggle('bad', s.powerUse >= s.powerCap && (s.powerUse > 0 || hasZone));
+  const wt = $('water');
+  wt.textContent = `${s.waterUse}/${s.waterCap}`;
+  wt.classList.toggle('bad', s.waterUse >= s.waterCap && (s.waterUse > 0 || hasZone));
   const net = $('net');
   net.textContent = (s.net >= 0 ? '+' : '') + s.net.toFixed(1);
   net.classList.toggle('bad', s.net < 0);
@@ -831,7 +1309,8 @@ const toolBtns = {};
 TOOL_KEYS.forEach((k, n) => {
   const b = document.createElement('button');
   b.className = 'tool';
-  b.innerHTML = `${TOOLS[k].label}<small>${TOOLS[k].cost ? '$' + TOOLS[k].cost : 'ฟรี'} · ${n + 1}</small>`;
+  b.title = TOOLS[k].tip;
+  b.innerHTML = `<span class="ico">${ICON[k]}</span><span class="lbl">${TOOLS[k].label}</span><small>${TOOLS[k].cost ? '$' + TOOLS[k].cost : 'ฟรี'} · ${n + 1}</small>`;
   b.onclick = () => selectTool(k);
   toolbar.appendChild(b);
   toolBtns[k] = b;
@@ -852,6 +1331,7 @@ $('reset').onclick = () => {
   if (!confirm('เริ่มเมืองใหม่? ข้อมูลเมืองเดิมจะหายทั้งหมด')) return;
   state = newState();
   for (let i = 0; i < N * N; i++) { if (meshes[i]) { tileGroup.remove(meshes[i]); meshes[i] = null; } }
+  swayTiles.clear();
   agents.clear();
   agents.invalidate();
   save();
@@ -886,10 +1366,17 @@ function pickTile(e) {
   const rect = renderer.domElement.getBoundingClientRect();
   mouse.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
   raycaster.setFromCamera(mouse, camera);
-  if (!raycaster.ray.intersectPlane(plane, hit)) return null;
-  const x = Math.floor(hit.x + N / 2);
-  const z = Math.floor(hit.z + N / 2);
-  return inBounds(x, z) ? { x, z } : null;
+  // พื้นสูงต่ำ: เริ่มจากระนาบแล้วปรับตามความสูงช่องที่ชี้ ซ้ำ 4 รอบให้เข้าใกล้ตำแหน่งจริง
+  let y = 0.3, x = 0, z = 0;
+  for (let k = 0; k < 4; k++) {
+    plane.constant = -y;
+    if (!raycaster.ray.intersectPlane(plane, hit)) return null;
+    x = Math.floor(hit.x + N / 2);
+    z = Math.floor(hit.z + N / 2);
+    if (!inBounds(x, z)) return null;
+    y = tileY(x, z) + 0.05;
+  }
+  return { x, z };
 }
 
 function updateHover(e) {
@@ -897,9 +1384,10 @@ function updateHover(e) {
   if (!hoverTile || currentTool === 'select') { hoverMesh.visible = false; return; }
   const { x, z } = hoverTile;
   hoverMesh.visible = true;
-  hoverMesh.position.set(x - N / 2 + 0.5, 0.08, z - N / 2 + 0.5);
+  hoverMesh.position.set(x - N / 2 + 0.5, tileY(x, z) + 0.1, z - N / 2 + 0.5);
   const cur = tileAt(x, z);
-  const ok = currentTool === 'bulldoze' ? !!cur : !cur && state.money >= TOOLS[currentTool].cost;
+  const wOk = isWaterTile(x, z) ? currentTool === 'road' : true;
+  const ok = currentTool === 'bulldoze' ? !!cur : !cur && wOk && state.money >= buildCost(currentTool, x, z);
   hoverMesh.material.color.set(currentTool === 'bulldoze' ? 0xff8844 : ok ? 0x66ff88 : 0xff5555);
 }
 
@@ -1015,8 +1503,8 @@ window.addEventListener('keydown', e => {
 // แผงตั้งค่า: กราฟิก / โหมดควบคุม
 // ---------------------------------------------------------------
 const HELP = {
-  trackpad: 'ลากสองนิ้ว = เลื่อนแผนที่<br>หนีบนิ้ว (pinch) = ซูม<br>Alt/Option + ลากสองนิ้ว = หมุน<br>คลิก/ลากนิ้วเดียว = สร้าง<br>1–8 เลือกเครื่องมือ, Esc ยกเลิก, Space หยุด',
-  mouse: 'ซ้าย (ลาก) = สร้าง<br>ขวา (ลาก) = หมุนกล้อง<br>ล้อเมาส์ = ซูม, ลูกศร = เลื่อน<br>1–8 เลือกเครื่องมือ, Esc ยกเลิก, Space หยุด',
+  trackpad: 'ลากสองนิ้ว = เลื่อนแผนที่<br>หนีบนิ้ว (pinch) = ซูม<br>Alt/Option + ลากสองนิ้ว = หมุน<br>คลิก/ลากนิ้วเดียว = สร้าง<br>1–9 เลือกเครื่องมือ, Esc ยกเลิก, Space หยุด',
+  mouse: 'ซ้าย (ลาก) = สร้าง<br>ขวา (ลาก) = หมุนกล้อง<br>ล้อเมาส์ = ซูม, ลูกศร = เลื่อน<br>1–9 เลือกเครื่องมือ, Esc ยกเลิก, Space หยุด',
 };
 
 function applyControlMode(m) {
@@ -1043,7 +1531,9 @@ function applyQuality(key) {
     if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
   }
   useBloom = q.bloom && !!composer;
-  agents.setTargets(q);
+  forest.setCount(q.forest);
+  weather.setRainCap(q.rain);
+  lastTargetsAt = 0; // คำนวณจำนวนรถ/คนใหม่ทันที
 
   document.querySelectorAll('#qSeg button').forEach(b => b.classList.toggle('active', b.dataset.q === key));
   $('qDesc').textContent = q.desc;
@@ -1061,6 +1551,57 @@ document.querySelectorAll('#mSeg button').forEach(b => { b.onclick = () => apply
 // ---------------------------------------------------------------
 // เริ่มเกม
 // ---------------------------------------------------------------
+let lastTargetsAt = 0;   // นับถอยหลังถึงรอบคำนวณจำนวนรถ/คน/สัตว์ครั้งถัดไป
+let swayClock = 0;
+mountIcons();
+
+// ปุ่มเลือกสภาพอากาศ (อัตโนมัติ / แจ่มใส / เมฆ / ฝน / พายุ)
+document.querySelectorAll('#wSeg button').forEach(b => {
+  b.onclick = () => {
+    weather.setMode(b.dataset.w);
+    document.querySelectorAll('#wSeg button').forEach(x => x.classList.toggle('active', x === b));
+  };
+});
+
+// ซ่อน/แสดง UI ทั้งหมด เพื่อดูภาพเมืองเต็มจอ (ปุ่มตา มุมขวาบน หรือกด H)
+let uiHidden = false;
+function setUiHidden(h) {
+  uiHidden = h;
+  document.body.classList.toggle('ui-hidden', h);
+  const b = $('uiToggle');
+  b.innerHTML = h ? ICON.eye : ICON.eyeOff;
+  b.title = h ? 'แสดง UI (H)' : 'ซ่อน UI (H)';
+}
+$('uiToggle').onclick = () => setUiHidden(!uiHidden);
+window.addEventListener('keydown', e => {
+  if (e.key === 'h' || e.key === 'H') setUiHidden(!uiHidden);
+});
+setUiHidden(false);
+
+// จำนวนรถ/คน/สัตว์ตามประชากรจริง และช่วงเวลา: เช้า-เย็นรถเยอะ, กลางคืนเงียบ, ฝนตกคนเดินน้อยลง
+function updateAgentTargets() {
+  const s = computeStats();
+  const q = QUALITY[qualityKey];
+  const W = weather.state;
+  const h = tod * 24;
+  const bump = (c, w) => Math.exp(-(((h - c) / w) ** 2));
+  const sm = THREE.MathUtils.smoothstep;
+  const rush = 1 + 0.9 * bump(8, 1.3) + 0.9 * bump(17.5, 1.6);
+  const awake = 0.12 + 0.88 * (sm(h, 5, 8) - sm(h, 21.5, 24));
+  const rainy = 1 - 0.7 * W.rain;
+
+  const cars = (s.pop * 0.1 + s.jobsCom * 0.07 + s.jobsInd * 0.1 + Math.min(6, s.roads * 0.12)) * rush * (0.25 + 0.75 * awake);
+  const people = (s.pop * 0.16 + s.jobs * 0.04 + s.parks * 1.5 + Math.min(4, s.roads * 0.08)) * awake * rainy;
+  const dogs = s.pop * 0.02 * (0.4 + 0.6 * awake) * rainy;
+  const cats = s.pop * 0.015 * (0.4 + 0.6 * awake) * (1 - 0.5 * W.rain);
+  agents.setTargets({
+    car: Math.min(Math.round(cars), q.cars),
+    person: Math.min(Math.round(people), q.people),
+    dog: Math.min(Math.round(dogs), Math.ceil(q.pets * 0.55)),
+    cat: Math.min(Math.round(cats), Math.floor(q.pets * 0.45)),
+  });
+}
+
 load();
 applyControlMode(settings.mode);
 applyQuality(settings.quality); // สร้างเมืองครั้งแรกตามระดับกราฟิก
@@ -1087,13 +1628,36 @@ function loop(now) {
   saveAcc += dt;
   if (saveAcc > 5) { saveAcc = 0; save(); }
 
+  weather.update(dt);
   const night = updateSky(dt);
-  agents.update(dt, night, speed);
+
+  // ไฟจราจรเดินตามความเร็วเกม
+  sigClock += dt * speed;
+  updateSignalLamps();
+
+  lastTargetsAt -= dt;
+  if (lastTargetsAt <= 0) { lastTargetsAt = 1; updateAgentTargets(); }
+  agents.update(dt, night, speed, { rain: weather.state.rain, dark: lampLevel });
+
+  // ลม: ต้นไม้โยก, คลื่นน้ำไหลตามทิศลม
+  const W = weather.state;
+  swayClock += dt;
+  const sw1 = swayClock * (1.3 + W.wind * 2.2), sw2 = swayClock * 1.1;
+  const swA = 0.015 + 0.09 * W.wind, swB = 0.01 + 0.05 * W.wind;
+  for (const arr of swayTiles.values()) {
+    for (const s of arr) {
+      s.obj.rotation.z = Math.sin(sw1 + s.ph) * swA * s.k;
+      s.obj.rotation.x = Math.cos(sw2 + s.ph) * swB * s.k;
+    }
+  }
+  const wvec = weather.windVec();
+  waterTex.offset.x = (waterTex.offset.x + wvec.x * dt * 0.0007 * (1 + W.wind * 3)) % 1;
+  waterTex.offset.y = (waterTex.offset.y + wvec.z * dt * 0.0007 * (1 + W.wind * 3)) % 1;
 
   // จำกัดไม่ให้กล้องเลื่อนออกนอกแผนที่มากเกินไป
   controls.target.x = clamp(controls.target.x, -N / 2, N / 2);
   controls.target.z = clamp(controls.target.z, -N / 2, N / 2);
-  controls.target.y = 0;
+  controls.target.y = 0.4;
 
   controls.update();
   if (useBloom) {
@@ -1107,7 +1671,15 @@ function loop(now) {
   fpsFrames++;
   fpsTime += dt;
   if (fpsTime >= 0.5) {
+    const c = agents.counts();
     $('fps').textContent = `FPS ${Math.round(fpsFrames / fpsTime)}`;
+    $('live').textContent = `รถ ${c.car} · คน ${c.person} · หมา ${c.dog} · แมว ${c.cat}`;
+    // นาฬิกา สภาพอากาศ อุณหภูมิ ลม
+    $('clock').textContent = clockText();
+    $('wxIcon').innerHTML = ICON[weather.iconKey()];
+    $('wxText').textContent = weather.label();
+    $('temp').textContent = Math.round(tempC) + '°C';
+    $('windv').textContent = 'ลม ' + Math.round(8 + W.wind * 42) + ' กม./ชม.';
     fpsFrames = 0; fpsTime = 0;
   }
   requestAnimationFrame(loop);

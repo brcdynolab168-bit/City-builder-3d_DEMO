@@ -14,7 +14,11 @@ const angLerp = (a, b, t) => {
 };
 const pick = arr => arr[(Math.random() * arr.length) | 0];
 
-export function createAgents({ scene, N, tileType }) {
+// จุดหยุดหน้าไฟแดง (หน่วย s: 0 = กลางช่อง, 0.5 = ขอบช่อง)
+const CAR_STOP = 0.3;
+const PED_STOP = 0.4;
+
+export function createAgents({ scene, N, tileType, groundY = () => 0, signal = () => null }) {
   const root = new THREE.Group();
   root.name = 'agents';
   scene.add(root);
@@ -221,11 +225,11 @@ export function createAgents({ scene, N, tileType }) {
       const arr = agents[type];
       const cap = type === 'car' ? carCap : walkCap;
       const target = Math.min(targets[type], cap);
-      for (let k = 0; k < 2 && arr.length < target; k++) {
+      for (let k = 0; k < 4 && arr.length < target; k++) {
         const a = spawn(type);
         if (a) arr.push(a);
       }
-      for (let k = 0; k < 2 && arr.length > target; k++) removeAgent(arr.pop());
+      for (let k = 0; k < 4 && arr.length > target; k++) removeAgent(arr.pop());
     }
   }
 
@@ -273,24 +277,41 @@ export function createAgents({ scene, N, tileType }) {
       const onRoad = a.s < 0.5 ? tileType(a.x, a.z) === 'road' : tileType(bx, bz) === 'road';
       ground = onRoad ? 0.04 : 0.045;
     }
-    a.obj.position.set(px, ground + a.bob, pz);
+    // ความสูงภูมิประเทศ: ไล่ระดับระหว่างกลางช่องปัจจุบันกับช่องถัดไป
+    const gy = groundY(a.x, a.z) * (1 - a.s) + groundY(bx, bz) * a.s;
+    a.obj.position.set(px, gy + ground + a.bob, pz);
     a.obj.rotation.y = yaw;
   }
 
   // ---------- API ----------
-  function update(dt, night, gameSpeed) {
-    M.head.emissiveIntensity = night * 3;
-    M.tail.emissiveIntensity = 0.15 + night * 1.6;
+  // ไฟจราจร: คืนตัวคูณความเร็ว (1 = ไปได้, 0 = หยุดรอที่เส้น)
+  function signalFactor(a) {
+    const bx = a.x + a.d[0], bz = a.z + a.d[1];
+    const st = signal(bx, bz, a.d[0] !== 0 ? 'x' : 'z');
+    if (!st || st === 'g') return 1;
+    const line = a.kind === 'car' ? CAR_STOP : PED_STOP;
+    if (a.s >= line) return 1;                       // ผ่านเส้นแล้ว
+    if (st === 'y' && a.s > line - 0.1) return 1;    // ไฟเหลืองแต่ใกล้เกินจะเบรก
+    const brake = a.kind === 'car' ? 0.22 : 0.1;
+    return clamp01((line - a.s - 0.01) / brake);
+  }
+
+  function update(dt, night, gameSpeed, env = {}) {
+    const rain = env.rain || 0;
+    const lamp = Math.max(night, env.dark || 0);
+    M.head.emissiveIntensity = lamp * 3;
+    M.tail.emissiveIntensity = 0.15 + lamp * 1.6;
 
     adjustTimer += dt;
     if (adjustTimer > 0.4) { adjustTimer = 0; adjustCounts(); }
 
     const sdt = dt * gameSpeed;
+    const wetSlow = 1 - 0.22 * rain; // ถนนลื่น รถช้าลงตอนฝนตก
 
     // รถเบรกเมื่อมีรถคันหน้าในเลนเดียวกัน
     const cars = agents.car;
     for (const a of cars) {
-      a.speedNow = a.speed;
+      a.speedNow = a.speed * wetSlow * signalFactor(a);
       for (const o of cars) {
         if (o === a || o.d[0] !== a.d[0] || o.d[1] !== a.d[1]) continue;
         let gap = null;
@@ -304,6 +325,7 @@ export function createAgents({ scene, N, tileType }) {
       const arr = agents[type];
       let removed = false;
       for (const a of arr) {
+        if (a.kind !== 'car') a.speedNow = a.speed * signalFactor(a);
         if (sdt > 0 && !advance(a, sdt)) { removeAgent(a); removed = true; continue; }
         animate(a);
         place(a);
@@ -313,8 +335,12 @@ export function createAgents({ scene, N, tileType }) {
   }
 
   return {
-    setTargets({ cars = 0, people = 0, pets = 0 }) {
-      targets = { car: cars, person: people, dog: Math.ceil(pets / 2), cat: Math.floor(pets / 2) };
+    // จำนวนเป้าหมายแต่ละชนิด (ผู้เรียกคำนวณจากประชากร/เวลา/อากาศ)
+    setTargets({ car = 0, person = 0, dog = 0, cat = 0 }) {
+      targets = { car, person, dog, cat };
+    },
+    counts() {
+      return { car: agents.car.length, person: agents.person.length, dog: agents.dog.length, cat: agents.cat.length };
     },
     invalidate() { dirty = true; },
     update,

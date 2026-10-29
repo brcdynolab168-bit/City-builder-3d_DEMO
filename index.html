@@ -6,14 +6,16 @@
   <title>Mini City 3D</title>
   <style>
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #1b2430; font-family: "Segoe UI", "Noto Sans Thai", sans-serif; color: #fff; user-select: none; -webkit-user-select: none; }
+    html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #1b2430; font-family: "Segoe UI", "Leelawadee UI", "Noto Sans Thai", sans-serif; color: #fff; user-select: none; -webkit-user-select: none; }
     #app { position: fixed; inset: 0; touch-action: none; }
     canvas { display: block; touch-action: none; }
+    .ic { width: 1.15em; height: 1.15em; vertical-align: -0.2em; flex: none; }
+    button { font-family: inherit; }
 
-    #hud { position: fixed; top: 10px; left: 10px; right: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; pointer-events: none; }
+    #hud { position: fixed; top: 10px; left: 10px; right: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; pointer-events: none; }
     .card { background: rgba(20, 28, 40, .82); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 8px 14px; pointer-events: auto; }
-    .stat { display: flex; flex-direction: column; min-width: 90px; }
-    .stat small { opacity: .6; font-size: 11px; }
+    .stat { display: flex; flex-direction: column; min-width: 88px; }
+    .stat small { opacity: .65; font-size: 11px; display: flex; align-items: center; gap: 4px; }
     .stat b { font-size: 18px; }
     .bad { color: #ff6b6b; }
     .demand { display: flex; gap: 8px; align-items: flex-end; height: 100%; }
@@ -21,34 +23,58 @@
     .bar i { position: absolute; left: 0; right: 0; bottom: 0; transition: height .4s; }
     .bar span { position: absolute; bottom: -1px; width: 100%; text-align: center; font-size: 10px; font-weight: 700; color: #fff; text-shadow: 0 0 3px #000; }
 
+    .wx { display: flex; align-items: center; gap: 10px; min-width: 190px; }
+    .wx .big { font-size: 30px; display: flex; color: #ffd27a; }
+    .wx .big .ic { width: 1em; height: 1em; }
+    .wx .t1 { font-size: 18px; font-weight: 700; line-height: 1.1; }
+    .wx .t2 { font-size: 11px; opacity: .7; }
+
     #toolbar { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 8px; max-width: calc(100vw - 20px); overflow-x: auto; }
-    .tool { background: rgba(255,255,255,.08); border: 1px solid transparent; color: #fff; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 14px; text-align: center; min-width: 88px; white-space: nowrap; }
-    .tool small { display: block; opacity: .6; font-size: 11px; }
+    .tool { background: rgba(255,255,255,.08); border: 1px solid transparent; color: #fff; border-radius: 8px; padding: 7px 10px 6px; cursor: pointer; font-size: 13px; text-align: center; min-width: 84px; white-space: nowrap; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+    .tool .ico { display: flex; color: #9fd8ff; }
+    .tool .ico .ic { width: 22px; height: 22px; }
+    .tool small { opacity: .6; font-size: 11px; }
     .tool:hover { background: rgba(255,255,255,.18); }
     .tool.active { border-color: #4fc3f7; background: rgba(79,195,247,.22); }
+    .tool.active .ico { color: #fff; }
 
     #speed { position: fixed; bottom: 12px; right: 12px; display: flex; gap: 6px; padding: 8px; }
-    #speed button, #reset { background: rgba(255,255,255,.08); color: #fff; border: 1px solid transparent; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+    #speed button, #reset { background: rgba(255,255,255,.08); color: #fff; border: 1px solid transparent; border-radius: 6px; padding: 6px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
     #speed button.active { border-color: #4fc3f7; }
     #reset { position: fixed; bottom: 12px; left: 12px; }
 
-    #toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: rgba(200,50,50,.9); padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+    #toast { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); background: rgba(200,50,50,.92); padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 90vw; text-align: center; }
     #toast.show { opacity: 1; }
 
-    #side { position: fixed; top: 80px; right: 10px; width: 262px; font-size: 12px; line-height: 1.6; display: flex; flex-direction: column; gap: 8px; }
+    #side { position: fixed; top: 84px; right: 10px; width: 270px; font-size: 12px; line-height: 1.6; display: flex; flex-direction: column; gap: 8px; }
     #side .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .seg { display: flex; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; overflow: hidden; }
-    .seg button { background: transparent; border: 0; color: #fff; padding: 5px 11px; cursor: pointer; font-size: 12px; }
+    .seg button { background: transparent; border: 0; color: #fff; padding: 5px 11px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; }
     .seg button.active { background: rgba(79,195,247,.38); }
+    .seg.icons button { padding: 5px 9px; }
+    .seg.icons .ic { width: 17px; height: 17px; }
     .cam { display: flex; gap: 6px; }
-    .cam button { flex: 1; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.15); color: #fff; border-radius: 8px; padding: 6px 0; font-size: 15px; cursor: pointer; }
+    .cam button { flex: 1; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.15); color: #fff; border-radius: 8px; padding: 6px 0; cursor: pointer; display: flex; justify-content: center; }
+    .cam button .ic { width: 17px; height: 17px; }
     .cam button:hover { background: rgba(255,255,255,.2); }
     .dim { opacity: .65; font-size: 11px; }
     #helpText { opacity: .85; }
+    #live { opacity: .85; }
+
+    /* ปุ่มซ่อน/แสดง UI (กด H ก็ได้) */
+    #uiToggle { position: fixed; top: 10px; right: 10px; width: 42px; height: 42px; padding: 0; display: flex; align-items: center; justify-content: center; background: rgba(20, 28, 40, .82); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.18); border-radius: 10px; color: #fff; cursor: pointer; z-index: 5; }
+    #uiToggle .ic { width: 20px; height: 20px; }
+    #uiToggle:hover { background: rgba(40, 56, 80, .9); }
+    body.ui-hidden #uiToggle { opacity: .35; }
+    body.ui-hidden #uiToggle:hover { opacity: 1; }
+    body.ui-hidden #hud, body.ui-hidden #side, body.ui-hidden #toolbar,
+    body.ui-hidden #speed, body.ui-hidden #reset { display: none; }
+    #hud { right: 62px; }
 
     @media (max-width: 760px) {
-      #side { top: auto; bottom: 86px; width: 220px; }
-      #hud .stat { min-width: 70px; }
+      #side { top: auto; bottom: 92px; width: 230px; }
+      #hud .stat { min-width: 64px; }
+      .wx { min-width: 0; }
     }
   </style>
 </head>
@@ -56,16 +82,24 @@
   <div id="app"></div>
 
   <div id="hud">
-    <div class="card stat"><small>เงิน</small><b id="money">0</b></div>
-    <div class="card stat"><small>ประชากร</small><b id="pop">0</b></div>
-    <div class="card stat"><small>งาน</small><b id="jobs">0</b></div>
-    <div class="card stat"><small>ไฟฟ้า (ใช้/ผลิต)</small><b id="power">0/0</b></div>
-    <div class="card stat"><small>รายได้สุทธิ/วัน</small><b id="net">0</b></div>
-    <div class="card stat"><small>วันที่</small><b id="day">0</b></div>
+    <div class="card stat"><small><span data-ic="money"></span>เงิน</small><b id="money">0</b></div>
+    <div class="card stat"><small><span data-ic="pop"></span>ประชากร</small><b id="pop">0</b></div>
+    <div class="card stat"><small><span data-ic="jobs"></span>งาน</small><b id="jobs">0</b></div>
+    <div class="card stat" title="ไฟฟ้า ใช้/ผลิต"><small><span data-ic="power"></span>ไฟฟ้า</small><b id="power">0/0</b></div>
+    <div class="card stat" title="น้ำประปา ใช้/ผลิต"><small><span data-ic="water"></span>น้ำประปา</small><b id="water">0/0</b></div>
+    <div class="card stat"><small><span data-ic="net"></span>รายได้สุทธิ/วัน</small><b id="net">0</b></div>
+    <div class="card stat"><small><span data-ic="calendar"></span>วันที่</small><b id="day">0</b></div>
     <div class="card demand" title="ความต้องการ: R=ที่อยู่อาศัย C=พาณิชย์ I=อุตสาหกรรม">
       <div class="bar"><i id="dR" style="background:#4caf50"></i><span>R</span></div>
       <div class="bar"><i id="dC" style="background:#2196f3"></i><span>C</span></div>
       <div class="bar"><i id="dI" style="background:#ffc107"></i><span>I</span></div>
+    </div>
+    <div class="card wx">
+      <div class="big" id="wxIcon"></div>
+      <div>
+        <div class="t1"><span id="clock">06:00</span> · <span id="temp">28°C</span></div>
+        <div class="t2"><span id="wxText">แจ่มใส</span> · <span id="windv">ลม 10 กม./ชม.</span></div>
+      </div>
     </div>
   </div>
 
@@ -76,28 +110,39 @@
       </div>
     </div>
     <div class="dim" id="qDesc"></div>
+    <div class="row"><b>สภาพอากาศ</b>
+      <div class="seg icons" id="wSeg">
+        <button data-w="auto" class="active" title="อัตโนมัติ (เปลี่ยนเอง)"><span data-ic="auto"></span></button>
+        <button data-w="clear" title="แจ่มใส"><span data-ic="sun"></span></button>
+        <button data-w="cloudy" title="เมฆมาก"><span data-ic="cloud"></span></button>
+        <button data-w="rain" title="ฝนตก"><span data-ic="rain"></span></button>
+        <button data-w="storm" title="พายุฝนฟ้าคะนอง"><span data-ic="storm"></span></button>
+      </div>
+    </div>
     <div class="row"><b>ควบคุม</b>
       <div class="seg" id="mSeg">
         <button data-m="trackpad">ทัชแพด</button><button data-m="mouse">เมาส์</button>
       </div>
     </div>
     <div class="cam">
-      <button id="camL" title="หมุนซ้าย (Q)">⟲</button>
-      <button id="camR" title="หมุนขวา (E)">⟳</button>
-      <button id="camIn" title="ซูมเข้า (+)">＋</button>
-      <button id="camOut" title="ซูมออก (-)">－</button>
-      <button id="camHome" title="กลับมุมมองเริ่มต้น">⌂</button>
+      <button id="camL" title="หมุนซ้าย (Q)"><span data-ic="rotL"></span></button>
+      <button id="camR" title="หมุนขวา (E)"><span data-ic="rotR"></span></button>
+      <button id="camIn" title="ซูมเข้า (+)"><span data-ic="plus"></span></button>
+      <button id="camOut" title="ซูมออก (-)"><span data-ic="minus"></span></button>
+      <button id="camHome" title="กลับมุมมองเริ่มต้น"><span data-ic="home"></span></button>
     </div>
     <div id="helpText"></div>
+    <div class="dim" id="live"></div>
     <div class="dim" id="fps"></div>
   </div>
 
   <div id="toolbar" class="card"></div>
   <div id="speed" class="card">
-    <button data-s="0">⏸</button><button data-s="1" class="active">▶ 1x</button><button data-s="3">⏩ 3x</button>
+    <button data-s="0" title="หยุด"><span data-ic="pause"></span></button><button data-s="1" class="active"><span data-ic="play"></span> 1x</button><button data-s="3"><span data-ic="fast"></span> 3x</button>
   </div>
-  <button id="reset">เริ่มเมืองใหม่</button>
+  <button id="reset"><span data-ic="reset"></span> เริ่มเมืองใหม่</button>
   <div id="toast"></div>
+  <button id="uiToggle" title="ซ่อน/แสดง UI (H)"></button>
 
   <script type="module" src="/src/main.js"></script>
 </body>
