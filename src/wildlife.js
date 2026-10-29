@@ -57,7 +57,7 @@ export function createWildlife({ scene, blocked = () => false }) {
         g.add(pivot);
         wings.push(pivot);
       }
-      g.scale.setScalar(rnd(1.3, 1.9));
+      g.scale.setScalar(rnd(0.42, 0.6));
       root.add(g);
       birds.push({ g, wings, flock, a: Math.random() * Math.PI * 2, dr: rnd(-2, 2), dh: rnd(-1, 1), ph: Math.random() * 10 });
     }
