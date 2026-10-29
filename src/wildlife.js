@@ -9,7 +9,7 @@ import { riverZ, SEA_Y } from './terrain.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 
-export function createWildlife({ scene }) {
+export function createWildlife({ scene, blocked = () => false }) {
   const root = new THREE.Group();
   root.name = 'wildlife';
   scene.add(root);
@@ -65,7 +65,7 @@ export function createWildlife({ scene }) {
 
   // ---------- เรือ ----------
   const boats = [];
-  const X0 = -27, X1 = 40;
+  const X0 = -30, X1 = 36;
   for (let i = 0; i < 3; i++) {
     const g = new THREE.Group();
     const inner = new THREE.Group();
@@ -91,7 +91,7 @@ export function createWildlife({ scene }) {
     g.add(wake);
     g.scale.setScalar(1.5);
     root.add(g);
-    boats.push({ g, inner, x: X0 + i * 23 + rnd(0, 6), speed: rnd(0.9, 1.5), ph: Math.random() * 10 });
+    boats.push({ g, inner, x: X0 + i * 23 + rnd(0, 6), speed: rnd(0.9, 1.5), dir: 1, ph: Math.random() * 10 });
   }
 
   let t = 0;
@@ -125,13 +125,15 @@ export function createWildlife({ scene }) {
 
     // เรือแล่นตามแม่น้ำ (ซ้าย→ขวา) ออกสู่ทะเลแล้ววนกลับมาใหม่
     for (const b of boats) {
-      b.x += b.speed * dt;
-      if (b.x > X1) b.x = X0;
+      // เจอสะพานข้างหน้า = กลับลำ (สะพานต่ำ เรือลอดไม่ได้)
+      if (!blocked(b.x) && blocked(b.x + b.dir * 2.4)) b.dir = -b.dir;
+      b.x += b.speed * b.dir * dt;
+      if (b.x > X1) b.dir = -1; else if (b.x < X0) b.dir = 1;
       const x = b.x;
       const z = riverZ(x);
       const zp = 0.3 * Math.cos(x * 0.1 + 0.6) + 0.378 * Math.cos(x * 0.27 + 2); // อนุพันธ์ของ riverZ
       b.g.position.set(x, SEA_Y + 0.015 + Math.sin(t * 1.8 + b.ph) * 0.018, z);
-      b.g.rotation.y = Math.atan2(1, zp);
+      b.g.rotation.y = Math.atan2(b.dir, b.dir * zp);
       b.inner.rotation.z = Math.sin(t * 1.6 + b.ph) * (0.04 + 0.05 * wm + 0.05 * rain);
       b.inner.rotation.x = Math.sin(t * 1.2 + b.ph * 2) * 0.03;
     }

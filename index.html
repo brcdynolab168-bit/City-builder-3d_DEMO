@@ -71,6 +71,17 @@
     body.ui-hidden #speed, body.ui-hidden #reset { display: none; }
     #hud { right: 62px; }
 
+    /* พับ/เลื่อนเก็บแผงข้างและแถบเครื่องมือ */
+    #side, #toolbar { transition: transform .28s ease, opacity .28s ease; }
+    #side.closed { transform: translateX(calc(100% + 24px)); opacity: 0; pointer-events: none; }
+    #toolbar.closed { transform: translate(-50%, calc(100% + 24px)); opacity: 0; pointer-events: none; }
+    .tab { position: fixed; z-index: 5; background: rgba(20, 28, 40, .82); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.18); color: #fff; cursor: pointer; font-size: 15px; line-height: 1; display: flex; align-items: center; justify-content: center; transition: transform .28s ease, background .2s; }
+    .tab:hover { background: rgba(40, 56, 80, .9); }
+    #sideTab { top: 60px; right: 10px; width: 42px; height: 22px; border-radius: 8px; }
+    #toolTab { bottom: 96px; left: 50%; margin-left: -21px; width: 42px; height: 20px; border-radius: 8px 8px 0 0; }
+    #toolTab.closed { transform: translateY(80px); }
+    body.ui-hidden .tab { display: none; }
+
     @media (max-width: 760px) {
       #side { top: auto; bottom: 92px; width: 230px; }
       #hud .stat { min-width: 64px; }
@@ -137,6 +148,8 @@
   </div>
 
   <div id="toolbar" class="card"></div>
+  <button class="tab" id="sideTab" title="เก็บ/แสดงแผงข้าง">›</button>
+  <button class="tab" id="toolTab" title="เก็บ/แสดงแถบเครื่องมือ">⌄</button>
   <div id="speed" class="card">
     <button data-s="0" title="หยุด"><span data-ic="pause"></span></button><button data-s="1" class="active"><span data-ic="play"></span> 1x</button><button data-s="3"><span data-ic="fast"></span> 3x</button>
   </div>

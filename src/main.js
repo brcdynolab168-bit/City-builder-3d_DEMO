@@ -10,6 +10,7 @@ import { createAgents } from './agents.js';
 import { createWeather } from './weather.js';
 import { createWildlife } from './wildlife.js';
 import { ICON, mountIcons } from './icons.js';
+import { blob, broadleafCrown, coniferCrown, trunkGeo } from './trees.js';
 import { terrainH, terrainColor, fbm, hash2, SEA_Y, WATER_LIMIT } from './terrain.js';
 
 // ---------------------------------------------------------------
@@ -306,7 +307,16 @@ function signalState(x, z, axis) {
 }
 
 // รถ ผู้คน หมา แมว
-const wildlife = createWildlife({ scene });
+// มีสะพานข้ามแม่น้ำที่คอลัมน์ x หรือไม่ (เรือจะไม่ชน)
+function bridgeAtX(wx) {
+  const tx = Math.floor(wx + N / 2);
+  for (let dx = -1; dx <= 1; dx++) for (let z = 0; z < N; z++) {
+    const i = z * N + tx + dx;
+    if (tx + dx >= 0 && tx + dx < N && tileIsWater[i] && state.tiles[i]?.t === 'road') return true;
+  }
+  return false;
+}
+const wildlife = createWildlife({ scene, blocked: bridgeAtX });
 const agents = createAgents({
   scene, N,
   tileType: (x, z) => tileAt(x, z)?.t ?? null,
@@ -554,15 +564,16 @@ scene.add(sea);
   scene.add(grid);
 }
 
-// ป่าสนบนภูเขา/เนินรอบเมือง (instanced) จำนวนตามระดับกราฟิก
+// ป่าบนภูเขา/เนินรอบเมือง (instanced): สนบนที่สูง ไม้ใบกว้างบนที่ต่ำ จำนวนตามระดับกราฟิก
 const forest = (() => {
-  const trunkGeo = new THREE.CylinderGeometry(0.05, 0.08, 0.5, 5); trunkGeo.translate(0, 0.25, 0);
-  const coneA = new THREE.ConeGeometry(0.5, 1.0, 6); coneA.translate(0, 0.95, 0);
-  const coneB = new THREE.ConeGeometry(0.36, 0.8, 6); coneB.translate(0, 1.55, 0);
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4126, roughness: 1 });
-  const leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, vertexColors: true });
   const FMAX = 4000;
-  const meshes = [new THREE.InstancedMesh(trunkGeo, trunkMat, FMAX), new THREE.InstancedMesh(coneA, leafMat, FMAX), new THREE.InstancedMesh(coneB, leafMat, FMAX)];
+  const mk = (geo, mat) => new THREE.InstancedMesh(geo, mat, FMAX);
+  const G = {
+    con: { trunk: mk(trunkGeo(0.7, 0.07, 0.04), trunkMat), crown: mk(coniferCrown(2, 8, 1), leafMat), n: 0 },
+    brd: { trunk: mk(trunkGeo(0.62, 0.09, 0.05), trunkMat), crown: mk(broadleafCrown(5, 1), leafMat), n: 0 },
+  };
   const rnd = mulberry32(20241029);
   const dummy = new THREE.Object3D();
   const color = new THREE.Color();
@@ -573,18 +584,34 @@ const forest = (() => {
     const h = terrainH(x, z);
     if (h < 0.35 || h > 9.5) continue;
     if (fbm(x * 0.08 + 5, z * 0.08 + 5, 3) < 0.42) continue;
-    const s = 0.9 + rnd() * 1.1;
+    const conifer = rnd() < 0.25 + 0.75 * Math.min(1, Math.max(0, (h - 1.5) / 4));
+    const g = conifer ? G.con : G.brd;
+    const s = (conifer ? 0.9 : 0.8) + rnd() * 1.1;
     dummy.position.set(x, h - 0.05, z);
-    dummy.rotation.set(0, rnd() * 6.28, 0);
-    dummy.scale.set(s, s * (0.9 + rnd() * 0.4), s);
+    dummy.rotation.set((rnd() - 0.5) * 0.08, rnd() * 6.28, (rnd() - 0.5) * 0.08);
+    dummy.scale.set(s * (0.85 + rnd() * 0.3), s * (0.9 + rnd() * 0.4), s * (0.85 + rnd() * 0.3));
     dummy.updateMatrix();
-    color.setRGB(0.10 + rnd() * 0.10, 0.34 + rnd() * 0.22, 0.12 + rnd() * 0.08, THREE.SRGBColorSpace);
-    for (const m of meshes) { m.setMatrixAt(placed, dummy.matrix); if (m !== meshes[0]) m.setColorAt(placed, color); }
+    if (conifer) color.setRGB(0.09 + rnd() * 0.08, 0.30 + rnd() * 0.18, 0.13 + rnd() * 0.08, THREE.SRGBColorSpace);
+    else if (rnd() < 0.08) color.setRGB(0.80 + rnd() * 0.15, 0.55 + rnd() * 0.2, 0.15, THREE.SRGBColorSpace);   // ใบเหลือง/ส้มประปราย
+    else color.setRGB(0.20 + rnd() * 0.15, 0.50 + rnd() * 0.22, 0.14 + rnd() * 0.08, THREE.SRGBColorSpace);
+    const i = g.n++;
+    g.trunk.setMatrixAt(i, dummy.matrix);
+    g.crown.setMatrixAt(i, dummy.matrix);
+    g.crown.setColorAt(i, color);
     placed++;
   }
-  for (const m of meshes) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; m.frustumCulled = false; scene.add(m); }
+  for (const g of Object.values(G)) for (const m of [g.trunk, g.crown]) {
+    m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    m.frustumCulled = false; m.count = g.n; scene.add(m);
+  }
   return {
-    setCount(n) { const c = Math.min(n, placed); meshes.forEach(m => { m.count = c; m.visible = c > 0; }); },
+    setCount(n) {
+      const f = placed ? Math.min(1, n / placed) : 0;
+      for (const g of Object.values(G)) {
+        const c = Math.floor(g.n * f);
+        for (const m of [g.trunk, g.crown]) { m.count = c; m.visible = c > 0; }
+      }
+    },
   };
 })();
 
@@ -804,14 +831,17 @@ function roofCap(parent, w, d, y) {
 // ต้นไม้แกว่งตามลม: เก็บ pivot ไว้ต่อช่อง (ล้างทิ้งเมื่อช่องถูกสร้างใหม่)
 const swayTiles = new Map();
 let swayList = null;
+const cityTrunkGeo = trunkGeo(0.3, 0.05, 0.03);
+const cityBroad = broadleafCrown(11), cityConifer = coniferCrown(4);
+const leafVC = [0x2f8a35, 0x3e9a40, 0x57a645, 0x6a9a2c, 0x2a7a3a].map(c => std(c, { roughness: 0.92, vertexColors: true }));
 function addTree(parent, px, pz, s, r) {
   const pivot = new THREE.Group();
   pivot.position.set(px, 0, pz);
   parent.add(pivot);
-  put(pivot, cylGeo, M.trunk, 0, 0.04 + 0.11 * s, 0, 0.06 * s, 0.22 * s, 0.06 * s);
-  const top = 0.04 + 0.22 * s;
-  put(pivot, icoGeo, pick(M.leaf, r), 0, top + 0.14 * s, 0, 0.36 * s, 0.32 * s, 0.36 * s, r * 6);
-  put(pivot, icoGeo, pick(M.leaf, r + 0.37), 0.05 * s, top + 0.3 * s, -0.03 * s, 0.24 * s, 0.22 * s, 0.24 * s, r * 3);
+  const conif = r > 0.72;
+  const k = 0.32 * s;
+  put(pivot, cityTrunkGeo, M.trunk, 0, 0.04, 0, k * 1.2, k * 1.1, k * 1.2, r * 6);
+  put(pivot, conif ? cityConifer : cityBroad, conif ? leafVC[4] : pick(leafVC, r), 0, 0.04, 0, k, k * (0.95 + r * 0.2), k, r * 9);
   if (swayList) swayList.push({ obj: pivot, ph: r * 40, k: 0.6 + 0.8 * hash(Math.round(px * 100), Math.round(pz * 100)) });
 }
 
@@ -1644,6 +1674,19 @@ window.addEventListener('keydown', e => {
   if (e.key === 'h' || e.key === 'H') setUiHidden(!uiHidden);
 });
 setUiHidden(false);
+// เลื่อนเก็บแผงข้าง / แถบเครื่องมือ
+{
+  const wire = (tabId, panelId, openCh, closeCh) => {
+    const tab = $(tabId), panel = $(panelId);
+    tab.onclick = () => {
+      const c = panel.classList.toggle('closed');
+      tab.classList.toggle('closed', c);
+      tab.textContent = c ? openCh : closeCh;
+    };
+  };
+  wire('sideTab', 'side', '‹', '›');
+  wire('toolTab', 'toolbar', '⌃', '⌄');
+}
 
 // จำนวนรถ/คน/สัตว์ตามประชากรจริง และช่วงเวลา: เช้า-เย็นรถเยอะ, กลางคืนเงียบ, ฝนตกคนเดินน้อยลง
 function updateAgentTargets() {
