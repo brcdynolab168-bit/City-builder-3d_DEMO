@@ -6,7 +6,7 @@ import * as THREE from 'three';
 
 export const FOOT = {
   'service:bu': [3, 3], 'service:hospital': [2, 2], 'service:school': [3, 2],
-  'service:police': [2, 2], 'service:fire': [2, 2], 'com:gold': [1, 1],
+  'service:police': [2, 2], 'service:fire': [2, 2], 'service:pea': [2, 2], 'service:pwa': [2, 2], 'service:dohw': [2, 2], 'com:gold': [1, 1],
   'service:hospital_p': [2, 2], 'service:school_p': [3, 2], 'com:bank': [1, 1],
   'service:bus': [3, 2], 'service:taxi': [2, 2], 'service:grab': [2, 1],
   'com:pub': [2, 1], 'com:tuner': [2, 1], 'service:drag': [3, 7],
@@ -56,6 +56,7 @@ export function createBig(c) {
   };
   const domeGeo = new THREE.SphereGeometry(0.5, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
   const sphereGeo = new THREE.SphereGeometry(0.5, 16, 10);
+  const torusGeo = new THREE.TorusGeometry(0.5, 0.14, 6, 18, Math.PI * 1.5);   // พระจันทร์เสี้ยว
 
   // ----- ตัวช่วย -----
   // ปริซึมหลายเหลี่ยม (จุดเป็น [x,z] ท้องถิ่น) สูง h เริ่มที่ y
@@ -355,33 +356,72 @@ export function createBig(c) {
   // =============================================================
   function mosque(bg) {
     ground(bg, 3, 3, M.concrete);
-    put(bg, boxGeo, M.path, 0, y0 + 0.012, 0.9, 1.4, 0.01, 1.3);
-    // อาคารละหมาด
-    put(bg, boxGeo, MT.wall, 0, y0 + 0.25, -0.35, 1.5, 0.5, 1.3);
-    put(bg, boxGeo, MT.gold, 0, y0 + 0.51, -0.35, 1.54, 0.025, 1.34);
-    hemi(bg, MT.greenDome, 0, y0 + 0.52, -0.35, 0.95, 0.7);
-    put(bg, cylGeo, MT.gold, 0, y0 + 1.14, -0.35, 0.012, 0.18, 0.012);
-    put(bg, sphereGeo, MT.gold, 0, y0 + 1.25, -0.35, 0.05, 0.05, 0.05);
-    for (const [x, z] of [[-0.55, 0.2], [0.55, 0.2]]) hemi(bg, MT.greenDome, x, y0 + 0.52, z, 0.38, 0.28);
-    // ซุ้มโค้งด้านหน้า
-    put(bg, boxGeo, MT.wall, 0, y0 + 0.17, 0.27, 1.5, 0.34, 0.1);
-    for (let k = -2; k <= 2; k++) {
-      put(bg, boxGeo, MT.glass, k * 0.28, y0 + 0.14, 0.325, 0.16, 0.22, 0.01);
-      put(bg, domeGeo, MT.glass, k * 0.28, y0 + 0.25, 0.325, 0.16, 0.1, 0.01).rotation.x = Math.PI / 2;
+    put(bg, boxGeo, M.path, 0, y0 + 0.012, 0.85, 1.5, 0.01, 1.3);
+    const CZ = -0.4, HT = 0.5;                       // ตัวอาคารละหมาด กว้าง 1.5 ลึก 1.1 สูง 0.5
+    put(bg, boxGeo, MT.wall, 0, y0 + HT / 2, CZ, 1.5, HT, 1.1);
+    put(bg, boxGeo, M.white, 0, y0 + 0.03, CZ, 1.58, 0.06, 1.18);                     // ฐาน
+    put(bg, boxGeo, MT.gold, 0, y0 + HT + 0.012, CZ, 1.54, 0.025, 1.14);              // ขอบหลังคาทอง
+    const roofY = y0 + HT + 0.025;
+    // โดมกลาง: ฐานทรงกระบอกมีหน้าต่างรอบ + โดมเขียว + ยอดและพระจันทร์เสี้ยว
+    put(bg, cylGeo, MT.wall, 0, roofY + 0.07, CZ, 0.8, 0.14, 0.8);
+    put(bg, cylGeo, MT.gold, 0, roofY + 0.145, CZ, 0.84, 0.02, 0.84);
+    for (let k = 0; k < 8; k++) {
+      const an = (k / 8) * Math.PI * 2;
+      put(bg, boxGeo, MT.glass, Math.cos(an) * 0.4, roofY + 0.075, CZ + Math.sin(an) * 0.4, 0.06, 0.09, 0.012, Math.PI / 2 - an);
     }
-    // หออะซาน
-    for (const [x, z] of [[-0.95, -0.95], [0.95, -0.95], [-0.95, 0.4], [0.95, 0.4]]) {
-      put(bg, cylGeo, MT.wall, x, y0 + 0.45, z, 0.1, 0.9, 0.1);
-      put(bg, cylGeo, MT.gold, x, y0 + 0.62, z, 0.14, 0.02, 0.14);
-      put(bg, cylGeo, MT.gold, x, y0 + 0.92, z, 0.13, 0.02, 0.13);
-      put(bg, coneGeo, MT.greenDome, x, y0 + 1.06, z, 0.12, 0.26, 0.12);
-      put(bg, sphereGeo, MT.gold, x, y0 + 1.2, z, 0.03, 0.03, 0.03);
+    hemi(bg, MT.greenDome, 0, roofY + 0.155, CZ, 0.8, 0.95);
+    const topY = roofY + 0.155 + 0.5 * 0.95;
+    put(bg, cylGeo, MT.gold, 0, topY + 0.07, CZ, 0.014, 0.16, 0.014);
+    put(bg, sphereGeo, MT.gold, 0, topY + 0.045, CZ, 0.04, 0.04, 0.04);
+    put(bg, torusGeo, MT.gold, 0, topY + 0.19, CZ, 0.1, 0.1, 0.1).rotation.z = -Math.PI * 1.25;
+    // โดมเล็ก 4 มุมหลังคา
+    for (const [x, z] of [[-0.58, CZ - 0.4], [0.58, CZ - 0.4], [-0.58, CZ + 0.4], [0.58, CZ + 0.4]]) {
+      put(bg, cylGeo, MT.wall, x, roofY + 0.04, z, 0.2, 0.08, 0.2);
+      hemi(bg, MT.greenDome, x, roofY + 0.08, z, 0.22, 0.26);
+      put(bg, cylGeo, MT.gold, x, roofY + 0.08 + 0.065 + 0.03, z, 0.008, 0.06, 0.008);
+      put(bg, sphereGeo, MT.gold, x, roofY + 0.08 + 0.065 + 0.01, z, 0.025, 0.025, 0.025);
     }
-    // ลานน้ำพุล้างหน้า
-    put(bg, cylGeo, M.white, 0, y0 + 0.03, 1.0, 0.36, 0.04, 0.36);
-    put(bg, cylGeo, MT.pool, 0, y0 + 0.052, 1.0, 0.32, 0.01, 0.32);
-    put(bg, cylGeo, M.white, 0, y0 + 0.09, 1.0, 0.04, 0.1, 0.04);
-    for (const [x, z, s, k] of [[-1.3, 1.3, 1.0, 0.4], [1.3, 1.3, 1.0, 0.7], [-1.3, 0.9, 0.9, 0.2], [1.3, 0.9, 0.9, 0.9]]) tree(bg, x, z, s, k);
+    // หน้าต่างโค้งด้านหน้า (สองข้างประตู) และด้านข้าง
+    const fz = CZ + 0.55;
+    for (const x of [-0.62, -0.42, 0.42, 0.62]) {
+      put(bg, boxGeo, MT.glass, x, y0 + 0.17, fz + 0.006, 0.13, 0.2, 0.012);
+      put(bg, cylGeo, MT.glass, x, y0 + 0.27, fz + 0.006, 0.13, 0.012, 0.13).rotation.x = Math.PI / 2;
+      put(bg, boxGeo, MT.gold, x, y0 + 0.062, fz + 0.008, 0.15, 0.012, 0.014);
+    }
+    for (const sx of [-1, 1]) for (const k of [-1, 0, 1]) {
+      put(bg, boxGeo, MT.glass, sx * 0.751, y0 + 0.17, CZ + k * 0.3, 0.012, 0.2, 0.12);
+      put(bg, cylGeo, MT.glass, sx * 0.751, y0 + 0.27, CZ + k * 0.3, 0.012, 0.012, 0.12).rotation.z = Math.PI / 2;
+    }
+    // ซุ้มประตูทางเข้า (อีวาน) สูงกว่าตัวอาคาร มีซุ้มโค้งและประตูไม้
+    put(bg, boxGeo, MT.wall, 0, y0 + 0.31, fz + 0.05, 0.5, 0.62, 0.1);
+    put(bg, boxGeo, MT.gold, 0, y0 + 0.63, fz + 0.05, 0.54, 0.025, 0.12);
+    put(bg, boxGeo, MT.gold, -0.27, y0 + 0.31, fz + 0.055, 0.025, 0.62, 0.1);
+    put(bg, boxGeo, MT.gold, 0.27, y0 + 0.31, fz + 0.055, 0.025, 0.62, 0.1);
+    put(bg, cylGeo, MT.gold, 0, y0 + 0.4, fz + 0.102, 0.34, 0.012, 0.34).rotation.x = Math.PI / 2;
+    put(bg, boxGeo, MT.gold, 0, y0 + 0.24, fz + 0.102, 0.34, 0.32, 0.012);
+    put(bg, cylGeo, M.door, 0, y0 + 0.4, fz + 0.108, 0.3, 0.012, 0.3).rotation.x = Math.PI / 2;
+    put(bg, boxGeo, M.door, 0, y0 + 0.24, fz + 0.108, 0.3, 0.32, 0.012);
+    put(bg, boxGeo, MT.gold, 0, y0 + 0.24, fz + 0.115, 0.012, 0.32, 0.006);
+    // หออะซาน 4 มุม: ฐาน ลำตัวสองช่วง ระเบียง หมวกเขียว พระจันทร์เสี้ยว
+    for (const [x, z] of [[-1.15, 0.2], [1.15, 0.2], [-1.15, -1.0], [1.15, -1.0]]) {
+      put(bg, boxGeo, MT.wall, x, y0 + 0.05, z, 0.17, 0.1, 0.17);
+      put(bg, cylGeo, MT.wall, x, y0 + 0.4, z, 0.105, 0.6, 0.105);
+      put(bg, cylGeo, MT.gold, x, y0 + 0.15, z, 0.125, 0.015, 0.125);
+      put(bg, cylGeo, MT.gold, x, y0 + 0.71, z, 0.18, 0.022, 0.18);
+      put(bg, cylGeo, MT.gold, x, y0 + 0.74, z, 0.15, 0.03, 0.15);
+      put(bg, cylGeo, MT.wall, x, y0 + 0.87, z, 0.08, 0.3, 0.08);
+      put(bg, cylGeo, MT.gold, x, y0 + 1.03, z, 0.1, 0.015, 0.1);
+      put(bg, coneGeo, MT.greenDome, x, y0 + 1.12, z, 0.1, 0.17, 0.1);
+      put(bg, cylGeo, MT.gold, x, y0 + 1.25, z, 0.008, 0.1, 0.008);
+      put(bg, torusGeo, MT.gold, x, y0 + 1.3, z, 0.06, 0.06, 0.06).rotation.z = -Math.PI * 1.25;
+      for (const k of [0.3, 0.5]) put(bg, boxGeo, MT.glass, x, y0 + k, z + 0.053, 0.03, 0.07, 0.008);
+    }
+    // ลานหน้ามัสยิด: บ่อน้ำล้างหน้า/ล้างเท้า + ประตูรั้วทอง
+    put(bg, boxGeo, M.white, 0, y0 + 0.03, 0.95, 0.62, 0.05, 0.34);
+    put(bg, boxGeo, MT.pool, 0, y0 + 0.058, 0.95, 0.56, 0.01, 0.28);
+    put(bg, cylGeo, M.white, 0, y0 + 0.1, 0.95, 0.04, 0.1, 0.04);
+    for (const sx of [-0.34, 0.34]) { put(bg, boxGeo, MT.wall, sx, y0 + 0.1, 1.4, 0.07, 0.2, 0.07); put(bg, sphereGeo, MT.gold, sx, y0 + 0.22, 1.4, 0.05, 0.05, 0.05); }
+    for (const [x, z, s, k] of [[-1.3, 1.3, 1.0, 0.4], [1.3, 1.3, 1.0, 0.7], [-0.95, 0.95, 0.9, 0.2], [0.95, 0.95, 0.9, 0.9]]) tree(bg, x, z, s, k);
   }
 
   // =============================================================
@@ -670,6 +710,78 @@ export function createBig(c) {
     flag(bg, -0.85, 0.05, 0xc62828, 0.5);
     for (const [x, z, s, k] of [[0.9, 0.85, 0.9, 0.3], [-0.9, 0.85, 0.9, 0.7]]) tree(bg, x, z, s, k);
   }
+  // =============================================================
+  // หน่วยงานซ่อมบำรุง: การไฟฟ้า / การประปา / กรมทางหลวง
+  // =============================================================
+  function pea(bg) {
+    ground(bg, 2, 2, M.concrete);
+    const top = block(bg, 1.1, 2, 0.6, FM.office[1], -0.35, y0, -0.5);
+    roofCap(bg, 1.1, 0.6, top);
+    put(bg, boxGeo, band(0xe65100), -0.35, y0 + 0.3, -0.5 + 0.305, 1.12, 0.07, 0.01);
+    signAt(bg, t('sign.pea'), '#e65100', '#ffffff', -0.35, y0 + 0.3, -0.5 + 0.312, 0.95, 0.065, 30);
+    put(bg, boxGeo, M.glassShop, -0.35, y0 + 0.1, -0.5 + 0.308, 0.4, 0.17, 0.008);
+    // ลานหม้อแปลง + เสาไฟฟ้าแรงสูง
+    put(bg, boxGeo, MT.slate, 0.62, y0 + 0.004, -0.5, 0.6, 0.008, 0.7);
+    for (const [x, z] of [[0.5, -0.65], [0.5, -0.35]]) {
+      put(bg, boxGeo, M.metal, x, y0 + 0.06, z, 0.18, 0.12, 0.16);
+      for (const k of [-1, 0, 1]) put(bg, cylGeo, band(0xdddddd), x + k * 0.05, y0 + 0.15, z, 0.016, 0.07, 0.016);
+    }
+    put(bg, cylGeo, M.pole, 0.78, y0 + 0.4, -0.5, 0.02, 0.8, 0.02);
+    for (const [h, w] of [[0.76, 0.34], [0.62, 0.26]]) {
+      put(bg, boxGeo, M.pole, 0.78, y0 + h, -0.5, 0.012, 0.012, w);
+      for (const k of [-1, 0, 1]) put(bg, cylGeo, band(0xcfd8dc), 0.78, y0 + h + 0.02, -0.5 + k * w * 0.4, 0.012, 0.03, 0.012);
+    }
+    fence(bg, 0.3, -0.88, 0.95, -0.88, M.metal); fence(bg, 0.3, -0.12, 0.95, -0.12, M.metal); fence(bg, 0.95, -0.88, 0.95, -0.12, M.metal);
+    put(bg, boxGeo, M.asphalt, 0, y0 + 0.012, 0.5, 1.9, 0.01, 0.7);
+    truck(bg, -0.5, 0.5, 0, 0xf28c1e, true);
+    truck(bg, 0.05, 0.5, 0, 0xf5f5f5, false);
+    flag(bg, -0.9, 0.05, 0xe65100, 0.5);
+    for (const [x, z, s, k] of [[0.9, 0.85, 0.9, 0.3], [-0.9, 0.85, 0.9, 0.7]]) tree(bg, x, z, s, k);
+  }
+  function pwa(bg) {
+    ground(bg, 2, 2, M.concrete);
+    const top = block(bg, 1.0, 2, 0.6, FM.office[1], -0.4, y0, -0.5);
+    roofCap(bg, 1.0, 0.6, top);
+    put(bg, boxGeo, band(0x0d47a1), -0.4, y0 + 0.3, -0.5 + 0.305, 1.02, 0.07, 0.01);
+    signAt(bg, t('sign.pwa'), '#0d47a1', '#ffffff', -0.4, y0 + 0.3, -0.5 + 0.312, 0.9, 0.065, 30);
+    put(bg, boxGeo, M.glassShop, -0.4, y0 + 0.1, -0.5 + 0.308, 0.4, 0.17, 0.008);
+    // ถังน้ำสูง + บ่อตกตะกอน
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) put(bg, cylGeo, M.metal, 0.62 + sx * 0.1, y0 + 0.2, -0.62 + sz * 0.1, 0.012, 0.4, 0.012);
+    put(bg, cylGeo, band(0x90caf9), 0.62, y0 + 0.5, -0.62, 0.3, 0.2, 0.3);
+    put(bg, coneGeo, band(0x1976d2), 0.62, y0 + 0.65, -0.62, 0.32, 0.1, 0.32);
+    put(bg, cylGeo, M.concrete, 0.55, y0 + 0.03, -0.12, 0.5, 0.06, 0.5);
+    put(bg, cylGeo, MT.water, 0.55, y0 + 0.062, -0.12, 0.44, 0.008, 0.44);
+    put(bg, cylGeo, M.concrete, -0.05, y0 + 0.03, -0.12, 0.34, 0.06, 0.34);
+    put(bg, cylGeo, MT.water, -0.05, y0 + 0.062, -0.12, 0.3, 0.008, 0.3);
+    put(bg, boxGeo, M.asphalt, 0, y0 + 0.012, 0.58, 1.9, 0.01, 0.6);
+    truck(bg, -0.5, 0.58, 0, 0x1976d2, false);
+    truck(bg, 0.05, 0.58, 0, 0x1976d2, false);
+    flag(bg, -0.9, 0.2, 0x0d47a1, 0.5);
+    for (const [x, z, s, k] of [[0.9, 0.85, 0.9, 0.3], [-0.9, 0.85, 0.9, 0.7]]) tree(bg, x, z, s, k);
+  }
+  function dohw(bg) {
+    ground(bg, 2, 2, M.concrete);
+    const top = block(bg, 1.1, 2, 0.6, FM.office[1], -0.35, y0, -0.55);
+    roofCap(bg, 1.1, 0.6, top);
+    put(bg, boxGeo, band(0x0d47a1), -0.35, y0 + 0.3, -0.55 + 0.305, 1.12, 0.07, 0.01);
+    signAt(bg, t('sign.dohw'), '#0d47a1', '#ffd54a', -0.35, y0 + 0.3, -0.55 + 0.312, 0.95, 0.065, 30);
+    put(bg, boxGeo, M.glassShop, -0.35, y0 + 0.1, -0.55 + 0.308, 0.4, 0.17, 0.008);
+    // กองวัสดุ + รถบดถนน
+    put(bg, coneGeo, band(0x4a4a4a), 0.7, y0 + 0.09, -0.6, 0.34, 0.18, 0.34);
+    put(bg, coneGeo, band(0xb9a47a), 0.45, y0 + 0.06, -0.72, 0.24, 0.12, 0.24);
+    put(bg, boxGeo, band(0xf9c80e), 0.55, y0 + 0.09, -0.2, 0.16, 0.08, 0.26);
+    put(bg, boxGeo, band(0xf9c80e), 0.55, y0 + 0.17, -0.27, 0.12, 0.08, 0.1);
+    put(bg, cylGeo, M.metal, 0.55, y0 + 0.07, -0.05, 0.16, 0.16, 0.16).rotation.z = Math.PI / 2;
+    put(bg, cylGeo, M.metal, 0.55, y0 + 0.06, -0.33, 0.12, 0.12, 0.12).rotation.z = Math.PI / 2;
+    // ป้ายทางหลวงสีเขียว
+    put(bg, cylGeo, M.pole, -0.9, y0 + 0.2, 0.15, 0.012, 0.4, 0.012);
+    put(bg, boxGeo, band(0x1b7a3e), -0.9, y0 + 0.4, 0.15, 0.2, 0.1, 0.012);
+    put(bg, boxGeo, M.asphalt, 0, y0 + 0.012, 0.5, 1.9, 0.01, 0.7);
+    truck(bg, -0.45, 0.5, 0, 0xf9c80e, false);
+    truck(bg, 0.1, 0.5, 0, 0x0d47a1, false);
+    for (let k = 0; k < 4; k++) put(bg, coneGeo, M.cone || band(0xff6a00), 0.55 + k * 0.1, y0 + 0.03, 0.5, 0.04, 0.06, 0.04);
+    for (const [x, z, s, k] of [[0.9, 0.85, 0.9, 0.3]]) tree(bg, x, z, s, k);
+  }
   function gold(bg) {
     ground(bg, 1, 1, M.walk);
     const red = std(0xb3201f, { roughness: 0.55 });
@@ -945,7 +1057,7 @@ export function createBig(c) {
     'service:hospital_p': bg => hospital(bg, true), 'service:school_p': bg => school(bg, true), 'com:bank': bank,
     'service:bus': busDepot, 'service:taxi': taxiDepot, 'service:grab': grabDepot,
     'com:pub': pub, 'com:tuner': tuner, 'service:drag': drag,
-    'service:police': police, 'service:fire': fire, 'com:gold': gold,
+    'service:police': police, 'service:fire': fire, 'service:pea': pea, 'service:pwa': pwa, 'service:dohw': dohw, 'com:gold': gold,
     'service:bu': university, 'service:hospital': hospital, 'service:school': school,
     'service:temple': temple, 'service:church': church, 'service:mosque': mosque,
     'com:mall': mall, 'com:market': market, 'com:dealer': dealer, 'com:fishing': fishing,

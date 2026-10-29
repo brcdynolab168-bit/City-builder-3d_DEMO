@@ -56,6 +56,9 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     red: mat(0xd32f2f, { roughness: 0.5 }),
     strobeR: new THREE.MeshStandardMaterial({ color: 0xff2020, emissive: 0xff0000, emissiveIntensity: 1 }),
     strobeB: new THREE.MeshStandardMaterial({ color: 0x2060ff, emissive: 0x1040ff, emissiveIntensity: 1 }),
+    strobeA: new THREE.MeshStandardMaterial({ color: 0xffb020, emissive: 0xff9a00, emissiveIntensity: 2.2 }),
+    shroud: mat(0xfafafa, { roughness: 0.95 }),
+    vest: mat(0xff7a1a, { roughness: 0.7 }),
   };
 
   // รวมชิ้นส่วนเป็นเรขาคณิตเดียว (สีที่จุดยอด)
@@ -322,6 +325,60 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     lr.scale.set(0.04, 0.025, 0.03); lr.position.set(0, 0.19, 0.2); lb.visible = false;
     g.add(lr);
     return { obj: g, lr, lb: lr };
+  }
+
+  // รถบริการ: rescue = รถกู้ภัยมูลนิธิ (รับร่างผู้เสียชีวิต), power = การไฟฟ้า (รถกระเช้า), water = การประปา (รถบรรทุกน้ำ/ซ่อมท่อ), road = กรมทางหลวง (รถซ่อมถนน)
+  const truckGeo = {};
+  function makeServiceTruck(kind) {
+    let G = truckGeo[kind];
+    if (!G) {
+      const body = [], glass = [], det = [];
+      body.push(part(boxGeo, 0x3a3f46, 0, 0.055, -0.02, 0.15, 0.03, 0.5));
+      for (const z of [-0.2, -0.02, 0.17]) for (const sx of [-1, 1]) det.push(part(cylGeo, 0x161616, sx * 0.082, 0.032, z, 0.064, 0.026, 0.064, 0, 0, Math.PI / 2));
+      det.push(part(boxGeo, 0x222222, 0, 0.042, 0.255, 0.15, 0.02, 0.016));
+      if (kind === 'rescue') {
+        body.push(part(boxGeo, 0xf4f4f4, 0, 0.115, -0.02, 0.155, 0.12, 0.46));
+        body.push(part(boxGeo, 0xf4f4f4, 0, 0.098, 0.238, 0.15, 0.07, 0.04));
+        glass.push(part(boxGeo, 0xffffff, 0, 0.14, 0.224, 0.13, 0.05, 0.012));
+        for (const sx of [-1, 1]) {
+          det.push(part(boxGeo, 0x1565c0, sx * 0.079, 0.1, -0.02, 0.004, 0.03, 0.46));
+          det.push(part(boxGeo, 0xd32f2f, sx * 0.08, 0.14, -0.1, 0.004, 0.045, 0.014), part(boxGeo, 0xd32f2f, sx * 0.08, 0.14, -0.1, 0.004, 0.014, 0.045));
+        }
+        det.push(part(boxGeo, 0x2b2b2b, 0, 0.115, -0.252, 0.12, 0.09, 0.008));
+      } else {
+        const cab = kind === 'power' ? 0xf5f5f5 : kind === 'water' ? 0x1976d2 : 0x0d47a1;
+        body.push(part(boxGeo, cab, 0, 0.1, 0.17, 0.15, 0.1, 0.13));
+        glass.push(part(boxGeo, 0xffffff, 0, 0.122, 0.236, 0.13, 0.05, 0.012));
+        if (kind === 'power') {
+          body.push(part(boxGeo, 0x8a8f96, 0, 0.082, -0.1, 0.16, 0.022, 0.34));
+          for (const sx of [-1, 1]) det.push(part(boxGeo, 0xf28c1e, sx * 0.077, 0.1, 0.17, 0.004, 0.03, 0.13));
+          body.push(part(boxGeo, 0xf2a81d, 0, 0.12, -0.2, 0.05, 0.06, 0.05));
+          body.push(part(boxGeo, 0xf2a81d, 0, 0.17, -0.08, 0.028, 0.028, 0.34, -0.3, 0, 0));
+          body.push(part(boxGeo, 0xf2a81d, 0, 0.21, 0.07, 0.07, 0.05, 0.07));
+        } else if (kind === 'water') {
+          body.push(part(boxGeo, 0x6f7882, 0, 0.082, -0.1, 0.16, 0.022, 0.34));
+          body.push(part(cylGeo, 0xe8f1fa, 0, 0.14, -0.1, 0.115, 0.32, 0.115, Math.PI / 2, 0, 0));
+          for (const z of [-0.2, -0.04]) body.push(part(cylGeo, 0x1976d2, 0, 0.14, z, 0.12, 0.03, 0.12, Math.PI / 2, 0, 0));
+        } else {
+          body.push(part(boxGeo, 0xf9c80e, 0, 0.11, -0.1, 0.16, 0.07, 0.32));
+          det.push(part(boxGeo, 0x222222, 0, 0.2, -0.265, 0.15, 0.08, 0.01), part(boxGeo, 0xffb020, 0, 0.2, -0.272, 0.1, 0.02, 0.004));
+        }
+      }
+      G = truckGeo[kind] = { body: merge(body), glass: merge(glass), det: merge(det) };
+    }
+    const g = new THREE.Group();
+    g.add(mesh(G.body, M.car[10]), mesh(G.glass, M.glass, false), mesh(G.det, M.detail));
+    let lr, lb;
+    if (kind === 'rescue') {
+      lr = mesh(boxGeo, M.strobeR, false); lb = mesh(boxGeo, M.strobeB, false);
+      lr.scale.set(0.05, 0.02, 0.03); lr.position.set(-0.04, 0.19, 0.04);
+      lb.scale.set(0.05, 0.02, 0.03); lb.position.set(0.04, 0.19, 0.04);
+      g.add(lr, lb);
+    } else {
+      lr = mesh(boxGeo, M.strobeA, false); lr.scale.set(0.05, 0.024, 0.03); lr.position.set(0, 0.165, 0.17);
+      g.add(lr); lb = lr;
+    }
+    return { obj: g, lr, lb };
   }
 
   // ---------- คน: 28 แบบ (ทรงผม เสื้อผ้า กระเป๋า หมวก) ----------
@@ -694,7 +751,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     return route; // เริ่มที่ไกล จบที่จุดเกิดเหตุ
   }
 
-  function startAccident() {
+  function startAccident(forceDead = 0) {
     if (accident) return false;
     if (dirty) rebuildLists();
     const cars = agents.car.filter(c => !c.crash && c.s > 0.42 && c.s < 0.78 && tileType(c.x, c.z) === 'road');
@@ -716,7 +773,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     if (!a.racer && cause !== 'breakdown' && lastEnv.drunk > 0 && Math.random() < 0.5 * lastEnv.drunk) cause = 'drunk';
     if (a.racer) cause = 'race';
     const pDead = ({ race: 0.42, cutoff: 0.12, rear: 0.06, solo: 0.14, slip: 0.1, breakdown: 0, drunk: 0.3 })[cause] * (1 + 0.6 * rain) * (lastEnv.hospital ? 0.7 : 1.4) * (a.isBike ? 1.5 : 1);
-    const dead = Math.random() < pDead ? (cause === 'race' && b && Math.random() < 0.3 ? 2 : 1) : 0;
+    const dead = forceDead ? forceDead : Math.random() < pDead ? (cause === 'race' && b && Math.random() < 0.3 ? 2 : 1) : 0;
     const injured = cause === 'breakdown' ? 0 : Math.floor(Math.random() * (cause === 'race' ? 4 : 3)) + (Math.random() < 0.4 ? 1 : 0);
     for (const v of victims) { v.speedNow = 0; v.headMesh.material = M.haz; v.tailMesh.material = M.haz; }
     place(a); if (b) place(b);
@@ -742,6 +799,8 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     });
     const brk = cause === 'breakdown';
     accident = { victims, props, puffs, t: 0, state: 'crash', amb: null, ambTimer: 6 + Math.random() * 6, tx: a.x, tz: a.z, hold: 0, noAmb: brk, tow: null, towAt: brk ? 7 + Math.random() * 5 : 18 + Math.random() * 8, towDone: false, noTow: false };
+    accident.dead = dead; accident.coronerAt = 10 + Math.random() * 5; accident.bodiesTaken = !dead;
+    buildScene(accident, a, b, dead, injured);
     events.push({ e: 'crash', cause, injured, dead, x: a.x, z: a.z, axis: a.d[0] !== 0 ? 'row' : 'col', clip: Math.random() < 0.5, bike: !!a.isBike, racer: !!a.racer });
     return true;
   }
@@ -812,6 +871,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     if (!w) return;
     if (!w.leaving) {
       if (!w.arrived) { advanceAmbulance(w, sdt); w.speedNow = w.arrived ? 0 : w.speed; return; }
+      if (ac.dead > 0 && !ac.bodiesTaken) return;   // รอรถกู้ภัยเก็บร่างผู้เสียชีวิตก่อน
       if (ac.amb && !ac.amb.leaving && ac.state !== 'leave') return; // รอให้รถพยาบาลช่วยผู้บาดเจ็บก่อน
       w.hold += sdt;
       if (w.hold >= 1 && !w.winched) {
@@ -840,6 +900,163 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       const ph = Math.sin(performance.now() / 1000 * 10) > 0;
       w.lr.visible = ph;
     }
+  }
+
+  // ---------- รถบริการ / ทีมซ่อม (การไฟฟ้า การประปา กรมทางหลวง) ----------
+  function spawnTruck(kind, tx, tz) {
+    let route = ambulanceRoute(tx, tz);
+    if (route && route.length > 4) route = route.slice(0, -1);   // จอดห่างจุดทำงานหนึ่งช่อง
+    if (!route || route.length < 3) return null;
+    const made = makeServiceTruck(kind);
+    const a = {
+      type: 'crew', ckind: kind, kind: 'car', ...made, x: route[0][0], z: route[0][1], i: 0, route, s: 0, speed: 1.3, speedNow: 1.3,
+      lat: 0, side: 1, phase: 0, bob: 0, dead: false, crash: null, arrived: false, hold: 0, leaving: false, leaveT: 0,
+    };
+    a.d = dirTo(route[0], route[1]);
+    a.n = route.length > 2 ? dirTo(route[1], route[2]) : a.d;
+    root.add(a.obj);
+    return a;
+  }
+  const crews = [];
+  const hazards = new Map();   // ช่องที่มีหลุม/น้ำท่วม: ตัวคูณความเร็วรถ
+  let crewSeq = 0;
+  // ส่งทีมซ่อมไปที่ช่องถนน (tx,tz): ขับมาจอด ทำงาน work วินาทีเกม แล้วขับออก  เหตุการณ์ {e:'crew', phase:'arrive'|'done'} ส่งให้ main
+  function dispatchCrew(ckind, tx, tz, work = 14) {
+    const a = spawnTruck(ckind, tx, tz);
+    if (!a) return 0;
+    a.id = ++crewSeq; a.work = work;
+    crews.push(a);
+    return a.id;
+  }
+  function updateCrews(sdt, nowT) {
+    for (const c of crews) {
+      if (c.dead) continue;
+      if (!c.leaving) {
+        if (!c.arrived) {
+          advanceAmbulance(c, sdt);
+          c.speedNow = c.arrived ? 0 : c.speed;
+          if (c.arrived) events.push({ e: 'crew', id: c.id, phase: 'arrive', ckind: c.ckind });
+        } else {
+          c.hold += sdt;
+          if (c.hold >= c.work) {
+            events.push({ e: 'crew', id: c.id, phase: 'done', ckind: c.ckind });
+            c.leaving = true; c.arrived = false; c.route = null; c.speedNow = 1.2;
+          }
+        }
+        place(c);
+      } else {
+        c.leaveT += sdt;
+        if (!advance(c, sdt) || c.leaveT > 45) removeAgent(c); else place(c);
+      }
+      if (!c.dead) c.lr.visible = Math.sin(nowT * 10) > 0;
+    }
+    for (let i = crews.length - 1; i >= 0; i--) if (crews[i].dead) crews.splice(i, 1);
+  }
+
+  // ---------- ที่เกิดเหตุเสียชีวิต: ร่างคลุมผ้าขาว คนมุงดู รถกู้ภัยมาเก็บร่าง ----------
+  function buildScene(ac, a, b, dead, injured) {
+    const base = (b || a).obj.position, d = a.d, perp = [d[1], -d[0]];
+    ac.base = base.clone();
+    ac.sceneG = new THREE.Group(); root.add(ac.sceneG);
+    ac.bodies = [];
+    for (let k = 0; k < dead; k++) {
+      const g = new THREE.Group();
+      const sheet = mesh(boxGeo, M.shroud, false); sheet.scale.set(0.05, 0.012, 0.16); sheet.position.y = 0.006;
+      const hd = mesh(boxGeo, M.shroud, false); hd.scale.set(0.04, 0.02, 0.05); hd.position.set(0, 0.012, 0.06);
+      const kn = mesh(boxGeo, M.shroud, false); kn.scale.set(0.036, 0.016, 0.05); kn.position.set(0, 0.01, -0.03);
+      g.add(sheet, hd, kn);
+      const along = 0.3 + 0.12 * k, lat = (k % 2 ? -1 : 1) * 0.07;
+      g.position.set(base.x + d[0] * along + perp[0] * lat, base.y - 0.03 + 0.002, base.z + d[1] * along + perp[1] * lat);
+      g.rotation.y = Math.atan2(d[0], d[1]) + (Math.random() - 0.5) * 0.5;
+      ac.sceneG.add(g);
+      ac.bodies.push({ g, from: g.position.clone(), yaw: g.rotation.y });
+    }
+    // คนมุงดู: ยืนริมทางเท้าสองฝั่ง หันเข้าหาจุดเกิดเหตุ ทยอยมา
+    ac.crowd = [];
+    const n = Math.min(11, dead ? 6 + dead * 2 + Math.floor(Math.random() * 3) : (injured > 1 ? 3 : 1) + Math.floor(Math.random() * 3));
+    for (let k = 0; k < n; k++) {
+      const p = makePerson();
+      const side = Math.random() < 0.5 ? -1 : 1, L = side * (0.37 + Math.random() * 0.08), sa = (Math.random() - 0.5) * 1.5;
+      const px = base.x + d[0] * sa + perp[0] * L, pz = base.z + d[1] * sa + perp[1] * L;
+      p.obj.position.set(px, base.y - 0.015, pz);
+      p.obj.rotation.y = Math.atan2(base.x - px, base.z - pz) + (Math.random() - 0.5) * 0.3;
+      p.obj.visible = false; p.obj.scale.setScalar(0.001);
+      ac.sceneG.add(p.obj);
+      ac.crowd.push({ p, delay: 1.5 + Math.random() * (dead ? 18 : 9), leaveAt: Math.random() * 8, shown: false, gone: false, ph: Math.random() * 6 });
+    }
+    // เจ้าหน้าที่กู้ภัย 2 คน (ใส่เสื้อกั๊กส้ม) โผล่มาเมื่อรถมูลนิธิถึง
+    ac.workers = [];
+    if (dead) for (let k = 0; k < 2; k++) {
+      const p = makePerson();
+      const vest = mesh(boxGeo, M.vest, false); vest.scale.set(0.05, 0.034, 0.034); vest.position.y = 0.108;
+      p.obj.add(vest); p.obj.visible = false;
+      ac.sceneG.add(p.obj);
+      ac.workers.push(p);
+    }
+  }
+  function clearScene(ac) {
+    if (ac.sceneG) { root.remove(ac.sceneG); ac.sceneG = null; }
+    ac.crowd = []; ac.bodies = []; ac.workers = [];
+    if (ac.coroner) { removeAgent(ac.coroner); ac.coroner = null; }
+  }
+  function updateScene(ac, sdt, nowT) {
+    if (!ac.sceneG) return;
+    for (const c of ac.crowd) {
+      const o = c.p.obj;
+      if (c.gone) continue;
+      if (!c.shown) { if (ac.t > c.delay) { c.shown = true; o.visible = true; c.t0 = ac.t; } else continue; }
+      const grow = Math.min(1, (ac.t - c.t0) / 0.5);
+      let sc = grow;
+      if (ac.dispersing) { const u = (ac.t - ac.dispT - c.leaveAt) / 0.5; if (u >= 1) { c.gone = true; o.visible = false; continue; } if (u > 0) sc *= 1 - u; }
+      o.scale.setScalar(Math.max(0.001, sc));
+      o.rotation.z = Math.sin(nowT * 1.3 + c.ph) * 0.02;
+    }
+  }
+  function updateCoroner(ac, sdt, nowT) {
+    if (!ac.coroner && !ac.noCoroner && !ac.bodiesTaken && ac.t > ac.coronerAt) {
+      const v = spawnTruck('rescue', ac.tx, ac.tz);
+      if (v) { ac.coroner = v; events.push('coroner'); }
+      else { ac.noCoroner = true; ac.bodiesTaken = true; for (const b of ac.bodies) b.g.visible = false; return; }
+    }
+    const v = ac.coroner;
+    if (!v) return;
+    if (!v.leaving) {
+      if (!v.arrived) { advanceAmbulance(v, sdt); v.speedNow = v.arrived ? 0 : v.speed; }
+      else {
+        v.hold += sdt;
+        const yaw = v.obj.rotation.y, fx = Math.sin(yaw), fz = Math.cos(yaw);
+        const rx = v.obj.position.x - fx * 0.3, rz = v.obj.position.z - fz * 0.3, ry = v.obj.position.y;
+        const u1 = clamp01((v.hold - 0.3) / 1.4), u = clamp01((v.hold - 1.8) / 3.4), e = u * u * (3 - 2 * u);
+        const S = ac.bodies[0].from;
+        // เจ้าหน้าที่เดินจากท้ายรถไปที่ร่าง แล้วช่วยกันหามกลับ
+        ac.workers.forEach((w, k) => {
+          w.obj.visible = v.hold > 0.3 && u < 1;
+          const bx = u1 < 1 ? rx + (S.x - rx) * u1 : S.x + (rx - S.x) * e, bz = u1 < 1 ? rz + (S.z - rz) * u1 : S.z + (rz - S.z) * e;
+          const off = (k ? -1 : 1) * 0.07;
+          w.obj.position.set(bx + fz * off, ry - 0.03, bz - fx * off);
+          const tx = u1 < 1 ? S.x : rx, tz = u1 < 1 ? S.z : rz;
+          w.obj.rotation.y = Math.atan2(tx - w.obj.position.x, tz - w.obj.position.z);
+          const sw = Math.sin(v.hold * 9 + k * 3) * 0.5 * (u1 < 1 || (u > 0 && u < 1) ? 1 : 0);
+          w.legs[0].rotation.x = sw; w.legs[1].rotation.x = -sw;
+        });
+        if (u > 0) ac.bodies.forEach((b, k) => {
+          const F = b.from, tx = rx + fz * (k ? -0.04 : 0.04), tz = rz - fx * (k ? -0.04 : 0.04);
+          b.g.position.set(F.x + (tx - F.x) * e, F.y + (ry + 0.1 - F.y) * e + Math.sin(e * Math.PI) * 0.05, F.z + (tz - F.z) * e);
+          b.g.rotation.y = b.yaw + (yaw - b.yaw) * e;
+        });
+        if (u >= 1 && !ac.bodiesTaken) {
+          ac.bodiesTaken = true; for (const b of ac.bodies) b.g.visible = false; for (const w of ac.workers) w.obj.visible = false;
+          events.push('bodyTaken');
+          v.leaving = true; v.arrived = false; v.route = null; v.speedNow = 1.2;
+          ac.dispersing = true; ac.dispT = ac.t + 3;
+        }
+      }
+      place(v);
+    } else {
+      v.leaveT += sdt;
+      if (!advance(v, sdt) || v.leaveT > 45) { removeAgent(v); ac.coroner = null; } else place(v);
+    }
+    if (v && !v.dead) { const ph = Math.sin(nowT * 11) > 0; v.lr.visible = ph; v.lb.visible = !ph; }
   }
 
   function updateAccident(dt, sdt, nowT) {
@@ -883,11 +1100,15 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       }
     }
     updateTow(ac, sdt);
+    if (!ac.dispersing && ac.state === 'leave' && ac.hold > 6 && ac.bodiesTaken) { ac.dispersing = true; ac.dispT = ac.t; }
+    if (ac.dead > 0) updateCoroner(ac, sdt, nowT);
+    updateScene(ac, sdt, nowT);
     // จบเหตุการณ์: รถพยาบาลออกไปแล้ว และรถยกเอารถเสียไปแล้ว (หรือไม่มีรถยก ก็เคลียร์ทิ้งหลังรอสักพัก)
-    const ambGone = !ac.amb || ac.amb.dead;
+    const ambGone = (!ac.amb || ac.amb.dead) && (!ac.coroner || ac.coroner.dead);
     const noTowFallback = ac.noTow && ac.state === 'leave' && ac.hold > 20;
     if (ambGone && (ac.towDone || noTowFallback) && (ac.state === 'leave' || ac.noAmb)) {
       if (noTowFallback) { for (const v of ac.victims) { const k = agents.car.indexOf(v); if (k >= 0) agents.car.splice(k, 1); removeAgent(v); } root.remove(ac.props); events.push('cleared'); }
+      clearScene(ac);
       accident = null;
       accTimer = 70 + Math.random() * 110;
       return;
@@ -895,7 +1116,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     if (ac.state === 'leave' && ac.hold > 120) { // กันค้าง
       for (const v of ac.victims) { const k = agents.car.indexOf(v); if (k >= 0) agents.car.splice(k, 1); removeAgent(v); }
       if (ac.amb) removeAgent(ac.amb); if (ac.tow) removeAgent(ac.tow);
-      root.remove(ac.props); accident = null; accTimer = 70;
+      root.remove(ac.props); clearScene(ac); accident = null; accTimer = 70;
       return;
     }
     // แสงสัญญาณรถพยาบาล
@@ -1030,6 +1251,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     for (const a of cars) {
       if (a.crash) { a.speedNow = 0; continue; }
       a.speedNow = a.speed * wetSlow * signalFactor(a);
+      if (hazards.size) { const hz = hazards.get(a.x * 4096 + a.z) ?? (a.s > 0.5 ? hazards.get((a.x + a.d[0]) * 4096 + a.z + a.d[1]) : undefined); if (hz) a.speedNow *= hz; }   // ถนนพัง/ท่อแตก รถชะลอ
       if (checkpoint && a.x === checkpoint.x && a.z === checkpoint.z) { a.speedNow *= 0.3; if (a.s > 0.4 && a.s < 0.5 && !a.chk) { a.chk = true; checkpoint.stopped++; } }
       const same = bucket.get(a.x * 4096 + a.z), nxt = bucket.get((a.x + a.d[0]) * 4096 + (a.z + a.d[1]));
       for (let pass = 0; pass < 2; pass++) {
@@ -1069,6 +1291,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     }
 
     updateAccident(dt, sdt, nowT);
+    updateCrews(sdt, nowT);
     if (checkpoint) { checkpoint.t += sdt; const ph = Math.sin(nowT * 11) > 0; checkpoint.lr.visible = ph; checkpoint.lb.visible = !ph; }
     if (accident?.amb && !accident.amb.dead) place(accident.amb);
   }
@@ -1089,6 +1312,8 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     // ทดสอบ/สั่งให้เกิดอุบัติเหตุทันที
     triggerAccident() { return startAccident(); },
     takeEvents() { return events.splice(0, events.length); },
+    dispatchCrew, crewCount: () => crews.length, forceAccident: n => startAccident(n),
+    setHazard(x, z, f) { if (f > 0 && f < 1) hazards.set(x * 4096 + z, f); else hazards.delete(x * 4096 + z); },
     emergency() { return !!(accident && accident.amb && !accident.amb.dead && !accident.amb.arrived); },
     accidentActive() { return !!accident; },
     clear() {
@@ -1097,6 +1322,9 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
         agents[type] = [];
       }
       if (checkpoint) endCheckpoint();
+      for (const c of crews) removeAgent(c);
+      crews.length = 0;
+      if (accident) clearScene(accident);
       if (accident) { root.remove(accident.props); if (accident.amb) removeAgent(accident.amb); if (accident.tow) removeAgent(accident.tow); for (const v of accident.victims) removeAgent(v); accident = null; }
       accTimer = 50;
     },

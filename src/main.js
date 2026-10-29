@@ -127,6 +127,9 @@ const VARIANTS = {
     { k: 'bu',       label: 'ม.กรุงเทพ',      cost: 3800, jobs: 130, power: 26, water: 22, upkeep: 45, note: 'มหาวิทยาลัย 3×3 ช่อง' },
     { k: 'police',   label: 'สถานีตำรวจ',     cost: 1000, jobs: 22, power: 8, water: 6, upkeep: 18, note: '2×2 ช่อง ลดอาชญากรรม/อุบัติเหตุ' },
     { k: 'fire',     label: 'สถานีดับเพลิง',  cost: 1100, jobs: 26, power: 8, water: 8, upkeep: 20, note: '2×2 ช่อง ดับไฟไหม้ไว' },
+    { k: 'pea',      label: 'การไฟฟ้า',       cost: 1200, jobs: 24, power: 10, water: 6, upkeep: 20, note: '2×2 ช่อง ส่งช่างซ่อมไฟดับ' },
+    { k: 'pwa',      label: 'การประปา',        cost: 1200, jobs: 24, power: 8, water: 4, upkeep: 20, note: '2×2 ช่อง ส่งช่างซ่อมท่อแตก' },
+    { k: 'dohw',     label: 'กรมทางหลวง',      cost: 1300, jobs: 28, power: 8, water: 6, upkeep: 22, note: '2×2 ช่อง ส่งทีมซ่อมถนนพัง' },
     { k: 'bus',      label: 'อู่รถเมล์',       cost: 1400, jobs: 30, power: 6, water: 6, upkeep: 20, tax: 12, note: '3×2 ช่อง มีรถเมล์วิ่ง ลดรถติด' },
     { k: 'taxi',     label: 'อู่แท็กซี่',      cost: 800,  jobs: 14, power: 3, water: 3, upkeep: 8, tax: 10, note: '2×2 ช่อง มีแท็กซี่วิ่ง' },
     { k: 'grab',     label: 'จุดรวมแกร็บ',    cost: 600,  jobs: 10, power: 3, water: 2, upkeep: 6, tax: 8, note: '2×1 ช่อง รถและมอไซค์แกร็บ' },
@@ -1089,7 +1092,7 @@ function shrub(bg, x, z, s, i = 0) {
 // ต้นไม้แกว่งตามลม: เก็บ pivot ไว้ต่อช่อง (ล้างทิ้งเมื่อช่องถูกสร้างใหม่)
 const swayTiles = new Map();
 let swayList = null;
-const cityTrunkGeo = trunkGeo(0.3, 0.05, 0.03);
+const cityTrunkGeo = trunkGeo(0.66, 0.075, 0.045);   // ลำต้นสูงพอจะแทงเข้าไปในพุ่มใบ (เดิมสั้นเกินไป พุ่มดูลอยอยู่เหนือต้น)
 const cityBroad = broadleafCrown(11), cityConifer = coniferCrown(4);
 const leafVC = [0x2f8a35, 0x3e9a40, 0x57a645, 0x6a9a2c, 0x2a7a3a].map(c => std(c, { roughness: 0.92, vertexColors: true }));
 function addTree(parent, px, pz, s, r) {
@@ -2306,6 +2309,7 @@ function applyTool(x, z) {
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const adjRoad = (x, z) => isType(x + 1, z, 'road') || isType(x - 1, z, 'road') || isType(x, z + 1, 'road') || isType(x, z - 1, 'road');
 
+const incidents = [];   // เหตุขัดข้องที่ยังไม่ได้ซ่อม (ไฟดับ/ท่อแตก/ถนนพัง)
 function computeStats() {
   const s = {
     pop: 0, jobsCom: 0, jobsInd: 0, powerCap: 0, powerUse: 0, waterCap: 0, waterUse: 0,
@@ -2334,6 +2338,13 @@ function computeStats() {
   // อากาศร้อนคนใช้น้ำมากขึ้น ฝนตกใช้น้อยลง
   s.waterUse = Math.round(s.waterUse * clamp(1 + (tempC - 30) * 0.02 - 0.15 * weather.state.rain, 0.7, 1.3));
   s.waterCap = Math.round(s.waterCap);
+  if (incidents.length) {   // ไฟดับ/ท่อแตก ทำให้กำลังจ่ายลดลง และมีค่าซ่อมฉุกเฉิน
+    let pl = 0, wl = 0;
+    for (const o of incidents) { if (o.kind === 'power') pl += 0.12; else if (o.kind === 'water') wl += 0.14; }
+    s.powerCap = Math.round(s.powerCap * (1 - Math.min(0.5, pl)));
+    s.waterCap = Math.round(s.waterCap * (1 - Math.min(0.5, wl)));
+    s.incidentCost = incidents.length * 3;
+  }
   s.jobs = s.jobsCom + s.jobsInd;
   // ภาษีแยกประเภท (รวมกันเท่ากับสูตรเดิม + ภาษีพิเศษของธุรกิจใหม่)
   s.taxes = {
@@ -2341,7 +2352,7 @@ function computeStats() {
     vehicle: s.pop * 0.025, finance: s.extraTax.finance, health: s.extraTax.health, edu: s.extraTax.edu, transit: s.extraTax.transit, leisure: s.extraTax.leisure,
   };
   s.income = Object.values(s.taxes).reduce((a, b) => a + b, 0);
-  s.expense = s.roads * 0.5 + s.bridges * 1.5 + s.upkeep + s.parks * 2 + s.junctions * 0.5;
+  s.expense = s.roads * 0.5 + s.bridges * 1.5 + s.upkeep + s.parks * 2 + s.junctions * 0.5 + (s.incidentCost || 0);
   s.net = s.income - s.expense;
   const workD = clamp((s.pop + 20 - s.jobs) / 90, 0, 1);
   s.demand = {
@@ -2434,7 +2445,7 @@ const later = (sec, fn) => { const at = curAt; sched.push({ t: sec, fn: at ? () 
 const roadAt = (x, z) => (Math.random() < 0.5 ? rowName(z) : colName(x));
 
 function civicCounts() {
-  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, gold: [], flammable: [], temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0 };
+  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, pea: 0, pwa: 0, dohw: 0, gold: [], flammable: [], temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0 };
   state.tiles.forEach((tl, i) => {
     if (!tl || tl.t === 'part' || (tl.cs && !tl.cs.to)) return;
     if (tl.t === 'service') c[tl.v] = (c[tl.v] || 0) + 1;
@@ -2551,6 +2562,159 @@ function tickFires() {
   }
 }
 
+// ----- เหตุขัดข้อง: ไฟดับ / ท่อประปาแตก / ถนนพัง -----
+// มีการไฟฟ้า/การประปา/กรมทางหลวงในเมือง = ส่งรถไปซ่อม (ขับมาจอด ทำงาน แล้วกลับ) ถ้าไม่มีต้องรอนานมาก ชาวบ้านบ่นเป็นระยะ
+const INC = {
+  power: { agency: 'pea', crew: 'power' },
+  water: { agency: 'pwa', crew: 'water' },
+  road: { agency: 'dohw', crew: 'road' },
+};
+const INC_COMPLAIN_AT = [8, 35, 75, 125];
+const IM = {
+  pole: new THREE.MeshStandardMaterial({ color: 0x6b4a2b, roughness: 1 }),
+  trafo: new THREE.MeshStandardMaterial({ color: 0x6f7882, roughness: 0.6, metalness: 0.4 }),
+  spark: new THREE.MeshBasicMaterial({ color: 0xffe14a, toneMapped: false }),
+  amber: new THREE.MeshBasicMaterial({ color: 0xffa500, toneMapped: false }),
+  wire: new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.8 }),
+  zone: new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2, depthWrite: false }),
+  ring: new THREE.MeshBasicMaterial({ color: 0xffc83b, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }),
+  jet: new THREE.MeshBasicMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0.6, depthWrite: false }),
+  puddle: new THREE.MeshBasicMaterial({ color: 0x4aa3df, transparent: true, opacity: 0.55, depthWrite: false }),
+  crater: new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 1 }),
+  chunk: new THREE.MeshStandardMaterial({ color: 0x3b3b3b, roughness: 1 }),
+  cone: new THREE.MeshStandardMaterial({ color: 0xff6a00, roughness: 0.6 }),
+  white: new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.6 }),
+  red: new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.6 }),
+};
+const incDiscGeo = new THREE.CircleGeometry(1, 40), incRingGeo = new THREE.RingGeometry(0.97, 1, 40);
+function buildIncidentVisual(inc) {
+  const g = new THREE.Group();
+  const add = (geo, mat, x, y, z, sx, sy, sz, ry = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.y = ry; m.castShadow = false; g.add(m); return m; };
+  const fl = (geo, mat, x, y, z, r) => { const m = add(geo, mat, x, y, z, r, r, r); m.rotation.x = -Math.PI / 2; return m; };
+  inc.anim = { sparks: [], drops: [] };
+  if (inc.kind === 'power') {
+    fl(incDiscGeo, IM.zone, 0, -0.02, 0, 2.6); fl(incRingGeo, IM.ring, 0, -0.015, 0, 2.6);   // ย่านที่ไฟดับ
+    add(cylGeo, IM.pole, 0.3, 0.28, 0.3, 0.025, 0.56, 0.025);
+    add(boxGeo, IM.pole, 0.3, 0.5, 0.3, 0.22, 0.016, 0.016);
+    add(boxGeo, IM.trafo, 0.3, 0.44, 0.3, 0.08, 0.1, 0.07);
+    inc.anim.beacon = add(sphG, IM.amber, 0.3, 0.6, 0.3, 0.05, 0.05, 0.05);
+    for (let k = 0; k < 5; k++) { const m = add(sphG, IM.spark, 0.3 + (Math.random() - 0.5) * 0.14, 0.44 + Math.random() * 0.12, 0.3 + (Math.random() - 0.5) * 0.1, 0.025, 0.025, 0.025); inc.anim.sparks.push({ m, ph: Math.random() * 20 }); }
+    add(boxGeo, IM.wire, 0, 0.012, 0.05, 0.5, 0.012, 0.012, 0.6 + Math.random());     // สายไฟขาดพาดถนน
+    for (let k = 0; k < 2; k++) { const sp = add(sphG, IM.spark, 0.05 * (k ? 1 : -1), 0.03, 0.05, 0.03, 0.03, 0.03); inc.anim.sparks.push({ m: sp, ph: Math.random() * 20 }); }
+  } else if (inc.kind === 'water') {
+    inc.anim.puddle = fl(incDiscGeo, IM.puddle, 0, 0.004, 0, 0.1);
+    inc.anim.jet = add(coneGeo, IM.jet, 0, 0.22, 0, 0.09, 0.44, 0.09);
+    for (let k = 0; k < 9; k++) { const m = add(sphG, IM.jet, 0, 0.3, 0, 0.035, 0.035, 0.035); inc.anim.drops.push({ m, ph: k / 9, ang: Math.random() * 6.28, r: 0.1 + Math.random() * 0.22 }); }
+    for (let k = 0; k < 3; k++) add(coneGeo, IM.cone, Math.cos(k * 2.1) * 0.34, 0.03, Math.sin(k * 2.1) * 0.34, 0.05, 0.07, 0.05);
+  } else {
+    const c = add(cylGeo, IM.crater, 0, 0.0, 0, 0.4, 0.014, 0.3, Math.random() * 3); c.position.y = 0.004;
+    for (let k = 0; k < 6; k++) { const a = k * 1.05 + Math.random() * 0.4; const m = add(boxGeo, IM.chunk, Math.cos(a) * 0.24, 0.012, Math.sin(a) * 0.19, 0.06, 0.025, 0.05, a); m.rotation.x = (Math.random() - 0.5) * 0.5; }
+    for (let k = 0; k < 4; k++) { const a = k * 1.57 + 0.4; add(coneGeo, IM.cone, Math.cos(a) * 0.36, 0.03, Math.sin(a) * 0.3, 0.05, 0.07, 0.05); }
+    add(boxGeo, IM.white, 0, 0.07, 0.38, 0.34, 0.05, 0.012); add(boxGeo, IM.red, -0.08, 0.07, 0.38, 0.08, 0.052, 0.014); add(boxGeo, IM.red, 0.08, 0.07, 0.38, 0.08, 0.052, 0.014);
+    inc.anim.beacon = add(sphG, IM.amber, 0, 0.12, 0.38, 0.04, 0.04, 0.04);
+  }
+  g.position.set(inc.x - N / 2 + 0.5, tileY(inc.x, inc.z) + 0.06, inc.z - N / 2 + 0.5);
+  scene.add(g);
+  inc.grp = g;
+}
+function pickIncidentTile(kind) {
+  const c = [];
+  state.tiles.forEach((tl, i) => {
+    if (tl?.t !== 'road' || tileIsWater[i]) return;
+    const x = i % N, z = Math.floor(i / N);
+    if (incidents.some(o => Math.abs(o.x - x) + Math.abs(o.z - z) < 4)) return;
+    if (kind !== 'road') {   // ไฟ/น้ำ: ต้องมีอาคารติดถนนช่องนั้น
+      let b = 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (!inBounds(nx, nz)) continue; const o = state.tiles[idx(nx, nz)]; if (o && (ZONES.includes(o.t) || o.t === 'service' || o.t === 'part')) b++; }
+      if (!b) return;
+    }
+    c.push(i);
+  });
+  return c.length ? pickOf(c) : -1;
+}
+function startIncident(kind) {
+  const i = pickIncidentTile(kind);
+  if (i < 0) return false;
+  const x = i % N, z = Math.floor(i / N);
+  const inc = { kind, x, z, t: 0, crew: 0, noCrew: false, cIdx: 0, dispatchAt: 6 + Math.random() * 8, deadline: 150 + Math.random() * 70, road: roadAt(x, z), state: 'open' };
+  buildIncidentVisual(inc);
+  incidents.push(inc);
+  if (kind === 'road') agents.setHazard(x, z, 0.3);
+  withAt(x, z, () => addNews('bad', ['news.inc.' + kind + '.start', { road: inc.road }]));
+  audio.sfx('error');
+  return true;
+}
+function villagerName() { return nameOf({ sex: Math.random() < 0.5 ? 'm' : 'f', fn: (Math.random() * 997) | 0, sn: (Math.random() * 997) | 0 }); }
+function fixIncident(inc, how) {
+  const k = incidents.indexOf(inc);
+  if (k < 0) return;
+  incidents.splice(k, 1);
+  scene.remove(inc.grp);
+  if (inc.kind === 'road') agents.setHazard(inc.x, inc.z, 0);
+  withAt(inc.x, inc.z, () => {
+    if (how === 'self') addNews('warn', ['news.inc.' + inc.kind + '.selffix', {}]);
+    else {
+      addNews('good', ['news.inc.' + inc.kind + '.fixed', { road: inc.road }]);
+      if (how === 'crew') later(5 + Math.random() * 6, () => addNews('good', ['news.inc.' + inc.kind + '.thx', { name: villagerName() }]));
+    }
+  });
+  audio.sfx('place');
+  updateHUD();
+}
+function onCrewEvent(ev) {
+  const inc = incidents.find(o => o.crew === ev.id);
+  if (!inc) return;
+  if (ev.phase === 'arrive') { inc.state = 'working'; withAt(inc.x, inc.z, () => addNews('info', ['news.inc.' + inc.kind + '.arrive', {}])); }
+  else if (ev.phase === 'done') fixIncident(inc, 'crew');
+}
+function tickIncidents() {
+  for (const inc of [...incidents]) {
+    inc.t++;
+    const D = INC[inc.kind], has = (ccache[D.agency] || 0) > 0;
+    if (has && !inc.crew && !inc.noCrew && inc.t >= inc.dispatchAt) {
+      inc.crew = agents.dispatchCrew(D.crew, inc.x, inc.z, inc.kind === 'road' ? 24 + Math.random() * 8 : 14 + Math.random() * 8);
+      if (inc.crew) { inc.state = 'responding'; withAt(inc.x, inc.z, () => addNews('info', ['news.inc.' + inc.kind + '.dispatch', {}])); }
+      else { inc.noCrew = true; inc.deadline = Math.min(inc.deadline, inc.t + 30); }
+    }
+    withAt(inc.x, inc.z, () => {
+      if (inc.cIdx < INC_COMPLAIN_AT.length && inc.t >= INC_COMPLAIN_AT[inc.cIdx]) {
+        inc.cIdx++;
+        if (!has && inc.cIdx === 3) addNews('warn', ['news.inc.' + inc.kind + '.build', {}]);
+        else addNews('warn', ['news.inc.' + inc.kind + '.c' + Math.floor(Math.random() * 4), { name: villagerName(), road: inc.road }]);
+      }
+    });
+    // กันค้าง: ทีมซ่อมไม่มา/ไม่มีหน่วยงาน
+    if (inc.t >= inc.deadline) fixIncident(inc, has ? 'fallback' : 'self');
+  }
+}
+function animateIncidents(time) {
+  for (const inc of incidents) {
+    const A = inc.anim; if (!A) continue;
+    if (A.beacon) A.beacon.visible = Math.sin(time * 8) > 0;
+    for (const sp of A.sparks) sp.m.visible = Math.sin(time * 37 + sp.ph) > 0.35;
+    if (A.jet) { const k = 0.8 + 0.3 * Math.sin(time * 9); A.jet.scale.set(0.09 * k, 0.44 * (0.9 + 0.2 * Math.sin(time * 6)), 0.09 * k); }
+    if (A.drops) for (const d of A.drops) { const u = (time * 0.9 + d.ph) % 1; d.m.position.set(Math.cos(d.ang) * d.r * u, 0.08 + 0.4 * Math.sin(u * Math.PI), Math.sin(d.ang) * d.r * u); }
+    if (A.puddle) { const r = Math.min(0.42, 0.1 + inc.t * 0.006); A.puddle.scale.set(r, r, r); }
+  }
+}
+function clearIncidents() {
+  for (const o of incidents) { scene.remove(o.grp); if (o.kind === 'road') agents.setHazard(o.x, o.z, 0); }
+  incidents.length = 0;
+}
+function maybeStartIncident(s, pShort, wShort) {
+  if (incidents.length >= 3 || (flags.incCool = (flags.incCool || 0) - 1) > 0) return;
+  const W = weather.state, wet = W.rain, storm = W.storm > 0.5 ? 1 : 0;
+  const kinds = [
+    ['power', 0.0028 * (1 + 2.5 * storm + (pShort ? 1.5 : 0))],
+    ['water', 0.0024 * (1 + 0.8 * wet + (wShort ? 1.5 : 0))],
+    ['road', 0.0026 * (1 + 3 * wet)],
+  ];
+  for (const [k, p] of kinds) {
+    if (incidents.some(o => o.kind === k)) continue;
+    if (Math.random() < p && startIncident(k)) { flags.incCool = 50; return; }
+  }
+}
+
 // ----- เหตุการณ์สุ่มรายวินาที (เรียกจาก tick) -----
 const flags = { power: false, water: false, jobs: 0, traffic: 0, flavor: 40, milestone: 0, pack: 90, bAcc: 0, dAcc: 0 };
 const R_FIRST = { birth: true };
@@ -2559,6 +2723,7 @@ function cityEvents(s) {
   // งานที่นัดไว้
   for (const q of [...sched]) { q.t--; if (q.t <= 0) { sched.splice(sched.indexOf(q), 1); q.fn(); } }
   tickFires();
+  tickIncidents();
   const pop = s.pop;
   if (pop <= 0) return;
   const W = weather.state;
@@ -2570,6 +2735,8 @@ function cityEvents(s) {
   const wShort = s.waterUse > s.waterCap;
   if (wShort && !flags.water) { flags.water = true; addNews('bad', ['news.nowater', {}]); }
   else if (!wShort && flags.water) { flags.water = false; addNews('good', ['news.water.ok', {}]); }
+
+  if (pop > 120) maybeStartIncident(s, pShort, wShort);
 
   // เกิด/เสียชีวิตตามธรรมชาติ (บันทึกในทะเบียนราษฎร์)
   flags.bAcc += pop * 0.000033; flags.dAcc += pop * 0.000013;
@@ -2687,6 +2854,7 @@ function cityEvents(s) {
 
 let lastAccAt = null;
 function onAgentEvent(ev) {
+  if (ev && ev.e === 'crew') { onCrewEvent(ev); return; }
   if (ev && ev.e === 'pack') {
     curAt = { x: ev.x, z: ev.z };
     const road = ev.axis === 'row' ? rowName(ev.z) : colName(ev.x);
@@ -2701,6 +2869,8 @@ function onAgentEvent(ev) {
     if (ev === 'ambulance') addNews('warn', ['news.ambulance', {}]);
     else if (ev === 'tow') addNews('info', ['news.tow', {}]);
     else if (ev === 'cleared') addNews('good', ['news.cleared', {}]);
+    else if (ev === 'coroner') addNews('info', ['news.coroner', {}]);
+    else if (ev === 'bodyTaken') addNews('info', ['news.bodytaken', {}]);
     curAt = null;
     return;
   }
@@ -3106,6 +3276,7 @@ $('reset').onclick = () => {
   if (!confirm(t('confirm.reset'))) return;
   state = newState();
   for (const f of [...fires]) removeFire(f);
+  clearIncidents();
   news.clear(); renderNews();
   for (let i = 0; i < N * N; i++) { if (meshes[i]) { disposeTile(meshes[i]); tileGroup.remove(meshes[i]); meshes[i] = null; } }
   swayTiles.clear();
@@ -3682,6 +3853,7 @@ function loop(now) {
   agents.update(dt, night, speed, { rain: weather.state.rain, dark: lampLevel, hospital: ccache.hospital + ccache.hospital_p > 0, police: policeCover(), accidentRate: 1 - 0.3 * policeCover(), drunk: ccache.pub > 0 ? clamp(nightLevel * 1.2, 0, 1) * Math.min(1, 0.4 + 0.3 * ccache.pub) * (agents.checkpointActive() ? 0.3 : 1) : 0, cam: camera.position, frustum: _fr });
   for (const ev of agents.takeEvents()) onAgentEvent(ev);
   animateFires(performance.now() / 1000);
+  animateIncidents(performance.now() / 1000);
   updateMinimap(dt);
   updateFly(dt);
   drag.update(speed > 0 && !menu.isOpen ? dt * Math.min(speed, 2) : 0);
