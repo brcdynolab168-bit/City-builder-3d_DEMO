@@ -72,31 +72,34 @@ export function terrainH(wx, wz) {
   const rw = ss(-36, -24, wx);
   if (rw > 0) {
     const d = Math.abs(wz - riverZ(wx));
-    const t = 1 - ss(0.7, 3.8, d);
-    h = lerp(h, -0.35, t * rw);
+    // ที่ราบริมแม่น้ำ: ลดความสูงใกล้ฝั่งให้เรียบ (ไม่ยกขึ้น) เพื่อให้สะพานเชื่อมถนนฝั่งตรงข้ามได้พอดี
+    h = Math.min(h, lerp(h, 0.42, (1 - ss(2.5, 9, d)) * rw * 0.85));
+    const t = 1 - ss(0.7, 3.3, d);
+    h = lerp(h, -0.5, t * rw);
   }
   return h;
 }
 
 // สีพื้นดินตามความสูง: ทรายริมน้ำ → หญ้า → ป่า → หิน → หิมะ
 export function terrainColor(h, noise, out) {
-  const n = (noise - 0.5) * 0.12;
+  // ค่าสีเป็น sRGB (ผู้เรียกแปลงเป็นเชิงเส้นก่อนใส่เป็น vertex color)
+  const n = (noise - 0.5) * 0.16;
   let r, g, b;
-  if (h < -0.15) { r = 0.16; g = 0.30; b = 0.34; }                  // ใต้น้ำ
+  if (h < -0.15) { r = 0.12; g = 0.32; b = 0.40; }                  // ใต้น้ำ
   else if (h < 0.3) {                                               // หาดทราย → หญ้า
     const t = ss(0.02, 0.32, h);
-    r = lerp(0.78, 0.46, t); g = lerp(0.70, 0.66, t); b = lerp(0.50, 0.36, t);
-  } else if (h < 5) {                                               // หญ้า
-    r = 0.46; g = 0.66; b = 0.36;
+    r = lerp(0.88, 0.36, t); g = lerp(0.76, 0.66, t); b = lerp(0.50, 0.22, t);
+  } else if (h < 5) {                                               // ทุ่งหญ้า
+    r = 0.34; g = 0.64; b = 0.20;
   } else if (h < 9) {                                               // ป่าทึบ
     const t = ss(5, 9, h);
-    r = lerp(0.46, 0.27, t); g = lerp(0.66, 0.42, t); b = lerp(0.36, 0.25, t);
+    r = lerp(0.34, 0.17, t); g = lerp(0.64, 0.42, t); b = lerp(0.20, 0.14, t);
   } else if (h < 13) {                                              // หิน
     const t = ss(9, 12, h);
-    r = lerp(0.27, 0.52, t); g = lerp(0.42, 0.49, t); b = lerp(0.25, 0.45, t);
+    r = lerp(0.17, 0.50, t); g = lerp(0.42, 0.46, t); b = lerp(0.14, 0.42, t);
   } else {                                                          // หิมะ
     const t = ss(13, 15.5, h);
-    r = lerp(0.52, 0.94, t); g = lerp(0.49, 0.95, t); b = lerp(0.45, 0.97, t);
+    r = lerp(0.50, 0.96, t); g = lerp(0.46, 0.97, t); b = lerp(0.42, 1.0, t);
   }
   out[0] = Math.min(1, Math.max(0, r + n));
   out[1] = Math.min(1, Math.max(0, g + n));

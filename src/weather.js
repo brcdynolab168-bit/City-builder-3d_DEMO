@@ -31,7 +31,7 @@ const sstep = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
-export function createWeather({ scene, getFocus }) {
+export function createWeather({ scene, getFocus, getCameraPos = () => ({ x: 0, y: 0, z: 0 }) }) {
   const state = {
     mode: 'auto',      // auto | clear | cloudy | rain | storm
     kind: 'clear',     // สภาพปัจจุบัน (ป้ายที่แสดง)
@@ -145,6 +145,7 @@ export function createWeather({ scene, getFocus }) {
     const sp = 1.2 + state.wind * 8;
     const tint = 0.78 - 0.4 * Math.min(1, state.rain + state.cloud * 0.2);
     cloudMat.color.setRGB(tint + 0.22, tint + 0.22, tint + 0.25);
+    const cp = getCameraPos();
     for (const c of clouds) {
       const u = c.userData;
       c.position.x += wx * sp * u.speed * dt;
@@ -153,7 +154,10 @@ export function createWeather({ scene, getFocus }) {
       if (c.position.x < -140) c.position.x += 280;
       if (c.position.z > 140) c.position.z -= 280;
       if (c.position.z < -140) c.position.z += 280;
-      const vis = sstep(u.threshold, u.threshold + 0.18, state.cloud);
+      // เมฆที่อยู่ใกล้กล้องจะค่อยๆ หายไป ไม่ให้บังภาพเมือง
+      const dx = c.position.x - cp.x, dy = c.position.y - cp.y, dz = c.position.z - cp.z;
+      const near = sstep(22, 60, Math.sqrt(dx * dx + dy * dy + dz * dz));
+      const vis = sstep(u.threshold, u.threshold + 0.18, state.cloud) * near;
       c.visible = vis > 0.02;
       c.scale.setScalar(u.base * Math.max(vis, 0.001) * (1 + 0.25 * state.storm));
     }
