@@ -6,6 +6,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { createAgents } from './agents.js';
 import { createWeather } from './weather.js';
 import { createWildlife } from './wildlife.js';
@@ -16,6 +17,8 @@ import { t, hasKey, setLang, getLang, onLang, LANGS } from './i18n.js';
 import * as Saves from './saves.js';
 import { createAudio } from './audio.js';
 import { createMenu } from './menu.js';
+import { createBig, FOOT } from './big.js';
+import { createSky, periodKey } from './sky.js';
 
 // ---------------------------------------------------------------
 // เริ่มเกม: อ่านช่องเซฟที่ใช้อยู่ แล้วเลือกแผนที่ก่อนสร้างภูมิประเทศ
@@ -47,6 +50,7 @@ const TOOLS = {
   water:    { label: 'โรงประปา',        cost: 400, tip: 'ผลิตน้ำ 120 หน่วย ต้องตั้งใกล้แม่น้ำ/ทะเล (ภายใน 3 ช่อง)' },
   park:     { label: 'สวน',            cost: 50,  tip: 'สวนสาธารณะ ผู้คนมาเดินเล่น ที่อยู่อาศัยรอบๆโตเร็วขึ้น' },
   service:  { label: 'บริการ',          cost: 800, tip: 'โรงเรียน / โรงพยาบาล: จ้างงาน และทำให้บ้านรอบๆโตเร็วขึ้น' },
+  farm:     { label: 'ฟาร์ม',           cost: 300, tip: 'นา ไร่ ฟาร์มปศุสัตว์ สวนผลไม้ (ไม่ต้องติดถนน)' },
   bulldoze: { label: 'รื้อ',            cost: 5,   tip: 'รื้อถอน' },
 };
 const TOOL_KEYS = Object.keys(TOOLS);
@@ -68,7 +72,23 @@ const VARIANTS = {
     { k: 'kfc',   label: 'KFC',             cost: 320,  jobs: 12,  power: 5,  water: 5,  note: 'ร้านอาหารจานด่วน' },
     { k: 'gas',   label: 'ปั๊มน้ำมัน',       cost: 450,  jobs: 9,   power: 4,  water: 3 },
     { k: 'lotus', label: 'โลตัส',           cost: 700,  jobs: 32,  power: 10, water: 8,  note: 'ซูเปอร์มาร์เก็ต' },
-    { k: 'mall',  label: 'ห้างสรรพสินค้า',   cost: 1800, jobs: 100, power: 30, water: 22 },
+    { k: 'mall',  label: 'ห้างสรรพสินค้า',   cost: 2400, jobs: 100, power: 30, water: 22, note: '3×2 ช่อง' },
+    { k: 'market',  label: 'ตลาด',            cost: 700,  jobs: 26, power: 4, water: 8, note: '2×2 ช่อง' },
+    { k: 'dealer',  label: 'ร้านขายรถ',        cost: 900,  jobs: 18, power: 6, water: 3, note: '2×1 ช่อง' },
+    { k: 'fishing', label: 'ร้านอุปกรณ์ตกปลา', cost: 240,  jobs: 5, power: 2, water: 1 },
+  ],
+  park: [
+    { k: 'park',   label: 'สวนเล็ก',          cost: 50,   upkeep: 1 },
+    { k: 'play',   label: 'สนามเด็กเล่น',     cost: 180,  upkeep: 3 },
+    { k: 'plaza',  label: 'ลานน้ำพุ',          cost: 420,  upkeep: 6 },
+    { k: 'sports', label: 'สนามกีฬา',          cost: 650,  upkeep: 9, jobs: 4 },
+    { k: 'garden', label: 'สวนพฤกษศาสตร์',     cost: 1300, upkeep: 16, jobs: 8 },
+  ],
+  farm: [
+    { k: 'rice',    label: 'นาข้าว',           cost: 300, jobs: 8,  power: 1, water: 6, upkeep: 2 },
+    { k: 'crop',    label: 'ไร่ผักและโรงเรือน', cost: 380, jobs: 10, power: 2, water: 7, upkeep: 3 },
+    { k: 'orchard', label: 'สวนผลไม้',         cost: 420, jobs: 9,  power: 1, water: 6, upkeep: 3 },
+    { k: 'barn',    label: 'ฟาร์มปศุสัตว์',     cost: 650, jobs: 16, power: 3, water: 10, upkeep: 5 },
   ],
   power: [
     { k: 'solar',   label: 'โซลาร์ฟาร์ม (เล็ก)',  cost: 220,  cap: 40,  upkeep: 6 },
@@ -81,12 +101,15 @@ const VARIANTS = {
     { k: 'big',   label: 'โรงประปาใหญ่',         cost: 850, cap: 270, upkeep: 32 },
   ],
   service: [
-    { k: 'school',   label: 'โรงเรียน',      cost: 800,  jobs: 26, power: 6,  water: 6,  upkeep: 12, note: 'บ้านรอบๆโตเร็วขึ้น' },
+    { k: 'school',   label: 'โรงเรียน',      cost: 1100, jobs: 26, power: 6,  water: 6,  upkeep: 12, note: 'บ้านรอบๆโตเร็วขึ้น' },
     { k: 'hospital', label: 'โรงพยาบาล',     cost: 1500, jobs: 60, power: 18, water: 15, upkeep: 26, note: 'บ้านรอบๆโตเร็วขึ้น' },
-    { k: 'bu',       label: 'ม.กรุงเทพ',      cost: 2600, jobs: 130, power: 26, water: 22, upkeep: 45, note: 'มหาวิทยาลัย' },
+    { k: 'bu',       label: 'ม.กรุงเทพ',      cost: 3800, jobs: 130, power: 26, water: 22, upkeep: 45, note: 'มหาวิทยาลัย 3×3 ช่อง' },
+    { k: 'temple',   label: 'วัด',            cost: 1200, jobs: 8, power: 3, water: 4, upkeep: 8, note: '3×3 ช่อง' },
+    { k: 'church',   label: 'โบสถ์คริสต์',     cost: 900,  jobs: 6, power: 3, water: 3, upkeep: 6, note: '2×3 ช่อง' },
+    { k: 'mosque',   label: 'มัสยิด',          cost: 1200, jobs: 6, power: 3, water: 4, upkeep: 8, note: '3×3 ช่อง' },
   ],
 };
-const DEFAULT_V = { res: 'zone', com: 'zone', ind: 'zone', power: 'gas', water: 'plant', service: 'school' };
+const DEFAULT_V = { res: 'zone', com: 'zone', ind: 'zone', power: 'gas', water: 'plant', service: 'school', park: 'park', farm: 'rice' };
 const currentVar = { ...DEFAULT_V };
 const variantOf = t => VARIANTS[t.t]?.find(v => v.k === (t.v || DEFAULT_V[t.t]));
 const fixedVariant = t => { const v = variantOf(t); return v && v.k !== 'zone' ? v : null; };
@@ -176,6 +199,7 @@ function load() {
   if (data && Array.isArray(data.tiles) && data.tiles.length === N * N) {
     // ถ้ามีของที่ตกอยู่บนน้ำ (จากเซฟเก่า) ให้ลบทิ้ง ยกเว้นถนน (กลายเป็นสะพาน)
     data.tiles.forEach((tl, i) => { if (tl && tileIsWater[i] && tl.t !== 'road') data.tiles[i] = null; });
+    data.tiles.forEach((tl, i) => { if (tl && tl.t === 'part' && (!data.tiles[tl.m] || data.tiles[tl.m].t === 'part')) data.tiles[i] = null; });
     state = data;
     if (typeof state.tod === 'number') tod = state.tod;
     return;
@@ -263,7 +287,7 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.5;
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 400);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 560);
 camera.position.set(N * 0.55, N * 0.5, N * 0.55);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -313,6 +337,11 @@ const QUALITY = {
     label: 'สูง', desc: 'สมจริงสุด: เงาละเอียด แสงเรืองกลางคืน ฝนหนา ป่าเต็มภูเขา ไฟจราจรและป้ายครบ รถ คน หมา แมว จำนวนมาก',
     pixelRatio: 2, shadows: true, shadowSize: 4096, bloom: true, cars: 150, people: 160, pets: 40, details: 2,
     rain: 7000, forest: 4000,
+  },
+  rtx: {
+    label: 'RTX', desc: 'RTX ON: เงาและแสงสมจริงสูงสุด (AO, ท้องฟ้า, แสงจันทร์, ไฟเรือง) กินการ์ดจอมาก',
+    pixelRatio: 2, shadows: true, shadowSize: 4096, bloom: true, cars: 150, people: 160, pets: 40, details: 2,
+    rain: 7000, forest: 4000, rtx: true,
   },
 };
 const settings = { quality: 'med', mode: 'trackpad', lang: 'th', master: 0.8, sfx: 0.8, music: 0.35, mute: false };
@@ -390,7 +419,7 @@ function bridgeAtX(wx) {
 const wildlife = createWildlife({ scene, blocked: bridgeAtX, boats: mapHasRiver() });
 const agents = createAgents({
   scene, N,
-  tileType: (x, z) => tileAt(x, z)?.t ?? null,
+  tileType: (x, z) => { const tl = tileAt(x, z); if (tl?.t === 'part') return state.tiles[tl.m]?.t === 'park' ? 'park' : 'part'; return tl?.t ?? null; },
   groundY: tileY,
   signal: signalState,
 });
@@ -704,35 +733,52 @@ const C_FLASH = new THREE.Color(0xdfe8ff);
 let lampLevel = 0;   // ความสว่างของไฟ (กลางคืน หรือฟ้ามืดครึ้มตอนฝน)
 let tempC = 30;      // อุณหภูมิ (°C)
 
+const skyBox = createSky(scene);
+const moonLight = new THREE.DirectionalLight(0x9fb6ff, 0);
+moonLight.position.set(-20, 30, -10);
+scene.add(moonLight);
+const C_HEMI_DAY = new THREE.Color(0xcfe6ff), C_HEMI_NIGHT = new THREE.Color(0x1b2747), C_HEMI_DUSK = new THREE.Color(0xe8b090);
+const C_GR_DAY = new THREE.Color(0x6b7a5a), C_GR_NIGHT = new THREE.Color(0x10150f);
+const sunTint = new THREE.Color();
+let periodNow = 'morning';
+
 function updateSky(dt) {
   const prevTod = tod;
   tod = (tod + dt / DAY_LENGTH_SEC) % 1;
   if (tod < prevTod && !menu.isOpen) state.day++; // ข้ามเที่ยงคืน = วันใหม่
   const W = weather.state;
+  const hour = tod * 24;
+  periodNow = periodKey(hour);
   const ang = (tod - 0.25) * Math.PI * 2;
   const elev = Math.sin(ang);
   sun.position.set(Math.cos(ang) * 40, Math.max(elev, 0.08) * 40 + 2, 16);
   const day = THREE.MathUtils.smoothstep(elev, -0.12, 0.28);
 
+  // สีแสงอาทิตย์: ส้มแดงตอนเช้า/เย็น ขาวนวลตอนเที่ยง
+  const kSun = THREE.MathUtils.smoothstep(elev, 0.0, 0.5);
+  sunTint.setRGB(1, 0.5 + 0.47 * kSun, 0.26 + 0.66 * kSun);
+  sun.color.copy(sunTint);
+
   // เมฆและฝนบังแสงอาทิตย์
   const dim = 1 - 0.55 * W.cloud - 0.2 * W.rain;
   sun.intensity = 2.3 * day * dim;
-  hemi.intensity = (0.18 + 0.65 * day) * (1 + 0.15 * W.cloud) + W.flash * 2.5;
-  scene.environmentIntensity = (0.12 + 0.45 * day) * (1 - 0.3 * W.cloud) + W.flash * 0.8;
+  const warm = THREE.MathUtils.clamp(1 - Math.abs(elev) / 0.3, 0, 1) * (1 - 0.7 * W.cloud);
+  hemi.color.copy(C_HEMI_NIGHT).lerp(C_HEMI_DAY, day).lerp(C_HEMI_DUSK, warm * 0.45);
+  hemi.groundColor.copy(C_GR_NIGHT).lerp(C_GR_DAY, day);
+  hemi.intensity = (0.2 + 0.62 * day) * (1 + 0.15 * W.cloud) + W.flash * 2.5;
+  scene.environmentIntensity = (0.14 + 0.43 * day) * (1 - 0.3 * W.cloud) + W.flash * 0.8;
   renderer.toneMappingExposure = 0.85 + 0.25 * day;
 
-  tmpColor.copy(C_NIGHT).lerp(C_DAY, day);
-  const warm = THREE.MathUtils.clamp(1 - Math.abs(elev) / 0.3, 0, 1) * 0.55;
-  tmpColor.lerp(C_WARM, warm * (1 - 0.7 * W.cloud));
-  // ท้องฟ้าเทาตามเมฆ/ฝน
-  const grey = tmpColor2.copy(C_GREY).multiplyScalar(0.1 + 0.9 * day);
-  tmpColor.lerp(grey, Math.min(0.85, W.cloud * 0.7 + W.rain * 0.25));
-  tmpColor.lerp(C_FLASH, W.flash * 0.5);
-  scene.background.copy(tmpColor);
-  scene.fog.color.copy(tmpColor);
+  // แสงจันทร์สีน้ำเงินอ่อน (สว่างเต็มดวงที่เที่ยงคืน)
+  const nightK = 1 - day;
+  moonLight.intensity = 0.34 * nightK * (1 - 0.6 * W.cloud) * (1 - 0.4 * W.rain);
+  moonLight.position.set(-Math.cos(ang) * 40, Math.max(-elev, 0.15) * 40 + 4, -16);
+
+  const sk = skyBox.update(hour, elev, ang, W, controls.target, sunTint);
+  scene.background.copy(sk.horizon);
+  scene.fog.color.copy(sk.horizon);
   scene.fog.near = 70 - 52 * W.rain;
   scene.fog.far = 170 - 80 * W.rain - 25 * W.cloud;
-  sun.color.setHex(0xfff1d6).lerp(C_WARM, warm * 0.8);
 
   const night = 1 - day;
   lampLevel = Math.min(1, night + day * (0.35 * W.cloud + 0.45 * W.rain));
@@ -1391,6 +1437,8 @@ function buildUniversity(bg, r) {
   shrub(bg, -0.42, 0.42, 0.11, 0); shrub(bg, 0.42, 0.42, 0.11, 2); shrub(bg, -0.18, 0.44, 0.09, 1); shrub(bg, 0.18, 0.44, 0.09, 3);
 }
 
+const BIG = createBig({ put, boxGeo, cylGeo, coneGeo, icoGeo, planeGeo, M, FM, block, roofCap, signAt, shrub, addTree, band, std, gableGeo, facadeGeo, lot, t, facadeMats });
+
 function buildVariant(bg, type, v, r, r2) {
   if (type === 'res') {
     if (v === 'house') return buildZoneBuilding(bg, 'res', 1, r, r2);
@@ -1540,7 +1588,11 @@ function buildTile(x, z) {
   const r2 = hash(x * 3 + 1, z * 5 + 2);
   const rot = () => facing(x, z, r);
 
-  if (t.t === 'road') {
+  if (t.t === 'part') {
+    // ช่องที่เป็นส่วนหนึ่งของอาคารใหญ่: มีแต่ฐาน อาคารวาดโดยช่องหลัก
+  } else if (t.fw && FOOT[t.t + ':' + t.v]) {
+    buildBigTile(g, x, z, t, ty);
+  } else if (t.t === 'road') {
     // ทางเท้า + ผิวถนนแอสฟัลต์ + เส้นแบ่งเลน
     put(g, boxGeo, M.walk, 0, 0.02, 0, 0.98, 0.04, 0.98);
     put(g, boxGeo, M.road, 0, 0.05, 0, 0.74, 0.02, 0.74);
@@ -1648,6 +1700,85 @@ function buildTile(x, z) {
   swayList = null;
 }
 
+function buildBigTile(g, x, z, tl, ty) {
+  const fw = tl.fw, fd = tl.fd, rot = tl.rot || 0;
+  const [W, D] = FOOT[tl.t + ':' + tl.v];
+  let base = -1e9, low = 1e9;
+  for (let dz = 0; dz < fd; dz++) for (let dx = 0; dx < fw; dx++) {
+    const h = tileY(x + dx, z + dz);
+    base = Math.max(base, h); low = Math.min(low, tileMinH[idx(x + dx, z + dz)]);
+  }
+  const wrap = new THREE.Group();
+  wrap.position.set(x + fw / 2 - N / 2 - g.position.x, base - ty, z + fd / 2 - N / 2 - g.position.z);
+  wrap.rotation.y = rot * Math.PI / 2;
+  const sh = Math.max(0.2, base - low + 0.25);
+  put(wrap, boxGeo, M.plinth, 0, 0.03 - sh / 2, 0, W - 0.01, sh, D - 0.01);
+  BIG.build(wrap, tl.t, tl.v);
+  g.add(wrap);
+}
+
+// ---------------------------------------------------------------
+// วางอาคารหลายช่อง: พื้นที่ (footprint) หมุนได้ด้วยปุ่ม R (ค่าเริ่มต้น = หันหน้าเข้าถนนเอง)
+// ช่องหลัก = มุมซ้ายบนของพื้นที่ ช่องอื่นเป็น {t:'part', m: ดัชนีช่องหลัก}
+// ---------------------------------------------------------------
+let placeRot = null;
+const footFor = tool => FOOT[tool + ':' + currentVar[tool]] || null;
+function rectFor(x, z, W, D, rot) {
+  const fw = rot % 2 ? D : W, fd = rot % 2 ? W : D;
+  return { x0: x - Math.floor((fw - 1) / 2), z0: z - Math.floor((fd - 1) / 2), fw, fd, rot };
+}
+function edgeRoads(R, side) { // side 0:+z 1:+x 2:-z 3:-x (ด้านหน้า/ด้านอื่น)
+  let n = 0;
+  const { x0, z0, fw, fd } = R;
+  if (side === 0 || side === 2) for (let i = 0; i < fw; i++) { if (isType(x0 + i, side === 0 ? z0 + fd : z0 - 1, 'road')) n++; }
+  else for (let j = 0; j < fd; j++) { if (isType(side === 1 ? x0 + fw : x0 - 1, z0 + j, 'road')) n++; }
+  return n;
+}
+const perimRoads = R => edgeRoads(R, 0) + edgeRoads(R, 1) + edgeRoads(R, 2) + edgeRoads(R, 3);
+function chooseRot(x, z, W, D) {
+  if (placeRot !== null) return placeRot;
+  let best = 0, bs = -1;
+  for (let r = 0; r < 4; r++) {
+    const R = rectFor(x, z, W, D, r);
+    const s = edgeRoads(R, r);
+    if (s > bs) { bs = s; best = r; }
+  }
+  return best;
+}
+// ตรวจว่าวางอาคารใหญ่ที่ตำแหน่งนี้ได้ไหม คืน {R, ok, reason}
+function evalBig(tool, x, z) {
+  const [W, D] = footFor(tool);
+  const R = rectFor(x, z, W, D, chooseRot(x, z, W, D));
+  let reason = null, lo = 1e9, hi = -1e9;
+  for (let dz = 0; dz < R.fd && !reason; dz++) for (let dx = 0; dx < R.fw; dx++) {
+    const px = R.x0 + dx, pz = R.z0 + dz;
+    if (!inBounds(px, pz)) { reason = 'toast.bounds'; break; }
+    if (state.tiles[idx(px, pz)]) { reason = 'toast.occupied'; break; }
+    if (isWaterTile(px, pz)) { reason = 'toast.water'; break; }
+    lo = Math.min(lo, tileMinH[idx(px, pz)]); hi = Math.max(hi, tileMaxH[idx(px, pz)]);
+  }
+  if (!reason && hi - lo > 1.3) reason = 'toast.slope';
+  if (!reason && ['com', 'service'].includes(tool) && !perimRoads(R)) reason = 'toast.road';
+  if (!reason && state.money < toolCost(tool)) reason = 'toast.nomoney';
+  return { R, ok: !reason, reason };
+}
+function placeBig(tool) {
+  /* ใช้ใน applyTool */
+}
+function masterOf(i) {
+  const tl = state.tiles[i];
+  if (!tl) return -1;
+  return tl.t === 'part' ? tl.m : i;
+}
+function footprintTiles(mi) {
+  const m = state.tiles[mi];
+  const out = [];
+  if (!m || m.t === 'part') return out;
+  const mx = mi % N, mz = Math.floor(mi / N), fw = m.fw || 1, fd = m.fd || 1;
+  for (let dz = 0; dz < fd; dz++) for (let dx = 0; dx < fw; dx++) out.push([mx + dx, mz + dz]);
+  return out;
+}
+
 function refresh(x, z) {
   agents.invalidate();
   buildTile(x, z);
@@ -1692,9 +1823,30 @@ function applyTool(x, z) {
     if (!cur) return;
     if (state.money < cost) { audio.sfx('error'); return toast(t('toast.nomoney')); }
     state.money -= cost;
-    state.tiles[i] = null;
-    audio.sfx('bulldoze');
-    refresh(x, z);
+    const mi = masterOf(i);
+    const tiles = footprintTiles(mi);
+    if (tiles.length > 1 || cur.t === 'part') {
+      for (const [px, pz] of tiles) state.tiles[idx(px, pz)] = null;
+      audio.sfx('bulldoze');
+      for (const [px, pz] of tiles) refresh(px, pz);
+    } else {
+      state.tiles[i] = null;
+      audio.sfx('bulldoze');
+      refresh(x, z);
+    }
+    updateHUD();
+    return;
+  }
+  if (footFor(currentTool)) {
+    if (cur) return;
+    const e = evalBig(currentTool, x, z);
+    if (!e.ok) { audio.sfx('error'); return toast(t(e.reason)); }
+    state.money -= toolCost(currentTool);
+    const { R } = e, mi = idx(R.x0, R.z0);
+    for (let dz = 0; dz < R.fd; dz++) for (let dx = 0; dx < R.fw; dx++) state.tiles[idx(R.x0 + dx, R.z0 + dz)] = { t: 'part', m: mi };
+    state.tiles[mi] = { t: currentTool, lv: 0, v: currentVar[currentTool], fw: R.fw, fd: R.fd, rot: R.rot };
+    audio.sfx('place');
+    for (let dz = 0; dz < R.fd; dz++) for (let dx = 0; dx < R.fw; dx++) refresh(R.x0 + dx, R.z0 + dz);
     updateHUD();
     return;
   }
@@ -1726,9 +1878,9 @@ function computeStats() {
   state.tiles.forEach((t, i) => {
     if (!t) return;
     const lv = t.lv || 0;
-    const FV = (t.t === 'res' || t.t === 'com' || t.t === 'service') ? fixedVariant(t) : null;
+    const FV = (t.t === 'res' || t.t === 'com' || t.t === 'service' || t.t === 'farm') ? fixedVariant(t) : null;
     if (FV) {
-      if (t.t === 'res') s.pop += FV.pop; else s.jobsCom += FV.jobs;
+      if (t.t === 'res') s.pop += FV.pop; else if (t.t === 'farm') s.jobsInd += FV.jobs; else s.jobsCom += FV.jobs;
       s.powerUse += FV.power; s.waterUse += FV.water; s.upkeep += FV.upkeep || 0;
       return;
     }
@@ -1736,7 +1888,7 @@ function computeStats() {
     else if (t.t === 'com') { s.jobsCom += JOBS_COM[lv]; s.powerUse += POWER_USE.com[lv]; s.waterUse += WATER_USE.com[lv]; s.comLv += lv; }
     else if (t.t === 'ind') { s.jobsInd += JOBS_IND[lv]; s.powerUse += POWER_USE.ind[lv]; s.waterUse += WATER_USE.ind[lv]; s.indLv += lv; }
     else if (t.t === 'road') { s.roads++; if (tileIsWater[i]) s.bridges++; if (isJunction(i % N, Math.floor(i / N))) s.junctions++; }
-    else if (t.t === 'park') { s.parks++; s.waterUse += 1; }
+    else if (t.t === 'park') { const PV = variantOf(t); s.parks += (t.fw || 1) * (t.fd || 1); s.waterUse += 1 + (t.fw ? t.fw * t.fd : 0); s.upkeep += PV?.upkeep ? PV.upkeep : 0; s.jobsCom += PV?.jobs || 0; }
     else if (t.t === 'power') { const V = variantOf(t); s.plants++; s.powerCap += V.cap; s.upkeep += V.upkeep; }
     else if (t.t === 'water') { const V = variantOf(t); s.wplants++; s.waterCap += V.cap * (1 + 0.15 * weather.state.rain); s.upkeep += V.upkeep; } // ฝนตก น้ำดิบมากขึ้น
   });
@@ -1822,7 +1974,7 @@ function updateHUD(s = computeStats()) {
 const toolbar = $('toolbar');
 const toolBtns = {};
 const toolSmall = {};
-const keyLabel = n => (n + 1) % 10;
+const keyLabel = n => (TOOL_KEYS[n] === 'bulldoze' ? 'B' : (n + 1) % 10);
 function refreshToolSmall(k) {
   const n = TOOL_KEYS.indexOf(k);
   const V = VARIANTS[k]?.find(v => v.k === currentVar[k]);
@@ -1884,15 +2036,25 @@ fly.addEventListener('click', e => {
   const it = e.target.closest('.fi');
   if (!it || !flyTool) return;
   currentVar[flyTool] = it.dataset.k;
+  placeRot = null;
   refreshToolSmall(flyTool);
   selectTool(flyTool);
   fly.classList.remove('show');
 });
 document.addEventListener('pointerdown', e => { if (!fly.contains(e.target) && !toolbar.contains(e.target)) fly.classList.remove('show'); });
+function rotatePlacement() {
+  if (!footFor(currentTool)) return;
+  placeRot = placeRot === null ? 0 : (placeRot + 1) % 4;
+  audio.sfx('click');
+  toast(t('toast.rot', { n: placeRot * 90 }));
+  if (lastHoverEvent) updateHover(lastHoverEvent);
+}
 function selectTool(k) {
+  placeRot = null;
   currentTool = k;
   for (const key in toolBtns) toolBtns[key].classList.toggle('active', key === k);
   hoverMesh.visible = k !== 'select' && hoverTile !== null;
+  hoverFront.visible = false;
 }
 
 document.querySelectorAll('#speed button').forEach(b => {
@@ -1920,7 +2082,9 @@ window.addEventListener('keydown', e => {
   }
   const n = parseInt(e.key, 10);
   if (n >= 1 && n <= 9 && n <= TOOL_KEYS.length) selectTool(TOOL_KEYS[n - 1]);
-  if (e.key === '0') selectTool('bulldoze');
+  if (e.key === '0') selectTool('farm');
+  if (e.key === 'b' || e.key === 'B') selectTool('bulldoze');
+  if (e.key === 'r' || e.key === 'R') rotatePlacement();
   if (e.key === 'Escape') { if (currentTool === 'select') openMenu(); else selectTool('select'); }
   if (e.key === ' ') { e.preventDefault(); const b = document.querySelector(`#speed button[data-s="${speed === 0 ? 1 : 0}"]`); b.click(); }
 });
@@ -1960,16 +2124,51 @@ function pickTile(e) {
   return { x, z };
 }
 
+let lastHoverEvent = null;
+const hoverFront = new THREE.Mesh(boxGeo, new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }));
+hoverFront.visible = false;
+scene.add(hoverFront);
 function updateHover(e) {
+  lastHoverEvent = e;
   hoverTile = pickTile(e);
+  hoverFront.visible = false;
   if (!hoverTile || currentTool === 'select') { hoverMesh.visible = false; return; }
   const { x, z } = hoverTile;
   hoverMesh.visible = true;
+  if (footFor(currentTool)) {
+    const ev = evalBig(currentTool, x, z), R = ev.R;
+    let base = 0;
+    for (let dz = 0; dz < R.fd; dz++) for (let dx = 0; dx < R.fw; dx++) base = Math.max(base, tileY(R.x0 + dx, R.z0 + dz));
+    hoverMesh.scale.set(R.fw, 0.12, R.fd);
+    hoverMesh.position.set(R.x0 + R.fw / 2 - N / 2, base + 0.1, R.z0 + R.fd / 2 - N / 2);
+    hoverMesh.material.color.set(ev.ok ? 0x66ff88 : 0xff5555);
+    // แถบสีเหลืองบอกด้านหน้าอาคาร
+    const fx = [0, 1, 0, -1][R.rot], fz = [1, 0, -1, 0][R.rot];
+    const along = R.rot % 2 ? R.fd : R.fw;
+    hoverFront.visible = true;
+    hoverFront.scale.set(R.rot % 2 ? 0.08 : along * 0.6, 0.14, R.rot % 2 ? along * 0.6 : 0.08);
+    hoverFront.position.set(hoverMesh.position.x + fx * (R.rot % 2 ? R.fw : R.fd) / 2, base + 0.12, hoverMesh.position.z + fz * (R.rot % 2 ? R.fw : R.fd) / 2);
+    return;
+  }
+  hoverMesh.scale.set(1, 0.12, 1);
   hoverMesh.position.set(x - N / 2 + 0.5, tileY(x, z) + 0.1, z - N / 2 + 0.5);
+  if (currentTool === 'bulldoze') {
+    const cur = tileAt(x, z);
+    if (cur) { // ไฮไลต์ทั้งหลังของอาคารใหญ่
+      const mi = masterOf(idx(x, z)), tl = footprintTiles(mi);
+      if (tl.length > 1) {
+        const mx = mi % N, mz = Math.floor(mi / N), m = state.tiles[mi];
+        hoverMesh.scale.set(m.fw, 0.12, m.fd);
+        hoverMesh.position.set(mx + m.fw / 2 - N / 2, tileY(x, z) + 0.1, mz + m.fd / 2 - N / 2);
+      }
+    }
+    hoverMesh.material.color.set(cur ? 0xff8844 : 0xff5555);
+    return;
+  }
   const cur = tileAt(x, z);
   const wOk = isWaterTile(x, z) ? currentTool === 'road' : true;
-  const ok = currentTool === 'bulldoze' ? !!cur : !cur && wOk && state.money >= buildCost(currentTool, x, z);
-  hoverMesh.material.color.set(currentTool === 'bulldoze' ? 0xff8844 : ok ? 0x66ff88 : 0xff5555);
+  const ok = !cur && wOk && state.money >= buildCost(currentTool, x, z);
+  hoverMesh.material.color.set(ok ? 0x66ff88 : 0xff5555);
 }
 
 const el = renderer.domElement;
@@ -2011,7 +2210,7 @@ const endPointer = e => {
 };
 window.addEventListener('pointerup', endPointer);
 window.addEventListener('pointercancel', endPointer);
-el.addEventListener('pointerleave', () => { hoverMesh.visible = false; });
+el.addEventListener('pointerleave', () => { hoverMesh.visible = false; hoverFront.visible = false; });
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -2085,8 +2284,8 @@ window.addEventListener('keydown', e => {
 // แผงตั้งค่า: กราฟิก / โหมดควบคุม
 // ---------------------------------------------------------------
 const HELP = {
-  trackpad: 'ลากสองนิ้ว = เลื่อนแผนที่<br>หนีบนิ้ว (pinch) = ซูม<br>Alt/Option + ลากสองนิ้ว = หมุน<br>คลิก/ลากนิ้วเดียว = สร้าง<br>1–9 เลือกเครื่องมือ, Esc ยกเลิก, Space หยุด',
-  mouse: 'ซ้าย (ลาก) = สร้าง<br>ขวา (ลาก) = หมุนกล้อง<br>ล้อเมาส์ = ซูม, ลูกศร = เลื่อน<br>1–9 เลือกเครื่องมือ, Esc ยกเลิก, Space หยุด',
+  trackpad: 'ลากสองนิ้ว = เลื่อนแผนที่<br>หนีบนิ้ว (pinch) = ซูม<br>Alt/Option + ลากสองนิ้ว = หมุน<br>คลิก/ลากนิ้วเดียว = สร้าง<br>1–9 เลือกเครื่องมือ, 0 ฟาร์ม, B รื้อ, R หมุนอาคาร, Esc ยกเลิก, Space หยุด',
+  mouse: 'ซ้าย (ลาก) = สร้าง<br>ขวา (ลาก) = หมุนกล้อง<br>ล้อเมาส์ = ซูม, ลูกศร = เลื่อน<br>1–9 เลือกเครื่องมือ, 0 ฟาร์ม, B รื้อ, R หมุนอาคาร, Esc ยกเลิก, Space หยุด',
 };
 
 function applyControlMode(m) {
@@ -2096,6 +2295,23 @@ function applyControlMode(m) {
   $('helpText').innerHTML = t('help.' + m);
 }
 
+let gtaoPass = null;
+function setRtx(on) {
+  if (on && !gtaoPass && composer) {
+    try {
+      gtaoPass = new GTAOPass(scene, camera, window.innerWidth, window.innerHeight);
+      gtaoPass.output = GTAOPass.OUTPUT.Default;
+      gtaoPass.updateGtaoMaterial({ radius: 0.45, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 16, distanceFallOff: 1, screenSpaceRadius: false });
+      gtaoPass.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, radiusExponent: 1, rings: 2, samples: 16 });
+      gtaoPass.blendIntensity = 1.0;
+      composer.insertPass(gtaoPass, 1);
+    } catch (err) {
+      console.warn('เปิด AO ไม่ได้ ข้ามไป:', err);
+      gtaoPass = null;
+    }
+  }
+  if (gtaoPass) gtaoPass.enabled = on;
+}
 function applyQuality(key) {
   const q = QUALITY[key];
   qualityKey = key;
@@ -2113,6 +2329,7 @@ function applyQuality(key) {
     if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
   }
   useBloom = q.bloom && !!composer;
+  setRtx(!!q.rtx && !!composer);
   forest.setCount(q.forest);
   weather.setRainCap(q.rain);
   lastTargetsAt = 0; // คำนวณจำนวนรถ/คนใหม่ทันที
@@ -2268,7 +2485,7 @@ let audioStatsT = 0, prevFlash = 0;
 const audioStats = { waterNear: 0, pop: 0, hospital: false, school: false };
 function refreshAudioStats() {
   let hospital = false, school = false;
-  for (const tl of state.tiles) if (tl && tl.t === 'service') { if (tl.v === 'hospital') hospital = true; else school = true; }
+  for (const tl of state.tiles) if (tl && tl.t === 'service') { if (tl.v === 'hospital') hospital = true; else if (tl.v === 'school') school = true; }
   const tx = Math.floor(controls.target.x + N / 2), tz = Math.floor(controls.target.z + N / 2);
   let best = 99;
   for (let dz = -12; dz <= 12; dz++) for (let dx = -12; dx <= 12; dx++) if (isWaterTile(tx + dx, tz + dz)) best = Math.min(best, Math.hypot(dx, dz));
@@ -2305,6 +2522,11 @@ function loop(now) {
   lastTargetsAt -= dt;
   if (lastTargetsAt <= 0) { lastTargetsAt = 1; updateAgentTargets(); }
   agents.update(dt, night, speed, { rain: weather.state.rain, dark: lampLevel });
+  for (const ev of agents.takeEvents()) {
+    if (ev === 'crash') { audio.sfx('crash'); toast(t('toast.accident')); }
+    else if (ev === 'ambulance') toast(t('toast.ambulance'));
+    else if (ev === 'cleared') toast(t('toast.cleared'));
+  }
 
   // ลม: ต้นไม้โยก, คลื่นน้ำไหลตามทิศลม
   const W = weather.state;
@@ -2331,7 +2553,7 @@ function loop(now) {
       prox: 1 - THREE.MathUtils.smoothstep(camDist, 9, 52),
       wind: W.wind, rain: W.rain, cars: ac.car, people: ac.person, dogs: ac.dog, cats: ac.cat,
       night: nightLevel, waterNear: audioStats.waterNear, pop: audioStats.pop,
-      hospital: audioStats.hospital, school: audioStats.school, tod, day: state.day, lightning,
+      hospital: audioStats.hospital, school: audioStats.school, tod, day: state.day, lightning, ambulance: agents.emergency(),
     });
   }
   controls.autoRotate = menu.isOpen && !menu.inGame;
@@ -2361,6 +2583,7 @@ function loop(now) {
     $('live').textContent = t('live', c);
     // นาฬิกา สภาพอากาศ อุณหภูมิ ลม
     $('clock').textContent = clockText();
+    $('period').textContent = t('tod.' + periodNow);
     $('wxIcon').innerHTML = ICON[weather.iconKey()];
     $('wxText').textContent = t('wx.' + weather.label());
     $('temp').textContent = Math.round(tempC) + '°C';

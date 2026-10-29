@@ -143,6 +143,28 @@ export function createAudio() {
       o.start(s); o.stop(s + 0.25);
     }
   }
+  // หมาหอนตอนกลางคืน: เสียงยาวไล่ระดับขึ้นแล้วลง มีสั่น แล้วมีหมาตัวอื่นหอนตอบจากไกลๆ
+  function howl(v, far = 1) {
+    const t0 = ctx.currentTime + 0.02;
+    const dur = 1.8 + rnd() * 1.4, base = 280 + rnd() * 120;
+    const o = ctx.createOscillator(), g = ctx.createGain(), f = ctx.createBiquadFilter();
+    const vib = ctx.createOscillator(), vg = ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(base * 0.8, t0);
+    o.frequency.exponentialRampToValueAtTime(base * 1.55, t0 + dur * 0.35);
+    o.frequency.setValueAtTime(base * 1.55, t0 + dur * 0.55);
+    o.frequency.exponentialRampToValueAtTime(base * 1.05, t0 + dur);
+    vib.frequency.value = 5.5; vg.gain.value = 9;
+    vib.connect(vg); vg.connect(o.frequency);
+    f.type = 'bandpass'; f.frequency.value = 650 + 250 * (1 - far); f.Q.value = 2.2;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(v, t0 + 0.35);
+    g.gain.setValueAtTime(v, t0 + dur * 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(f); f.connect(g); pan(g, rnd() * 2 - 1).connect(ambLP);
+    o.start(t0); vib.start(t0); o.stop(t0 + dur + 0.05); vib.stop(t0 + dur + 0.05);
+    return dur;
+  }
   function meow(v) {
     const t = ctx.currentTime;
     const o = ctx.createOscillator(), g = ctx.createGain(), f = ctx.createBiquadFilter();
@@ -251,6 +273,7 @@ export function createAudio() {
       case 'bulldoze': noiseHit(0.35, 1800, 250, 0.35); tone(90, 0.3, 'sawtooth', 0.12, 40); break;
       case 'error': tone(150, 0.2, 'square', 0.1, 110); break;
       case 'money': tone(880, 0.1, 'sine', 0.12); tone(1320, 0.18, 'sine', 0.12, 0, 0.08); break;
+      case 'crash': noiseHit(0.5, 3000, 300, 0.5); tone(70, 0.5, 'sawtooth', 0.3, 30); tone(1800, 0.25, 'square', 0.08, 600, 0.02); tone(1250, 0.4, 'triangle', 0.06, 300, 0.1); break;
       case 'menu': tone(440, 0.09, 'triangle', 0.12); tone(660, 0.12, 'triangle', 0.1, 0, 0.07); break;
     }
   }
@@ -322,6 +345,16 @@ export function createAudio() {
         timers.dog = 7 + rnd() * 16;
         if (env.dogs > 0 && prox > 0.45 && env.rain < 0.6) bark(0.08 + 0.22 * near);
       }
+      // หมาหอน (ดึกๆ ยิ่งช่วงเที่ยงคืนยิ่งบ่อย) ตอบกันเป็นทอดๆ
+      timers.howl = (timers.howl ?? 8) - step;
+      if (timers.howl <= 0) {
+        const mid = Math.exp(-Math.pow(((env.tod + 0.5) % 1 - 0.5) / 0.09, 2)); // 1 = เที่ยงคืนตรง
+        timers.howl = (14 + rnd() * 26) / (0.5 + mid);
+        if (env.dogs > 0 && env.night > 0.75 && prox > 0.3 && env.rain < 0.5) {
+          const d = howl(0.05 + 0.14 * near, 0.5 + 0.5 * prox);
+          if (rnd() < 0.7) setTimeout(() => { if (ctx.state === 'running') howl(0.03 + 0.07 * near, 0.2); }, (d * 0.6 + 0.5) * 1000);
+        }
+      }
       timers.cat -= step;
       if (timers.cat <= 0) {
         timers.cat = 12 + rnd() * 25;
@@ -333,6 +366,9 @@ export function createAudio() {
         timers.horn = 6 + rnd() * 14;
         if (env.cars > 6 && prox > 0.4) horn(0.03 + 0.1 * near);
       }
+      // รถพยาบาลที่กำลังไปช่วยอุบัติเหตุ ไซเรนดังต่อเนื่อง
+      timers.amb = (timers.amb ?? 0) - step;
+      if (env.ambulance && timers.amb <= 0 && prox > 0.2) { timers.amb = 5.4; siren(0.05 + 0.2 * near); }
       // ไซเรนรถพยาบาล
       timers.siren -= step;
       if (timers.siren <= 0) {

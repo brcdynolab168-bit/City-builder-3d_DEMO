@@ -113,7 +113,7 @@ export function createMenu(h) {
         ${slider('master', t('set.master'))}${slider('sfx', t('set.sfx'))}${slider('music', t('set.music'))}
         <label class="mchk"><input type="checkbox" data-chk="mute" ${S.mute ? 'checked' : ''}> ${t('set.mute')}</label>
       </div>
-      <div class="msec"><h4>${t('set.graphics')}</h4>${seg('quality', [['low', t('q.low')], ['med', t('q.med')], ['high', t('q.high')]], S.quality)}
+      <div class="msec"><h4>${t('set.graphics')}</h4>${seg('quality', [['low', t('q.low')], ['med', t('q.med')], ['high', t('q.high')], ['rtx', 'RTX']], S.quality)}
         <div class="mdesc">${t('q.' + S.quality + '.desc')}</div></div>
       <div class="msec"><h4>${t('side.control')}</h4>${seg('mode', [['trackpad', t('m.trackpad')], ['mouse', t('m.mouse')]], S.mode)}</div>
       <div class="mrow">${btn('back', t('menu.back'))}</div>`;
