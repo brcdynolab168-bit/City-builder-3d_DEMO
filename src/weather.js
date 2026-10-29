@@ -18,11 +18,20 @@ const KINDS = {
   rain:   { cloud: 0.92, rain: 0.6, storm: 0, wind: 0.5 },
   storm:  { cloud: 1,    rain: 1,   storm: 1, wind: 0.9 },
 };
+// สุ่มสภาพอากาศถัดไปแบบถ่วงน้ำหนัก: ส่วนใหญ่ฟ้าใส/มีเมฆ ฝนตกไม่บ่อย (~10% ของเวลา)
 const NEXT = {
-  clear: ['clear', 'cloudy', 'cloudy', 'rain'],
-  cloudy: ['clear', 'rain', 'cloudy', 'rain'],
-  rain: ['cloudy', 'rain', 'storm', 'clear'],
-  storm: ['rain', 'cloudy'],
+  clear:  { clear: 55, cloudy: 40, rain: 5 },
+  cloudy: { clear: 55, cloudy: 25, rain: 20 },
+  rain:   { cloudy: 60, clear: 20, rain: 10, storm: 10 },
+  storm:  { rain: 60, cloudy: 40 },
+};
+// อยู่นานเท่าไรก่อนสุ่มใหม่ (วินาทีจริง): ฟ้าใสนาน ฝน/พายุสั้น
+const DUR = { clear: [240, 480], cloudy: [150, 300], rain: [90, 180], storm: [60, 120] };
+const pickNext = kind => {
+  const w = NEXT[kind];
+  let r = Math.random() * Object.values(w).reduce((a, b) => a + b, 0);
+  for (const k in w) { r -= w[k]; if (r < 0) return k; }
+  return 'clear';
 };
 
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -44,7 +53,7 @@ export function createWeather({ scene, getFocus, getCameraPos = () => ({ x: 0, y
     wet: 0,            // ความเปียกของพื้น 0..1
   };
   const goal = { ...KINDS.clear };
-  let timer = 50;
+  let timer = 120;
   let flashTimer = 6;
   let clock = 0;
 
@@ -125,10 +134,9 @@ export function createWeather({ scene, getFocus, getCameraPos = () => ({ x: 0, y
     if (state.mode === 'auto') {
       timer -= dt;
       if (timer <= 0) {
-        const opts = NEXT[state.kind];
-        state.kind = opts[Math.floor(Math.random() * opts.length)];
+        state.kind = pickNext(state.kind);
         applyGoal(state.kind);
-        timer = rnd(60, 160);
+        timer = rnd(...DUR[state.kind]);
       }
     }
 

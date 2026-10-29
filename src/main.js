@@ -2770,6 +2770,7 @@ function computeStats() {
   const pol2 = state.policy;
   const roof = Math.round(s.pop * 0.03 * (pol2.greenCut || 0));
   s.powerCap += roof; s.greenCap += roof; s.roofSolar = roof;
+  s.powerCap = Math.round(s.powerCap); s.greenCap = Math.round(s.greenCap);
   s.green = s.powerCap ? s.greenCap / s.powerCap : 0;
   // รถยนต์ไฟฟ้า: มีสถานีชาร์จมากและลดภาษีรถ EV คนก็ซื้อมากขึ้น รถ EV ชาร์จไฟจากระบบของเมือง
   s.evShare = Math.min(0.6, (0.02 + 0.05 * Math.min(ccache.ev, 8)) * (1 + 0.35 * (pol2.evCut || 0)));
@@ -4114,6 +4115,7 @@ function rotatePlacement() {
 function selectTool(k) {
   placeRot = null;
   currentTool = k;
+  controls.touches.ONE = k === 'select' ? THREE.TOUCH.ROTATE : null;   // มือถือ: โหมดดูเมือง ลากนิ้วเดียวหมุนกล้อง (โหมดอื่นนิ้วเดียว = สร้าง)
   for (const key in toolBtns) toolBtns[key].classList.toggle('active', key === k);
   hoverMesh.visible = k !== 'select' && hoverTile !== null;
   hoverFront.visible = false;
@@ -4259,8 +4261,24 @@ el.addEventListener('contextmenu', e => e.preventDefault());
 // หน้าจอสัมผัส: แตะนิ้วเดียว = สร้าง, สองนิ้ว = เลื่อน/ซูม (ไม่สร้าง)
 let touchTap = null;
 const touchIds = new Set();
+// บิดสองนิ้ว = หมุนกล้องรอบจุดที่มอง (หนีบ = ซูม และลากสองนิ้ว = เลื่อน ยังทำงานตามเดิม)
+const touchPts = new Map();
+let twistAng = null;
+const twoFingerAngle = () => { const [a, b] = [...touchPts.values()]; return Math.atan2(b.y - a.y, b.x - a.x); };
+function twist(e) {
+  touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touchPts.size !== 2) { twistAng = null; return; }
+  const ang = twoFingerAngle();
+  if (twistAng !== null) {
+    let d = ang - twistAng;
+    d = Math.atan2(Math.sin(d), Math.cos(d));   // ห่อมุมให้อยู่ใน ±π
+    if (Math.abs(d) < 0.5) orbitBy(d * 1.1);     // ข้ามการกระโดดผิดปกติ (นิ้วยกแล้ววางใหม่)
+  }
+  twistAng = ang;
+}
 el.addEventListener('pointerdown', e => {
   if (e.pointerType === 'touch') {
+    twist(e);
     touchIds.add(e.pointerId);
     if (touchIds.size === 1) touchTap = { x: e.clientX, y: e.clientY, t: performance.now(), ok: true };
     else if (touchTap) touchTap.ok = false;
@@ -4275,6 +4293,7 @@ el.addEventListener('pointerdown', e => {
 });
 el.addEventListener('pointermove', e => {
   if (e.pointerType === 'touch') {
+    if (touchPts.has(e.pointerId)) twist(e);
     if (touchTap && Math.hypot(e.clientX - touchTap.x, e.clientY - touchTap.y) > 10) touchTap.ok = false;
     return;
   }
@@ -4283,6 +4302,7 @@ el.addEventListener('pointermove', e => {
 });
 const endPointer = e => {
   if (e.pointerType === 'touch') {
+    touchPts.delete(e.pointerId); twistAng = null;
     touchIds.delete(e.pointerId);
     if (touchTap && touchTap.ok && e.type === 'pointerup' && touchIds.size === 0 && performance.now() - touchTap.t < 500) {
       const tile = pickTile(e);
