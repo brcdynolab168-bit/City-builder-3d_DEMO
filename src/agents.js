@@ -625,8 +625,67 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   }
 
   function removeAgent(a) {
+    if (a.visit && a.visit.phase === 1) a.visit.v.inside = Math.max(0, a.visit.v.inside - 1);   // คนที่อยู่ในร้านถูกลบ
+    a.visit = null;
     root.remove(a.obj);
     a.dead = true;
+  }
+
+  // ---------- คนเดินเข้า-ออกสถานที่ (ร้าน วัด โรงพยาบาล ฯลฯ) ----------
+  // venue = { x, z, fw, fd, w (น้ำหนักความนิยมตามเวลา), inside, visits } — ผู้เรียกเป็นเจ้าของอ็อบเจกต์ แล้วอ่านค่าสถิติไปแสดงผล
+  let venueProvider = null, venuesDirty = true;
+  let entr = new Map();   // key ช่องถนน -> [{ v, dx, dz }] (dx,dz = ทิศจากถนนเข้าหาอาคาร)
+  function syncVenues() {
+    venuesDirty = false;
+    entr = new Map();
+    if (!venueProvider) return;
+    for (const v of venueProvider()) {
+      const fw = v.fw || 1, fd = v.fd || 1;
+      for (let dz = -1; dz <= fd; dz++) for (let dx = -1; dx <= fw; dx++) {
+        const inX = dx >= 0 && dx < fw, inZ = dz >= 0 && dz < fd;
+        if (inX === inZ) continue;
+        const rx = v.x + dx, rz = v.z + dz;
+        if (!walkable('car', rx, rz)) continue;
+        const k = rx * 4096 + rz;
+        let l = entr.get(k); if (!l) entr.set(k, l = []);
+        l.push({ v, dx: inX ? 0 : dx < 0 ? 1 : -1, dz: inZ ? 0 : dz < 0 ? 1 : -1, rx, rz });
+      }
+    }
+  }
+  const VISIT_T = 2.6;
+  function maybeVisit(a, sdt) {
+    if (a.cool > 0) a.cool -= sdt;
+    if (a.visit || a.s < 0.5 || !entr.size) return;
+    const k = a.x * 4096 + a.z;
+    if (a.lastEnt === k) return;
+    a.lastEnt = k;
+    const l = entr.get(k);
+    if (!l || a.cool > 0) return;
+    const e = l[(Math.random() * l.length) | 0];
+    if (Math.random() >= 0.5 * e.v.w) return;
+    const p = a.obj.position;
+    a.visit = { v: e.v, dx: e.dx, dz: e.dz, t: 0, phase: 0, from: [p.x, p.y, p.z], to: [e.rx - N / 2 + 0.5 + e.dx * 0.86, p.y, e.rz - N / 2 + 0.5 + e.dz * 0.86], dwell: 8 + Math.random() * 24 };
+  }
+  // คืน true เมื่อควบคุมตำแหน่งตัวละครอยู่ (ข้ามการเดินปกติ)
+  function updateVisit(a, sdt, env) {
+    const V = a.visit, o = a.obj;
+    V.t += sdt;
+    if (V.phase === 1) {
+      if (V.t >= V.dwell) { V.phase = 2; V.t = 0; o.visible = true; V.v.inside = Math.max(0, V.v.inside - 1); }
+      return true;
+    }
+    const u = Math.min(1, V.t / VISIT_T), inn = V.phase === 0;
+    const k = inn ? u : 1 - u;
+    o.position.set(V.from[0] + (V.to[0] - V.from[0]) * k, V.from[1], V.from[2] + (V.to[2] - V.from[2]) * k);
+    o.rotation.y = Math.atan2(inn ? V.dx : -V.dx, inn ? V.dz : -V.dz);
+    o.scale.setScalar(k > 0.7 ? Math.max(0.001, 1 - (k - 0.7) / 0.3) : 1);
+    a.speedNow = a.speed; a.phase += sdt * 7;
+    if (inView(a, env.frustum)) animate(a);
+    if (u >= 1) {
+      if (inn) { V.phase = 1; V.t = 0; o.visible = false; V.v.inside++; V.v.visits++; }
+      else { a.visit = null; a.cool = 25 + Math.random() * 40; o.scale.setScalar(1); o.visible = true; }
+    }
+    return true;
   }
 
   let adjustTimer = 0;
@@ -1282,6 +1341,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     if (adjustTimer > 0.4) { adjustTimer = 0; adjustCounts(); }
 
     const sdt = dt * gameSpeed;
+    if (venuesDirty) syncVenues();
     const wetSlow = 1 - 0.22 * rain; // ถนนลื่น รถช้าลงตอนฝนตก
 
     // เหตุการณ์อุบัติเหตุ: ฝนตกเกิดบ่อยขึ้น
@@ -1318,10 +1378,12 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       const arr = agents[type];
       let removed = false;
       for (const a of arr) {
+        if (a.visit) { updateVisit(a, sdt, env); continue; }
         if (a.racer && !a.crash) { a.ttl -= dt; if (a.ttl <= 0) { removeAgent(a); removed = true; continue; } }
         if (a.kind !== 'car') a.speedNow = a.speed * signalFactor(a);
         if (!a.crash && sdt > 0 && !advance(a, sdt)) { removeAgent(a); removed = true; continue; }
         place(a);
+        if (type === 'person' && sdt > 0) maybeVisit(a, sdt);
         if (a.role === 'rbike' && a.rig) stuntUpdate(a, dt, sdt);
         if (a.full && cam) {
           // ระยะจากกล้อง: ไกลมาก = ซ่อน, ไกล = โมเดลรวมชิ้นเดียว ไม่แกว่งแขนขา, ใกล้ = เคลื่อนไหวเต็ม
@@ -1351,7 +1413,8 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     counts() {
       return { car: agents.car.length, bike: agents.car.filter(a => a.isBike).length, bus: agents.car.filter(a => a.role === 'bus').length, taxi: agents.car.filter(a => a.role === 'taxi').length, grab: agents.car.filter(a => a.role === 'grab').length, person: agents.person.length, dog: agents.dog.length, cat: agents.cat.length };
     },
-    invalidate() { dirty = true; },
+    invalidate() { dirty = true; venuesDirty = true; },
+    setVenueProvider(fn) { venueProvider = fn; venuesDirty = true; },
     startRacePack,
     startCheckpoint, endCheckpoint, checkpointActive: () => !!checkpoint, checkpointAge: () => (checkpoint ? checkpoint.t : 0),
     racers() { let n = 0, b = 0; for (const a of agents.car) if (a.racer && !a.crash) { n++; if (a.isBike) b++; } return { n, bike: b }; },

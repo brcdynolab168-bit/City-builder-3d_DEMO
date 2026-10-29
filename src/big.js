@@ -12,6 +12,7 @@ export const FOOT = {
   'com:pub': [2, 1], 'com:tuner': [2, 1], 'service:drag': [3, 7],
   'service:temple': [3, 3], 'service:church': [2, 3], 'service:mosque': [3, 3],
   'com:mall': [3, 2], 'com:market': [2, 2], 'com:dealer': [2, 1], 'com:fishing': [1, 1],
+  'ind:honda': [3, 3], 'ind:toyota': [4, 3], 'ind:bmw': [3, 3], 'ind:shindengen': [2, 2], 'ind:keihin': [2, 2], 'ind:denso': [3, 2],
   'farm:rice': [3, 2], 'farm:crop': [2, 2], 'farm:barn': [3, 2], 'farm:orchard': [2, 2],
   'park:plaza': [2, 2], 'park:play': [1, 1], 'park:sports': [2, 2], 'park:garden': [3, 3],
   'park:fountain': [1, 1], 'park:flowers': [1, 1], 'park:pond': [1, 1], 'park:pavilion': [1, 1], 'park:picnic': [1, 1],
@@ -1053,7 +1054,52 @@ export function createBig(c) {
 
   const top0 = v => y0 + v;
 
+  // =============================================================
+  // โรงงานระดับสูง (ต้องใช้แรงงานมีความรู้): ค่ายรถยนต์ + ซัพพลายเออร์ชิ้นส่วน
+  // =============================================================
+  function factory(bg, o) {
+    const { W, D } = o, hh = o.h ?? 0.3, hd = o.hd ?? D * 0.42, hw = W - 0.3, hz = -D / 2 + hd / 2 + 0.12;
+    ground(bg, W, D, M.asphalt);
+    put(bg, boxGeo, band(o.wall), 0, y0 + hh / 2, hz, hw, hh, hd);                                   // โถงประกอบ
+    put(bg, boxGeo, band(o.trim), 0, y0 + hh * 0.38, hz + hd / 2 + 0.004, hw + 0.02, 0.05, 0.012);   // แถบสีประจำแบรนด์
+    put(bg, boxGeo, MT.glass, 0, y0 + hh * 0.72, hz + hd / 2 + 0.006, hw * 0.9, 0.06, 0.008);        // หน้าต่างแนวยาว
+    if (o.saw) {                                                                                      // หลังคาฟันเลื่อย
+      const n = Math.max(3, Math.round(hw / 0.32)), sw = hw / n;
+      for (let k = 0; k < n; k++) put(bg, boxGeo, band(0x8d99a6), -hw / 2 + sw * (k + 0.5), y0 + hh + 0.03, hz, sw * 0.98, 0.03, hd * 0.98).rotation.z = 0.42;
+    } else put(bg, boxGeo, band(0x8d99a6), 0, y0 + hh + 0.012, hz, hw + 0.04, 0.024, hd + 0.04);
+    // ป้ายชื่อบนหลังคา
+    put(bg, boxGeo, band(o.sBg), 0, y0 + hh + 0.14, hz + hd / 2 - 0.05, Math.min(hw * 0.7, 1.6), 0.15, 0.03);
+    signAt(bg, o.name, o.sBg, o.sFg, 0, y0 + hh + 0.14, hz + hd / 2 - 0.033, Math.min(hw * 0.7, 1.6) * 0.96, 0.14, o.fs || 44);
+    for (const sx of [-1, 1]) put(bg, cylGeo, M.pole, sx * Math.min(hw * 0.3, 0.7), y0 + hh + 0.06, hz + hd / 2 - 0.05, 0.02, 0.12, 0.02);
+    // อาคารสำนักงาน (กระจก)
+    const ox = W / 2 - 0.62, oz = D / 2 - 0.5;
+    put(bg, boxGeo, band(0xe9edf1), ox, y0 + 0.2, oz, 0.8, 0.4, 0.5);
+    put(bg, boxGeo, MT.glass, ox, y0 + 0.2, oz + 0.252, 0.7, 0.3, 0.008);
+    put(bg, boxGeo, band(o.trim), ox, y0 + 0.41, oz, 0.84, 0.03, 0.54);
+    // ลานจอดรถที่ผลิตเสร็จ
+    for (let k = 0; k < (o.cars ?? 8); k++) miniCar(bg, -W / 2 + 0.3 + (k % 8) * 0.19, D / 2 - 0.16 - Math.floor(k / 8) * 0.17, 0, M.carCols[(k + (o.seed || 0)) % M.carCols.length]);
+    // ถังเก็บ/ท่อ
+    if (o.tanks) for (let k = 0; k < o.tanks; k++) put(bg, cylGeo, band(0xcfd6dc), W / 2 - 0.25 - k * 0.3, y0 + 0.15, -D / 2 + 0.2, 0.22, 0.3, 0.22);
+    if (o.extra) o.extra(bg, { W, D, hz, hd, hw, hh });
+    for (const [sx, sz] of [[-1, 1], [1, 1]]) tree(bg, sx * (W / 2 - 0.1), -D / 2 + 0.12 + (sz > 0 ? 0 : 0), 0.7, sx + 2);
+  }
+  const honda = bg => factory(bg, { W: 3, D: 3, wall: 0xeceae4, trim: 0xd3202b, name: 'HONDA', sBg: '#d3202b', sFg: '#ffffff', saw: true, cars: 12, tanks: 2, seed: 1 });
+  const toyota = bg => factory(bg, { W: 4, D: 3, wall: 0xf1f1ee, trim: 0xc8102e, name: 'TOYOTA', sBg: '#c8102e', sFg: '#ffffff', saw: true, h: 0.34, cars: 16, tanks: 2, seed: 2,
+    extra: (g, c) => { for (let k = 0; k < 3; k++) put(g, boxGeo, band(0x9aa5ae), -c.W / 2 + 0.5 + k * 0.7, y0 + 0.38, c.hz - c.hd / 2 - 0.12, 0.5, 0.02, 0.2); } });
+  const bmw = bg => factory(bg, { W: 3, D: 3, wall: 0xf4f6f8, trim: 0x1c69d4, name: 'BMW', sBg: '#1c69d4', sFg: '#ffffff', h: 0.26, hd: 1.0, cars: 10, seed: 4,
+    extra: (g, c) => {   // หอคอยทรงกระบอกสำนักงานใหญ่
+      put(g, cylGeo, band(0xe6ebf0), -c.W / 2 + 0.55, y0 + 0.42, c.hz - 0.1, 0.5, 0.84, 0.5);
+      for (let k = 0; k < 6; k++) put(g, cylGeo, MT.glass, -c.W / 2 + 0.55, y0 + 0.1 + k * 0.13, c.hz - 0.1, 0.52, 0.05, 0.52);
+      put(g, cylGeo, band(0x1c69d4), -c.W / 2 + 0.55, y0 + 0.86, c.hz - 0.1, 0.54, 0.03, 0.54);
+    } });
+  const shindengen = bg => factory(bg, { W: 2, D: 2, wall: 0xdde6ee, trim: 0x1565c0, name: 'Shindengen', sBg: '#1565c0', sFg: '#ffffff', fs: 34, h: 0.3, cars: 0, tanks: 1,
+    extra: (g, c) => { for (let k = 0; k < 3; k++) put(g, boxGeo, band(0xb0bec5), -0.4 + k * 0.4, y0 + c.hh + 0.07, c.hz, 0.22, 0.1, 0.22); } });
+  const keihin = bg => factory(bg, { W: 2, D: 2, wall: 0xe9efe6, trim: 0x2e7d32, name: 'KEIHIN', sBg: '#2e7d32', sFg: '#ffffff', fs: 40, h: 0.3, cars: 0, tanks: 1, saw: true });
+  const denso = bg => factory(bg, { W: 3, D: 2, wall: 0xf3f0ec, trim: 0xd32f2f, name: 'DENSO', sBg: '#c62828', sFg: '#ffffff', h: 0.32, cars: 0, tanks: 2,
+    extra: (g, c) => { put(g, boxGeo, band(0xcfd8dc), c.W / 2 - 0.55, y0 + 0.5, c.hz - 0.1, 0.3, 0.8, 0.3); for (let k = 0; k < 5; k++) put(g, boxGeo, MT.glass, c.W / 2 - 0.55, y0 + 0.14 + k * 0.14, c.hz - 0.1 + 0.152, 0.22, 0.05, 0.008); } });
+
   const MAP = {
+    'ind:honda': honda, 'ind:toyota': toyota, 'ind:bmw': bmw, 'ind:shindengen': shindengen, 'ind:keihin': keihin, 'ind:denso': denso,
     'service:hospital_p': bg => hospital(bg, true), 'service:school_p': bg => school(bg, true), 'com:bank': bank,
     'service:bus': busDepot, 'service:taxi': taxiDepot, 'service:grab': grabDepot,
     'com:pub': pub, 'com:tuner': tuner, 'service:drag': drag,

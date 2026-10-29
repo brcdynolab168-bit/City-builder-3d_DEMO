@@ -106,6 +106,15 @@ const VARIANTS = {
     { k: 'sports', label: 'สนามกีฬา',          cost: 650,  upkeep: 9, jobs: 4 },
     { k: 'garden', label: 'สวนพฤกษศาสตร์',     cost: 1300, upkeep: 16, jobs: 8 },
   ],
+  ind: [
+    { k: 'zone',  label: 'โซนอุตสาหกรรม (โตเอง)', cost: 30, note: 'โรงงานทั่วไป โตเองตามความต้องการ' },
+    { k: 'shindengen', label: 'Shindengen', cost: 1800, jobs: 80,  skill: 40,  power: 22, water: 10, upkeep: 24, tax: 45,  req: { pop: 500, edu: 1, maker: 'any' },    note: 'ชิ้นส่วนอิเล็กทรอนิกส์ 2×2 ช่อง' },
+    { k: 'keihin',     label: 'Keihin',     cost: 1900, jobs: 90,  skill: 45,  power: 24, water: 12, upkeep: 26, tax: 50,  req: { pop: 500, edu: 1, maker: 'honda' },  note: 'ชิ้นส่วนเครื่องยนต์ (ซัพพลายเออร์ Honda) 2×2 ช่อง' },
+    { k: 'denso',      label: 'Denso',      cost: 2400, jobs: 110, skill: 55,  power: 28, water: 14, upkeep: 30, tax: 62,  req: { pop: 800, bu: 1, maker: 'toyota' },  note: 'ชิ้นส่วนรถยนต์ (ซัพพลายเออร์ Toyota/BMW) 3×2 ช่อง' },
+    { k: 'honda',      label: 'Honda',      cost: 2600, jobs: 120, skill: 40,  power: 40, water: 20, upkeep: 40, tax: 60,  req: { pop: 600, edu: 1 },               note: 'โรงงานประกอบรถยนต์/มอเตอร์ไซค์ 3×3 ช่อง' },
+    { k: 'toyota',     label: 'Toyota',     cost: 3600, jobs: 180, skill: 70,  power: 60, water: 30, upkeep: 55, tax: 90,  req: { pop: 1000, bu: 1 },               note: 'โรงงานประกอบรถยนต์ 4×3 ช่อง' },
+    { k: 'bmw',        label: 'BMW',        cost: 5200, jobs: 150, skill: 110, power: 55, water: 24, upkeep: 70, tax: 150, req: { pop: 2000, bu: 1, bank: 1 },      note: 'โรงงานรถยนต์พรีเมียม 3×3 ช่อง' },
+  ],
   farm: [
     { k: 'rice',    label: 'นาข้าว',           cost: 300, jobs: 8,  power: 1, water: 6, upkeep: 2 },
     { k: 'crop',    label: 'ไร่ผักและโรงเรือน', cost: 380, jobs: 10, power: 2, water: 7, upkeep: 3 },
@@ -146,18 +155,46 @@ const DEFAULT_V = { res: 'zone', com: 'zone', ind: 'zone', power: 'gas', water: 
 const currentVar = { ...DEFAULT_V };
 const variantOf = t => VARIANTS[t.t]?.find(v => v.k === (t.v || DEFAULT_V[t.t]));
 const fixedVariant = t => { const v = variantOf(t); return v && v.k !== 'zone' ? v : null; };
+// ---------- โรงงานระดับสูง: เงื่อนไขปลดล็อก + แรงงานมีความรู้ ----------
+const OEMS = ['honda', 'toyota', 'bmw'];
+const SUPPLIERS = { honda: ['keihin', 'shindengen'], toyota: ['denso', 'shindengen'], bmw: ['denso', 'shindengen'] };   // ซัพพลายเออร์ที่ช่วยให้ค่ายรถได้ผลผลิตเพิ่ม
+const MAKER_OF = { shindengen: OEMS, keihin: ['honda'], denso: ['toyota', 'bmw'] };                                     // ซัพพลายเออร์ต้องมีค่ายรถคู่ค้า
+const EDU_SKILL = { school: 120, school_p: 180, bu: 700 };                                                               // แรงงานมีความรู้ที่โรงเรียน/มหาวิทยาลัยผลิตได้
+function indReqFail(k) {   // คืน [คีย์ข้อความ, พารามิเตอร์] ถ้ายังไม่ผ่านเงื่อนไข
+  const V = VARIANTS.ind.find(v => v.k === k);
+  if (!V || !V.req) return null;
+  const R = V.req, c = ccache, pop = audioStats.pop;
+  if (R.pop && pop < R.pop) return ['toast.ind.pop', { n: R.pop }];
+  if (R.edu && c.school + c.school_p + c.bu < R.edu) return ['toast.ind.edu', {}];
+  if (R.bu && c.bu < R.bu) return ['toast.ind.bu', {}];
+  if (R.bank && c.bank < R.bank) return ['toast.ind.bank', {}];
+  if (R.maker) {
+    const ok = R.maker === 'any' ? OEMS.some(m => c[m] > 0) : c[R.maker] > 0;
+    if (!ok) return ['toast.ind.maker', { name: R.maker === 'any' ? t('ind.anyoem') : t('v.ind.' + R.maker) }];
+  }
+  return null;
+}
+function indReqText(V) {
+  const R = V.req || {}, a = [];
+  if (R.pop) a.push(t('req.pop', { n: R.pop }));
+  if (R.edu) a.push(t('req.edu'));
+  if (R.bu) a.push(t('req.bu'));
+  if (R.bank) a.push(t('req.bank'));
+  if (R.maker) a.push(t('req.maker', { name: R.maker === 'any' ? t('ind.anyoem') : t('v.ind.' + R.maker) }));
+  return a.length ? t('req.need', { list: a.join(' · ') }) : '';
+}
 const toolCost = tool => VARIANTS[tool]?.find(v => v.k === currentVar[tool])?.cost ?? TOOLS[tool].cost;
 const ZONES = ['res', 'com', 'ind'];
 const toolLabel = k => t('tool.' + k);
 const toolTip = k => (hasKey('tip.' + k) ? t('tip.' + k) : '');
 const vLabel = (tool, v) => t(`v.${tool}.${v.k}`);
-const vNote = (tool, v) => (hasKey(`v.${tool}.${v.k}.note`) ? t(`v.${tool}.${v.k}.note`) : '');
+const vNote = (tool, v) => (hasKey(`v.${tool}.${v.k}.note`) ? t(`v.${tool}.${v.k}.note`) : '') + (tool === 'ind' && v.req ? ' ' + indReqText(v) : '');
 
 // ตารางตามระดับตึก (ดัชนี = เลเวล 0..3): คน / งาน / ไฟ / น้ำ ต่อช่อง
 const POP_PER  = [0, 5, 28, 80];   // บ้านเดี่ยว → อพาร์ตเมนต์ → คอนโดสูง
 const JOBS_COM = [0, 6, 20, 60];
 const JOBS_IND = [0, 10, 28, 70];
-const TAX_GROUP = { pub: 'leisure', tuner: 'leisure', drag: 'leisure', bank: 'finance', gold: 'finance', hospital_p: 'health', school_p: 'edu', bus: 'transit', taxi: 'transit', grab: 'transit' };
+const TAX_GROUP = { honda: 'industry', toyota: 'industry', bmw: 'industry', shindengen: 'industry', keihin: 'industry', denso: 'industry', pub: 'leisure', tuner: 'leisure', drag: 'leisure', bank: 'finance', gold: 'finance', hospital_p: 'health', school_p: 'edu', bus: 'transit', taxi: 'transit', grab: 'transit' };
 const POWER_USE = { res: [0, 2, 6, 14], com: [0, 3, 8, 20], ind: [0, 4, 12, 30] };
 const WATER_USE = { res: [0, 3, 9, 22], com: [0, 2, 6, 15], ind: [0, 4, 12, 28] };
 const POWER_CAP = 200;
@@ -2284,9 +2321,11 @@ function evalBig(tool, x, z) {
     lo = Math.min(lo, tileMinH[idx(px, pz)]); hi = Math.max(hi, tileMaxH[idx(px, pz)]);
   }
   if (!reason && hi - lo > 1.3) reason = 'toast.slope';
-  if (!reason && ['com', 'service'].includes(tool) && !perimRoads(R)) reason = 'toast.road';
+  if (!reason && ['com', 'service', 'ind'].includes(tool) && !perimRoads(R)) reason = 'toast.road';
+  let params;
+  if (!reason && tool === 'ind') { const rq = indReqFail(currentVar.ind); if (rq) { reason = rq[0]; params = rq[1]; } }
   if (!reason && state.money < toolCost(tool)) reason = 'toast.nomoney';
-  return { R, ok: !reason, reason };
+  return { R, ok: !reason, reason, params };
 }
 function placeBig(tool) {
   /* ใช้ใน applyTool */
@@ -2366,7 +2405,7 @@ function applyTool(x, z) {
   if (footFor(currentTool)) {
     if (cur) return;
     const e = evalBig(currentTool, x, z);
-    if (!e.ok) { audio.sfx('error'); return toast(t(e.reason)); }
+    if (!e.ok) { audio.sfx('error'); return toast(t(e.reason, e.params)); }
     state.money -= toolCost(currentTool);
     const { R } = e, mi = idx(R.x0, R.z0);
     for (let dz = 0; dz < R.fd; dz++) for (let dx = 0; dx < R.fw; dx++) state.tiles[idx(R.x0 + dx, R.z0 + dz)] = { t: 'part', m: mi };
@@ -2401,17 +2440,19 @@ function computeStats() {
   const s = {
     pop: 0, jobsCom: 0, jobsInd: 0, powerCap: 0, powerUse: 0, waterCap: 0, waterUse: 0,
     roads: 0, bridges: 0, parks: 0, plants: 0, wplants: 0, comLv: 0, indLv: 0, junctions: 0, upkeep: 0,
-    extraTax: { finance: 0, health: 0, edu: 0, transit: 0, leisure: 0 },
+    extraTax: { finance: 0, health: 0, edu: 0, transit: 0, leisure: 0, industry: 0 }, skillSupply: 0, skillNeed: 0, skillFill: 1,
   };
+  const brands = [];
   state.tiles.forEach((t, i) => {
     if (!t) return;
     const lv = t.lv || 0;
     if (t.cs && !t.cs.to) { if (t.t === 'power' || t.t === 'water') return; if (t.t !== 'part') return; }
-    const FV = (t.t === 'res' || t.t === 'com' || t.t === 'service' || t.t === 'farm') ? fixedVariant(t) : null;
+    const FV = (t.t === 'res' || t.t === 'com' || t.t === 'service' || t.t === 'farm' || t.t === 'ind') ? fixedVariant(t) : null;
     if (FV) {
-      if (t.t === 'res') s.pop += FV.pop; else if (t.t === 'farm') s.jobsInd += FV.jobs; else s.jobsCom += FV.jobs;
+      if (t.t === 'res') s.pop += FV.pop; else if (t.t === 'farm') s.jobsInd += FV.jobs; else if (t.t === 'ind') brands.push(FV.k); else s.jobsCom += FV.jobs;
+      if (t.t === 'service') s.skillSupply += EDU_SKILL[t.v] || 0;
       s.powerUse += FV.power; s.waterUse += FV.water; s.upkeep += FV.upkeep || 0;
-      if (FV.tax) s.extraTax[TAX_GROUP[t.v] || 'finance'] += FV.tax;
+      if (FV.tax && t.t !== 'ind') s.extraTax[TAX_GROUP[t.v] || 'finance'] += FV.tax;
       return;
     }
     if (t.t === 'res') { s.pop += POP_PER[lv]; s.powerUse += POWER_USE.res[lv]; s.waterUse += WATER_USE.res[lv]; }
@@ -2432,11 +2473,25 @@ function computeStats() {
     s.waterCap = Math.round(s.waterCap * (1 - Math.min(0.5, wl)));
     s.incidentCost = incidents.length * 3;
   }
+  // โรงงานระดับสูง: ต้องใช้แรงงานมีความรู้ ถ้าขาดจะจ้างงานและเก็บภาษีได้น้อยลง; มีซัพพลายเออร์ครบจะได้เพิ่ม; ซัพพลายเออร์ไม่มีค่ายรถคู่ค้าจะเหลือครึ่งเดียว
+  if (brands.length) {
+    s.skillSupply += Math.round(s.pop * 0.03);
+    for (const k of brands) s.skillNeed += VARIANTS.ind.find(v => v.k === k).skill;
+    s.skillFill = s.skillNeed ? clamp(s.skillSupply / s.skillNeed, 0.2, 1) : 1;
+    for (const k of brands) {
+      const V = VARIANTS.ind.find(v => v.k === k);
+      s.jobsInd += Math.round(V.jobs - V.skill * (1 - s.skillFill));
+      let mul = s.skillFill;
+      if (SUPPLIERS[k]) mul *= 1 + 0.12 * SUPPLIERS[k].filter(x => brands.includes(x)).length;
+      if (MAKER_OF[k] && !MAKER_OF[k].some(m => brands.includes(m))) mul *= 0.5;
+      s.extraTax.industry += V.tax * mul;
+    }
+  } else s.skillSupply += Math.round(s.pop * 0.03);
   s.jobs = s.jobsCom + s.jobsInd;
   // ภาษีแยกประเภท (รวมกันเท่ากับสูตรเดิม + ภาษีพิเศษของธุรกิจใหม่)
   s.taxes = {
     land: s.pop * 0.2, pit: s.pop * 0.25, vat: s.jobsCom * 0.5, corp: s.jobsCom * 0.4 + s.jobsInd * 0.5, ind: s.jobsInd * 0.3,
-    vehicle: s.pop * 0.025, finance: s.extraTax.finance, health: s.extraTax.health, edu: s.extraTax.edu, transit: s.extraTax.transit, leisure: s.extraTax.leisure,
+    vehicle: s.pop * 0.025, finance: s.extraTax.finance, health: s.extraTax.health, edu: s.extraTax.edu, transit: s.extraTax.transit, leisure: s.extraTax.leisure, industry: s.extraTax.industry,
   };
   s.income = Object.values(s.taxes).reduce((a, b) => a + b, 0);
   s.expense = s.roads * 0.5 + s.bridges * 1.5 + s.upkeep + s.parks * 2 + s.junctions * 0.5 + (s.incidentCost || 0);
@@ -2537,13 +2592,14 @@ const later = (sec, fn) => { const at = curAt; sched.push({ t: sec, fn: at ? () 
 const roadAt = (x, z) => (Math.random() < 0.5 ? rowName(z) : colName(x));
 
 function civicCounts() {
-  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, pea: 0, pwa: 0, dohw: 0, gold: [], flammable: [], temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0 };
+  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, pea: 0, pwa: 0, dohw: 0, gold: [], flammable: [], honda: 0, toyota: 0, bmw: 0, shindengen: 0, keihin: 0, denso: 0, temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0 };
   state.tiles.forEach((tl, i) => {
     if (!tl || tl.t === 'part' || (tl.cs && !tl.cs.to)) return;
     if (tl.t === 'service') c[tl.v] = (c[tl.v] || 0) + 1;
     else if (tl.t === 'com' && (tl.v === 'gold' || tl.v === 'bank')) c.gold.push(i);
     else if (tl.t === 'com' && c[tl.v] !== undefined) c[tl.v]++;
     else if (tl.t === 'farm') c.farm++;
+    else if (tl.t === 'ind') { if (fixedVariant(tl)) c[tl.v] = (c[tl.v] || 0) + 1; }
     else if (tl.t === 'park') c.parks += (tl.fw || 1) * (tl.fd || 1);
     if (['res', 'com', 'ind', 'farm'].includes(tl.t) && (fixedVariant(tl) || tl.lv > 0)) c.flammable.push(i);
   });
@@ -2571,6 +2627,147 @@ function civicSnapshot() {
     police: cc.police, fire: cc.fire, parks: cc.parks, roads: s.roads, liveCars: ac.car, kids: demo.child + demo.youth,
   });
   return { s, demo, cc, ac, nd };
+}
+
+// ----- ศาสนาของประชากร -----
+// สัดส่วนประมาณการ: พื้นฐานเป็นพุทธเป็นหลัก ศาสนสถานในเมืองดึงผู้นับถือศาสนานั้นเพิ่ม (ไม่ได้เก็บเป็นรายคน คำนวณจากเมืองตอนนี้)
+function religionShares(cc = ccache) {
+  const mus = 0.05 + 0.035 * Math.min(3, cc.mosque), chr = 0.02 + 0.02 * Math.min(3, cc.church), oth = 0.03;
+  const bud = Math.max(0.4, 1 - mus - chr - oth);
+  const sum = bud + mus + chr + oth;
+  return { bud: bud / sum, mus: mus / sum, chr: chr / sum, oth: oth / sum };
+}
+
+// ----- คนเดินเข้า-ออกสถานที่ + รายงานความนิยม -----
+const bump = (h, c, w) => Math.exp(-0.5 * ((((h - c + 36) % 24) - 12) / w) ** 2);
+const VENUE = {   // base = น้ำหนักพื้นฐาน, cat = หมวดสำหรับสรุป, time = รูปแบบช่วงเวลาที่คนไป
+  'com:seven': { base: 1.0, cat: 'shop', time: 'day24' }, 'com:cj': { base: 1.0, cat: 'shop', time: 'day24' },
+  'com:kfc': { base: 1.2, cat: 'food', time: 'meal' }, 'com:shabu': { base: 1.3, cat: 'food', time: 'eve' },
+  'com:mookata': { base: 1.3, cat: 'food', time: 'eve' }, 'com:restaurant': { base: 1.2, cat: 'food', time: 'meal' },
+  'com:lotus': { base: 1.3, cat: 'shop', time: 'day' }, 'com:mall': { base: 1.7, cat: 'shop', time: 'mall' }, 'com:market': { base: 1.4, cat: 'shop', time: 'morning' },
+  'com:bank': { base: 0.8, cat: 'money', time: 'office' }, 'com:gold': { base: 0.6, cat: 'money', time: 'office' },
+  'com:pub': { base: 1.0, cat: 'fun', time: 'night' }, 'com:gas': { base: 0.4, cat: 'other', time: 'day' }, 'com:dealer': { base: 0.5, cat: 'shop', time: 'day' },
+  'com:tuner': { base: 0.4, cat: 'other', time: 'eve' }, 'com:fishing': { base: 0.4, cat: 'shop', time: 'morning' }, 'com:zone': { base: 0.6, cat: 'shop', time: 'day' },
+  'service:temple': { base: 0.9, cat: 'worship', time: 'temple' }, 'service:church': { base: 0.8, cat: 'worship', time: 'church' }, 'service:mosque': { base: 0.8, cat: 'worship', time: 'mosque' },
+  'service:hospital': { base: 0.9, cat: 'health', time: 'office' }, 'service:hospital_p': { base: 0.8, cat: 'health', time: 'office' },
+};
+const CATS = ['food', 'shop', 'worship', 'health', 'fun', 'money', 'other'];
+function venueW(key, hr, rel) {
+  const V = VENUE[key];
+  let m;
+  switch (V.time) {
+    case 'day24': m = 0.45 + 0.55 * bump(hr, 13, 6); break;
+    case 'day': m = hr >= 8 && hr < 21 ? 0.4 + 0.6 * bump(hr, 14, 4) : 0.03; break;
+    case 'mall': m = hr >= 10 && hr < 22 ? 0.4 + 0.6 * bump(hr, 17, 4) : 0; break;
+    case 'morning': m = hr >= 5 && hr < 14 ? 0.3 + 0.7 * bump(hr, 8, 2.2) : 0.04; break;
+    case 'office': m = hr >= 8.5 && hr < 16.5 ? 0.5 + 0.5 * bump(hr, 11, 2) : 0; break;
+    case 'meal': m = 0.1 + 0.9 * Math.max(bump(hr, 12.3, 1.2), bump(hr, 19, 1.6)); break;
+    case 'eve': m = 0.08 + 0.92 * Math.max(0.5 * bump(hr, 12.5, 1.1), bump(hr, 19.8, 1.8)); break;
+    case 'night': m = hr >= 18 || hr < 3 ? 0.2 + 0.8 * bump(hr < 6 ? hr + 24 : hr, 23, 2.4) : 0; break;
+    case 'temple': m = (0.08 + 0.92 * Math.max(bump(hr, 7, 1.4), bump(hr, 17, 1.2))) * (rel.bud / 0.9); break;
+    case 'mosque': m = (0.08 + 0.92 * Math.max(bump(hr, 5.3, 0.7), bump(hr, 12.6, 0.9), bump(hr, 18.8, 0.8))) * (rel.mus / 0.05); break;
+    case 'church': m = (state.day % 7 === 0 ? 0.15 + 0.85 * bump(hr, 9.5, 1.5) : 0.1 * bump(hr, 17, 2)) * (rel.chr / 0.02); break;
+    default: m = 1;
+  }
+  return Math.max(0, V.base * m);
+}
+const venueObjs = new Map();   // key 'x,z' -> อ็อบเจกต์สถานที่ (คงตัวเดิมไว้ ให้ตัวละครอ้างอิงได้ต่อเนื่อง)
+function venueKeyOf(tl) {
+  if (!tl || tl.t === 'part' || (tl.cs && !tl.cs.to)) return null;
+  if (tl.t === 'com') { const k = 'com:' + (fixedVariant(tl) ? tl.v : 'zone'); return VENUE[k] && (fixedVariant(tl) || tl.lv > 0) ? k : null; }
+  if (tl.t === 'service') { const k = 'service:' + tl.v; return VENUE[k] ? k : null; }
+  return null;
+}
+function buildVenueList() {
+  const seen = new Set(), out = [];
+  state.tiles.forEach((tl, i) => {
+    const key = venueKeyOf(tl);
+    if (!key) return;
+    const id = i + '';
+    seen.add(id);
+    let v = venueObjs.get(id);
+    if (!v) venueObjs.set(id, v = { id, x: i % N, z: Math.floor(i / N), w: 0, inside: 0, visits: 0, total: 0 });
+    v.key = key; v.fw = tl.fw || 1; v.fd = tl.fd || 1; v.lv = tl.lv || 0;
+    out.push(v);
+  });
+  for (const id of [...venueObjs.keys()]) if (!seen.has(id)) venueObjs.delete(id);
+  return out;
+}
+agents.setVenueProvider(buildVenueList);
+const venueName = v => (v.key === 'com:zone' ? t('tool.com') + ' · ' + t('bld.lv', { n: v.lv }) : t('v.' + v.key.replace(':', '.')));
+function venueRoad(v) {
+  const fw = v.fw || 1, fd = v.fd || 1;
+  for (let dz = -1; dz <= fd; dz++) for (let dx = -1; dx <= fw; dx++) {
+    const inX = dx >= 0 && dx < fw, inZ = dz >= 0 && dz < fd;
+    if (inX === inZ) continue;
+    const rx = v.x + dx, rz = v.z + dz;
+    if (inBounds(rx, rz) && state.tiles[rz * N + rx]?.t === 'road') return inX ? rowName(rz) : colName(rx);
+  }
+  return roadAt(v.x, v.z);
+}
+const visScale = () => clamp(audioStats.pop / Math.max(12, agents.counts().person), 1, 60);
+let visY = null;   // สรุปเมื่อวาน
+function visitTick(pop) {
+  const hr = tod * 24, rel = religionShares();
+  const list = buildVenueList();
+  for (const v of list) v.w = venueW(v.key, hr, rel);
+  const sc = visScale();
+  // คนแน่นร้าน
+  flags.crowdCool = (flags.crowdCool ?? 60) - 1;
+  if (flags.crowdCool <= 0 && pop > 100) {
+    let best = null;
+    for (const v of list) if (v.inside >= 4 && (!best || v.inside > best.inside) && state.day * 1440 + hr * 60 > (v.noCrowd || 0)) best = v;
+    if (best) {
+      flags.crowdCool = 70 + Math.random() * 50;
+      best.noCrowd = state.day * 1440 + hr * 60 + 600;
+      withAt(best.x, best.z, () => addNews('info', ['news.visit.crowd', { place: venueName(best), road: venueRoad(best), n: Math.round(best.inside * sc) }]));
+    }
+  }
+  // สรุปประจำวัน (เมื่อขึ้นวันใหม่)
+  if (flags.visDay === undefined) flags.visDay = state.day;
+  if (state.day !== flags.visDay) {
+    flags.visDay = state.day;
+    const top = [...list].sort((a, b) => b.visits - a.visits)[0];
+    const cat = {};
+    for (const v of list) cat[VENUE[v.key].cat] = (cat[VENUE[v.key].cat] || 0) + v.visits;
+    visY = { cat, top: list.filter(v => v.visits > 0).sort((a, b) => b.visits - a.visits).slice(0, 8).map(v => ({ id: v.id, x: v.x, z: v.z, key: v.key, lv: v.lv, n: v.visits, road: venueRoad(v) })), sc };
+    if (top && top.visits >= 3 && pop > 100) withAt(top.x, top.z, () => addNews('info', ['news.visit.daily', { place: venueName(top), road: venueRoad(top), n: Math.round(top.visits * sc) }]));
+    for (const v of list) { v.total += v.visits; v.visits = 0; }
+  }
+  // ศาสนสถานที่ขาด
+  if (flags.relCool === undefined) flags.relCool = 120;
+  flags.relCool--;
+  if (flags.relCool <= 0 && pop > 200) {
+    flags.relCool = 260 + Math.random() * 200;
+    const need = [];
+    if (rel.mus * pop >= 60 && ccache.mosque === 0) need.push('mus');
+    if (rel.chr * pop >= 40 && ccache.church === 0) need.push('chr');
+    if (rel.bud * pop >= 200 && ccache.temple === 0) need.push('bud');
+    if (need.length) addNews('warn', ['news.rel.need.' + pickOf(need), {}]);
+  }
+}
+
+// ----- โรงงานระดับสูง: ข่าวเปิดโรงงาน / ขาดแรงงานมีความรู้ -----
+function indTick(s, pop) {
+  flags.indSeen ||= {};
+  for (const k of ['honda', 'toyota', 'bmw', 'shindengen', 'keihin', 'denso']) {
+    const n = ccache[k] || 0, was = flags.indSeen[k] ?? n;
+    if (n > was) {
+      const V = VARIANTS.ind.find(v => v.k === k), mi = state.tiles.findIndex(tl => tl && tl.t === 'ind' && tl.v === k && !(tl.cs && !tl.cs.to));
+      const open = () => {
+        addNews('good', ['news.ind.open', { name: V.label, n: V.jobs }]);
+        if (MAKER_OF[k] === undefined) { /* ค่ายรถ */ } else addNews('info', ['news.ind.chain', { name: V.label }]);
+        if (Math.random() < 0.7) tvNews('tv.ind', { name: V.label, n: V.jobs }, 20);
+      };
+      if (mi >= 0) withAt(mi % N, Math.floor(mi / N), open); else open();
+    }
+    flags.indSeen[k] = n;
+  }
+  flags.skillCool = (flags.skillCool ?? 90) - 1;
+  if (s.skillNeed && s.skillFill < 0.85 && flags.skillCool <= 0) {
+    flags.skillCool = 200 + Math.random() * 120;
+    addNews('warn', ['news.ind.skill', { n: Math.max(1, Math.round(s.skillNeed - s.skillSupply)) }]);
+  }
 }
 
 // ----- ไฟไหม้ -----
@@ -2960,6 +3157,9 @@ function cityEvents(s) {
     }
   }
 
+  indTick(s, pop);
+  visitTick(pop);   // คนเข้าร้าน/สถานที่ รายงานความนิยม ข่าวศาสนา
+
   // ตารางรายการทีวีประจำเมือง: ข่าวเช้า/เที่ยง ละคร รายการคุย พยากรณ์ สลาก
   flags.tv = (flags.tv ?? 60) - 1;
   if (flags.tv <= 0 && pop > 60) {
@@ -3158,6 +3358,28 @@ function tabOverview(P) {
     + sec(t('pop.stats'), kv(t('pop.acc'), S.acc) + kv(t('pop.inj'), S.inj) + kv(t('pop.dead'), S.dead) + kv(t('pop.fires'), S.fires) + kv(t('pop.crimes'), S.crimes))
     + sec(t('ov.latest'), news.items.slice(0, 4).map(it => `<div class="ni"><i style="background:${KIND_DOT[it.kind]}"></i><div><small>${escH(t('news.time', { d: it.day, c: it.clock }))}</small><span>${escH(newsText(it))}</span></div></div>`).join('') || `<div class="dim">${escH(t('news.empty'))}</div>`);
 }
+function tabReligion(pop) {
+  const r = religionShares(), c = ccache, p = Math.max(1, pop);
+  const row = (k, col) => bar(t('rel.' + k), 100 * r[k], col, fmt(r[k] * p) + ' (' + Math.round(100 * r[k]) + '%)');
+  return sec(t('rel.title'), row('bud', '#ffb300') + row('mus', '#26a69a') + row('chr', '#5c6bc0') + row('oth', '#9e9e9e')
+    + kv(t('v.service.temple'), c.temple) + kv(t('v.service.mosque'), c.mosque) + kv(t('v.service.church'), c.church)
+    + `<div class="dim">${escH(t('rel.note'))}</div>`);
+}
+function tabPlaces() {
+  const list = buildVenueList(), sc = visScale();
+  const now = [...list].filter(v => v.inside > 0).sort((a, b) => b.inside - a.inside).slice(0, 6);
+  const today = [...list].filter(v => v.visits > 0).sort((a, b) => b.visits - a.visits).slice(0, 8);
+  const mx = Math.max(1, ...today.map(v => v.visits));
+  const cat = {};
+  for (const v of list) cat[VENUE[v.key].cat] = (cat[VENUE[v.key].cat] || 0) + v.visits;
+  const ct = Math.max(1, Object.values(cat).reduce((a, b) => a + b, 0));
+  const CC = { food: '#ff8a65', shop: '#4fc3f7', worship: '#ffd54f', health: '#ef5350', fun: '#ba68c8', money: '#81c784', other: '#a1887f' };
+  return sec(t('places.hot'), today.length ? today.map(v => bar(venueName(v) + ' · ' + t('sign.road') + venueRoad(v), 100 * v.visits / mx, '#ffb74d', fmt(v.visits * sc))).join('') : `<div class="dim">${escH(t('places.none'))}</div>`)
+    + sec(t('places.now'), now.length ? now.map(v => kv(venueName(v) + ' · ' + t('sign.road') + venueRoad(v), fmt(v.inside * sc))).join('') : `<div class="dim">${escH(t('places.none'))}</div>`)
+    + sec(t('places.cat'), CATS.filter(k => cat[k]).sort((a, b) => cat[b] - cat[a]).map(k => bar(t('cat.' + k), 100 * cat[k] / ct, CC[k], fmt(cat[k] * sc))).join('') || `<div class="dim">${escH(t('places.none'))}</div>`)
+    + (visY ? sec(t('places.yday'), visY.top.slice(0, 5).map(v => kv(venueName(v) + ' · ' + t('sign.road') + v.road, fmt(v.n * visY.sc))).join('') || `<div class="dim">${escH(t('places.none'))}</div>`) : '')
+    + `<div class="dim">${escH(t('places.note'))}</div>`;
+}
 function tabPop(P) {
   const { s, demo, ac, nd } = P;
   const p = Math.max(1, demo.pop), pc = n => Math.round(100 * n / p);
@@ -3166,7 +3388,9 @@ function tabPop(P) {
   const g = (k, n, col) => bar(t(k), pc(n), col, fmt(n) + ' (' + pc(n) + '%)');
   return sec(t('pop.demo') + ' — ' + fmt(demo.pop), g('pop.male', demo.male, '#4fc3f7') + g('pop.female', demo.female, '#f06292')
       + g('age.child', demo.child, '#ffd54f') + g('age.youth', demo.youth, '#81c784') + g('age.adult', demo.adult, '#64b5f6') + g('age.elder', demo.elder, '#b39ddb'))
+    + tabReligion(demo.pop)
     + sec(t('pop.work'), bar(t('pop.employed'), demo.workers ? 100 * emp / demo.workers : 100, '#4db6ac', fmt(emp) + ' / ' + fmt(demo.workers))
+      + (s.skillNeed ? bar(t('pop.skilled'), 100 * s.skillFill, s.skillFill < 0.85 ? '#ff7043' : '#66bb6a', fmt(s.skillSupply) + ' / ' + fmt(s.skillNeed)) : kv(t('pop.skilled'), fmt(s.skillSupply)))
       + kv(t('pop.jobsOpen'), fmt(Math.max(0, s.jobs - demo.workers))) + kv(t('pop.unemployed'), fmt(Math.max(0, demo.workers - s.jobs)))
       + kv(t('ov.jobsCom'), fmt(s.jobsCom)) + kv(t('ov.jobsInd'), fmt(s.jobsInd)))
     + sec(t('pop.vehicles'), kv(t('pop.car'), `${fmt(reg.car)} <small>(${escH(t('pop.onroad', { n: ac.car }))})</small>`)
@@ -3239,12 +3463,12 @@ function tabReg() {
     + (causes.length ? sec(t('reg.byCause'), causes.map(k => bar(t('reg.cause.' + k), 100 * sh(k) / tot, k === 'old' || k === 'illness' ? '#90a4ae' : '#e57373', fmt(sh(k)))).join('')) : '')
     + `<div class="ptabs sub">${['all', 'birth', 'death'].map(k => `<button data-reg="${k}" class="rf ${k === regFilter ? 'on' : ''}">${escH(t('reg.filter.' + k))}</button>`).join('')}</div>${rows}`;
 }
-const TABS = ['overview', 'pop', 'reg', 'util', 'fin', 'bld', 'news'];
+const TABS = ['overview', 'pop', 'places', 'reg', 'util', 'fin', 'bld', 'news'];
 function renderPop() {
   if (!popPanel || !popOpen) return;
   const keep = popPanel.querySelector('.pbody')?.scrollTop || 0;
   const P = civicSnapshot(), D = cityDetail();
-  const body = { overview: tabOverview, pop: tabPop, reg: tabReg, util: tabUtil, fin: tabFin, bld: tabBld, news: tabNews }[popTab](P, D);
+  const body = { overview: tabOverview, pop: tabPop, places: tabPlaces, reg: tabReg, util: tabUtil, fin: tabFin, bld: tabBld, news: tabNews }[popTab](P, D);
   popPanel.innerHTML = `
     <div class="dh"><b>${escH(t('city.title'))}</b><small>${escH(t('side.drag'))}</small><button class="x" id="popClose">${ICON.close}</button></div>
     <div class="ptabs">${TABS.map(k => `<button data-tab="${k}" class="${k === popTab ? 'on' : ''}">${escH(t('tab.' + k))}</button>`).join('')}</div>
@@ -3368,6 +3592,7 @@ function variantStats(tool, v) {
   if (v.cap) p.push(t('st.cap', { n: v.cap }));
   if (v.power || v.water) p.push(t('st.use', { p: v.power, w: v.water }));
   if (v.upkeep) p.push(t('st.upkeep', { n: v.upkeep }));
+  if (v.skill) p.push(t('st.skill', { n: v.skill }));
   if (v.tax) p.push(t('st.tax', { n: v.tax }));
   const note = vNote(tool, v);
   return (p.join(' · ') || '') + (note ? (p.length ? ' — ' : '') + note : '');
