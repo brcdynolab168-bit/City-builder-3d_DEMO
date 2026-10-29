@@ -10,6 +10,6 @@
 // anon key เปิดเผยได้ (ออกแบบมาให้อยู่ในเว็บ) สิทธิ์การอ่าน/เขียนถูกคุมด้วย RLS ใน schema.sql
 // ---------------------------------------------------------------
 export const ONLINE = {
-  url: '',       // เช่น 'https://abcdefgh.supabase.co'
-  anonKey: '',   // เช่น 'eyJhbGciOi...'
+  url: 'https://aslxcdagtdufhokzdvlz.supabase.co',       // เช่น 'https://abcdefgh.supabase.co'
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzbHhjZGFndGR1Zmhva3pkdmx6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyOTc1MTQsImV4cCI6MjEwODg3MzUxNH0.zacIDfIjr5syYEriC7fVHrvPdBvX723F5WHPBc2wMvQ',   // เช่น 'eyJhbGciOi...'
 };
