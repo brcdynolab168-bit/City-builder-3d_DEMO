@@ -544,7 +544,10 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     ]);
     return (catCache[i] = { body: merge(b), leg });
   }
-  function makeQuad(G, hipY, hx, hz) {
+  // ขนาดสัตว์เทียบกับคน (คนสูง ~0.17 หน่วย = 1.7 ม.): หมาไทยขนาดกลางสูงถึงหัว ~0.65 ม., แมว ~0.3 ม.
+  // โมเดลจากโค้ดออกแบบไว้ใหญ่ (หมา ~1.1 ม., แมว ~0.9 ม.) จึงย่อทั้งตัว
+  const DOG_SIZE = 0.58, CAT_SIZE = 0.36;
+  function makeQuad(G, hipY, hx, hz, size = 1) {
     const g = new THREE.Group();
     const bodyM = mesh(G.body, M.fur, false);
     g.add(bodyM);
@@ -558,15 +561,17 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     }
     if (!G.full) G.full = merge([G.body, ...spots.map(([sx, sz]) => { const c = G.leg.clone(); c.translate(sx * hx, hipY, sz * hz); return c; })]);
     const full = mesh(G.full, M.fur, false); full.visible = false; g.add(full);
-    return { obj: g, legs, lodParts, full, near: true };
+    g.scale.setScalar(size);
+    const obj = new THREE.Group(); obj.add(g);
+    return { obj, legs, lodParts, full, near: true, size };
   }
   const glbAnimal = cat => {
     const v = pickVehicle(cat); if (!v) return null;
     const g = new THREE.Group(); g.add(v);
     return { obj: g, legs: [0, 1, 2, 3].map(() => new THREE.Group()), lodParts: [], full: null, near: true, glb: true };
   };
-  const makeDog = () => glbAnimal('dogs') || makeQuad(dogGeos(Math.floor(Math.random() * 12)), 0.048, 0.014, 0.03);
-  const makeCat = () => glbAnimal('cats') || makeQuad(catGeos(Math.floor(Math.random() * 10)), 0.038, 0.01, 0.022);
+  const makeDog = () => glbAnimal('dogs') || makeQuad(dogGeos(Math.floor(Math.random() * 12)), 0.048, 0.014, 0.03, DOG_SIZE * (0.85 + Math.random() * 0.3));
+  const makeCat = () => glbAnimal('cats') || makeQuad(catGeos(Math.floor(Math.random() * 10)), 0.038, 0.01, 0.022, CAT_SIZE * (0.9 + Math.random() * 0.2));
 
   // ---------- เส้นทาง ----------
   const walkable = (kind, x, z) => {
@@ -813,7 +818,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       const k = 0.7;
       a.legs[0].rotation.x = s * k; a.legs[3].rotation.x = s * k;
       a.legs[1].rotation.x = -s * k; a.legs[2].rotation.x = -s * k;
-      a.bob = Math.abs(s) * 0.003;
+      a.bob = Math.abs(s) * 0.003 * (a.size || 1);   // ตัวเล็กเด้งน้อยลง
     }
   }
 

@@ -23,7 +23,7 @@ import { createMenu } from './menu.js';
 import { createBig, FOOT } from './big.js';
 import { createSky, periodKey } from './sky.js';
 import { createNews, demographics, needs as calcNeeds, PAGES, pickOf } from './civic.js';
-import { LEVELS, MAX_LEVEL, levelChecks, reachableLevel, levelFromPop } from './levels.js';
+import { LEVELS, MAX_LEVEL, levelChecks, reachableLevel, levelFromPop, dailyXp, buildXp } from './levels.js';
 import { GOODS, trade } from './trade.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -952,7 +952,7 @@ let periodNow = 'morning';
 function updateSky(dt) {
   const prevTod = tod;
   tod = (tod + dt / DAY_LENGTH_SEC) % 1;
-  if (tod < prevTod && !menu.isOpen) state.day++; // ข้ามเที่ยงคืน = วันใหม่
+  if (tod < prevTod && !menu.isOpen) { state.day++; onNewDay(); } // ข้ามเที่ยงคืน = วันใหม่
   const W = weather.state;
   const hour = tod * 24;
   periodNow = periodKey(hour);
@@ -2602,6 +2602,7 @@ function applyTool(x, z) {
     const e = evalBig(currentTool, x, z);
     if (!e.ok) { audio.sfx('error'); return toast(t(e.reason, e.params)); }
     state.money -= toolCost(currentTool);
+    gainXp(buildXp(toolCost(currentTool)));
     const { R } = e, mi = idx(R.x0, R.z0);
     for (let dz = 0; dz < R.fd; dz++) for (let dx = 0; dx < R.fw; dx++) state.tiles[idx(R.x0 + dx, R.z0 + dz)] = { t: 'part', m: mi };
     state.tiles[mi] = { t: currentTool, lv: 0, v: currentVar[currentTool], fw: R.fw, fd: R.fd, rot: R.rot, cs: { p: 0, dur: 30 + 9 * Math.sqrt(R.fw * R.fd) } };
@@ -2617,6 +2618,7 @@ function applyTool(x, z) {
     const c = buildCost('road', x, z);
     if (state.money < c) { audio.sfx('error'); return toast(t('toast.nomoney')); }
     state.money -= c;
+    gainXp(buildXp(c));
     cur.v = currentVar.road;
     audio.sfx('road');
     refresh(x, z);
@@ -2633,6 +2635,7 @@ function applyTool(x, z) {
   if (V0?.req) { const rq = reqFailOf(V0); if (rq) { audio.sfx('error'); return toast(t(rq[0], rq[1])); } }
   if (state.money < cost2) { audio.sfx('error'); return toast(t('toast.nomoney')); }
   state.money -= cost2;
+  gainXp(buildXp(cost2));
   state.tiles[i] = VARIANTS[currentTool] ? { t: currentTool, lv: 0, v: currentVar[currentTool] } : { t: currentTool, lv: 0 };
   if (['res', 'com', 'ind', 'service', 'power', 'water'].includes(currentTool) && (fixedVariant(state.tiles[i]) || currentTool === 'power' || currentTool === 'water')) state.tiles[i].cs = { p: 0, dur: currentTool === 'power' || currentTool === 'water' ? 45 : 28 };
   audio.sfx(currentTool === 'road' ? 'road' : 'place');
@@ -2904,7 +2907,7 @@ function civicSnapshot() {
 function levelCtx(P = civicSnapshot()) {
   const { s, cc, nd } = P;
   return {
-    pop: s.pop, day: state.day, mood: nd.mood,
+    pop: s.pop, day: state.day, mood: nd.mood, xp: state.xp || 0,
     has: {
       util: s.powerCap > 0 && s.waterCap > 0 && s.powerCap >= s.powerUse && s.waterCap >= s.waterUse,
       school: cc.school + cc.school_p > 0, hospital: cc.hospital + cc.hospital_p > 0, police: cc.police > 0, fire: cc.fire > 0,
@@ -2919,12 +2922,22 @@ function refreshLevelBadge() {
     el.style.cssText = 'margin-left:6px;padding:1px 7px;border-radius:9px;background:#ffb300;color:#3a2600;font-size:11px;font-weight:700;white-space:nowrap';
     $('cityName').after(el);
   }
-  el.textContent = 'Lv.' + cityLevel() + ' ' + t('lv.' + LEVELS[cityLevel() - 1].key);
+  const next = LEVELS[cityLevel()];
+  el.textContent = 'Lv.' + cityLevel() + ' ' + t('lv.' + LEVELS[cityLevel() - 1].key) + ' · XP ' + fmt(state.xp || 0) + (next ? ' / ' + fmt(next.xp) : '');
+}
+function gainXp(n) {
+  state.xp = (state.xp || 0) + n;
+  if ($('cityLv')) refreshLevelBadge();
+}
+function onNewDay() {
+  const s = computeStats(), n = dailyXp(s.pop, s.net, lastMood);
+  if (n > 0) { gainXp(n); toast(t('xp.day', { n: fmt(n) })); }
 }
 function checkLevelUp() {
   const P = civicSnapshot(), ctx = levelCtx(P);
   lastMood = P.nd.mood;
   if (!state.level) state.level = levelFromPop(ctx.pop);   // เซฟเก่า/เกมใหม่
+  if (state.xp === undefined) state.xp = ctx.xp = LEVELS[cityLevel() - 1].xp;   // เซฟเก่า: เริ่มที่ XP ของระดับปัจจุบัน
   const lv = reachableLevel(cityLevel(), ctx);
   if (lv > cityLevel()) {
     state.level = lv;
@@ -2941,7 +2954,10 @@ function levelSection(P) {
   const head = kv(t('lv.now'), 'Lv.' + lv + ' ' + t('lv.' + LEVELS[lv - 1].key));
   if (!next) return sec(t('lv.title'), head + `<div class="dim">${escH(t('lv.max'))}</div>`);
   const rows = levelChecks(next, levelCtx(P)).map(c => kv((c.ok ? '✅ ' : '⬜ ') + t('lvc.' + c.k), c.need !== undefined ? fmt(c.cur) + ' / ' + fmt(c.need) : (c.ok ? '✓' : '—'))).join('');
-  return sec(t('lv.title'), head + `<h5>${escH(t('lv.next', { n: next.n, name: t('lv.' + next.key) }))}</h5>` + rows);
+  const from = LEVELS[lv - 1].xp, xp = state.xp || 0;
+  const xpBar = bar('XP', clamp(100 * (xp - from) / (next.xp - from), 0, 100), '#ffb300', fmt(xp) + ' / ' + fmt(next.xp) + (xp < next.xp ? ' (' + t('xp.left', { n: fmt(next.xp - xp) }) + ')' : ''));
+  return sec(t('lv.title'), head + xpBar + `<div class="dim">${escH(t('xp.how'))}</div>`
+    + `<h5>${escH(t('lv.next', { n: next.n, name: t('lv.' + next.key) }))}</h5>` + rows);
 }
 
 // ----- ศาสนาของประชากร -----
@@ -3654,6 +3670,7 @@ function doUpgrade(i, o) {
   if (o.fail) { audio.sfx('error'); return toast(t(o.fail[0], o.fail[1])); }
   if (state.money < o.cost) { audio.sfx('error'); return toast(t('toast.nomoney')); }
   state.money -= o.cost;
+  gainXp(buildXp(o.cost));
   state.tiles[i] = { t: 'res', lv: 0, v: o.V.k, cs: { p: 0, dur: 24 } };
   audio.sfx('place');
   const x = i % N, z = Math.floor(i / N);

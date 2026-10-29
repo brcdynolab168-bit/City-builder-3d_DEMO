@@ -6,20 +6,26 @@
 //  need: เงื่อนไขบริการ (ctx.has[k] ต้องเป็นจริง)
 //    util = ไฟและน้ำพอใช้, school, hospital, police, fire, transit = มีรถเมล์หรือรถไฟฟ้า,
 //    bu = มหาวิทยาลัย, metro = รถไฟฟ้า, freight = สถานีขนส่งสินค้า, green = ไฟฟ้าจากพลังงานสะอาด ≥ 30%
+//  xp: XP สะสมที่ต้องมี (ได้จากการสร้าง และรายวันตามประชากร/กำไร/ความพอใจ)
 export const LEVELS = [
-  { n: 1, key: 'village' },
-  { n: 2, key: 'town',    pop: 150,  day: 3,  mood: 0,  need: ['util'] },
-  { n: 3, key: 'city',    pop: 600,  day: 8,  mood: 50, need: ['util', 'school'] },
-  { n: 4, key: 'bigcity', pop: 1500, day: 15, mood: 55, need: ['hospital', 'police', 'fire'] },
-  { n: 5, key: 'metro',   pop: 3000, day: 25, mood: 60, need: ['transit', 'bu'] },
-  { n: 6, key: 'mega',    pop: 6000, day: 40, mood: 65, need: ['metro', 'freight', 'green'] },
+  { n: 1, key: 'village', xp: 0 },
+  { n: 2, key: 'town',    xp: 300,   pop: 150,  day: 3,  mood: 0,  need: ['util'] },
+  { n: 3, key: 'city',    xp: 1500,  pop: 600,  day: 8,  mood: 50, need: ['util', 'school'] },
+  { n: 4, key: 'bigcity', xp: 5000,  pop: 1500, day: 15, mood: 55, need: ['hospital', 'police', 'fire'] },
+  { n: 5, key: 'metro',   xp: 14000, pop: 3000, day: 25, mood: 60, need: ['transit', 'bu'] },
+  { n: 6, key: 'mega',    xp: 35000, pop: 6000, day: 40, mood: 65, need: ['metro', 'freight', 'green'] },
 ];
 export const MAX_LEVEL = LEVELS.length;
 
-// รายการเงื่อนไขของระดับ L: [{ k, ok, cur, need }] (k = pop | day | mood | ชื่อบริการ)
+// XP ที่ได้ต่อวัน: เมืองใหญ่ กำไรดี และประชาชนพอใจ ได้มากขึ้น
+export const dailyXp = (pop, net, mood) => Math.round((pop / 20 + Math.max(0, net) / 25) * (0.5 + mood / 100));
+export const buildXp = cost => Math.max(1, Math.round(cost / 20));   // ทุก $20 ที่ลงทุนสร้าง = 1 XP
+
+// รายการเงื่อนไขของระดับ L: [{ k, ok, cur, need }] (k = xp | pop | day | mood | ชื่อบริการ)
 export function levelChecks(L, ctx) {
   if (!L || !L.pop) return [];
   const out = [
+    { k: 'xp', ok: ctx.xp >= L.xp, cur: ctx.xp, need: L.xp },
     { k: 'pop', ok: ctx.pop >= L.pop, cur: ctx.pop, need: L.pop },
     { k: 'day', ok: ctx.day >= L.day, cur: ctx.day, need: L.day },
   ];

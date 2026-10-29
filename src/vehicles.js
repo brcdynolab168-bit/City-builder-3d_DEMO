@@ -6,7 +6,7 @@ let skClone = o => o.clone(true);
 import('three/addons/utils/SkeletonUtils.js').then(m => { if (m.clone) skClone = m.clone; }).catch(() => {});
 
 // ความยาวเป้าหมายในหน่วยของเกม (ตัวถังด้านหน้า-หลัง)
-export const VEH_LEN = { cars: 0.36, bikes: 0.22, buses: 0.58, boats: 1.3, dogs: 0.2, cats: 0.15, police: 0.38, taxis: 0.36, sports: 0.37 };
+export const VEH_LEN = { cars: 0.36, bikes: 0.22, buses: 0.58, boats: 1.3, dogs: 0.1, cats: 0.07, police: 0.38, taxis: 0.36, sports: 0.37 };
 // หมวดที่ย่อ/ขยายตามความสูงแทนความยาว (คน)
 export const VEH_H = { cops: 0.16 };
 // ถ้าโมเดลหันหัวผิดทาง ให้ปรับค่านี้ (Math.PI = กลับหัว, ±Math.PI/2 = หันข้าง)
