@@ -72,12 +72,14 @@ export function createDrag({ scene, audio = null }) {
     bodyI.setColorAt(k, new THREE.Color(pick(SHIRT))); headI.setColorAt(k, new THREE.Color(pick(SKIN)));
   }
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _e = new THREE.Euler();
+  let crowdTick = 0;
   let crowdLevel = 0;      // 0..1 ผู้ชมทยอยมา
   function updateCrowd(dt) {
     const target = active ? 1 : 0;
     crowdLevel += (target - crowdLevel) * Math.min(1, dt * 0.35);
     bodyI.visible = headI.visible = !!strip && crowdLevel > 0.01;
     if (!strip || !bodyI.visible) return;
+    if ((crowdTick ^= 1)) return;   // ผู้ชมอัปเดตสลับเฟรม (ตาแยกไม่ออก)
     const cheerK = cheerBoost > 0 ? 1 : 0.35;
     crowd.forEach((c, k) => {
       const here = crowdLevel > c.appear;

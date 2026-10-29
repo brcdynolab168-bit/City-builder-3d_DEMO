@@ -78,18 +78,28 @@ export function createWeather({ scene, getFocus, getCameraPos = () => ({ x: 0, y
   // ---------- ฝน ----------
   const MAXR = 7000;
   const RX = 90, RY = 40, RZ = 90;
-  const drops = new Float32Array(MAXR * 3);
+  // ฝนคำนวณบน GPU ทั้งหมด: เก็บตำแหน่งตั้งต้นครั้งเดียว แล้ว vertex shader เลื่อนตามเวลา/ลม (ไม่ต้องวนลูป 7000 เม็ดและอัปโหลดบัฟเฟอร์ทุกเฟรม)
+  const rainPos = new Float32Array(MAXR * 6), rainEnd = new Float32Array(MAXR * 2);
   for (let i = 0; i < MAXR; i++) {
-    drops[i * 3] = rnd(-RX / 2, RX / 2);
-    drops[i * 3 + 1] = rnd(0, RY);
-    drops[i * 3 + 2] = rnd(-RZ / 2, RZ / 2);
+    const x = rnd(-RX / 2, RX / 2), y = rnd(0, RY), z = rnd(-RZ / 2, RZ / 2);
+    rainPos.set([x, y, z, x, y, z], i * 6);
+    rainEnd[i * 2 + 1] = 1;
   }
-  const rainPos = new Float32Array(MAXR * 6);
-  const rainAttr = new THREE.BufferAttribute(rainPos, 3);
-  rainAttr.setUsage(THREE.DynamicDrawUsage);
   const rainGeo = new THREE.BufferGeometry();
-  rainGeo.setAttribute('position', rainAttr);
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+  rainGeo.setAttribute('aEnd', new THREE.BufferAttribute(rainEnd, 1));
+  const rainU = { uOff: { value: new THREE.Vector3() }, uTail: { value: new THREE.Vector3() } };
   const rainMat = new THREE.LineBasicMaterial({ color: 0xbcd0e4, transparent: true, opacity: 0.4, depthWrite: false });
+  rainMat.onBeforeCompile = shader => {
+    shader.uniforms.uOff = rainU.uOff; shader.uniforms.uTail = rainU.uTail;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aEnd;\nuniform vec3 uOff;\nuniform vec3 uTail;')
+      .replace('#include <begin_vertex>', `vec3 transformed = vec3(position);
+        transformed.x = mod(transformed.x + uOff.x + ${(RX / 2).toFixed(1)}, ${RX.toFixed(1)}) - ${(RX / 2).toFixed(1)};
+        transformed.z = mod(transformed.z + uOff.z + ${(RZ / 2).toFixed(1)}, ${RZ.toFixed(1)}) - ${(RZ / 2).toFixed(1)};
+        transformed.y = mod(transformed.y - uOff.y, ${RY.toFixed(1)});
+        transformed += aEnd * uTail;`);
+  };
   const rainLines = new THREE.LineSegments(rainGeo, rainMat);
   rainLines.frustumCulled = false;
   rainLines.visible = false;
@@ -173,21 +183,10 @@ export function createWeather({ scene, getFocus, getCameraPos = () => ({ x: 0, y
       const push = state.wind * 5;
       const len = 0.8 + 0.5 * state.rain;
       const tx = wx * push / fall * len, tz = wz * push / fall * len;
-      for (let i = 0; i < cnt; i++) {
-        const o = i * 3;
-        let x = drops[o] + wx * push * dt;
-        let y = drops[o + 1] - fall * dt;
-        let z = drops[o + 2] + wz * push * dt;
-        if (y < 0) { y += RY; x = rnd(-RX / 2, RX / 2); z = rnd(-RZ / 2, RZ / 2); }
-        if (x > RX / 2) x -= RX; else if (x < -RX / 2) x += RX;
-        if (z > RZ / 2) z -= RZ; else if (z < -RZ / 2) z += RZ;
-        drops[o] = x; drops[o + 1] = y; drops[o + 2] = z;
-        const p = i * 6;
-        rainPos[p] = x; rainPos[p + 1] = y; rainPos[p + 2] = z;
-        rainPos[p + 3] = x - tx; rainPos[p + 4] = y + len; rainPos[p + 5] = z - tz;
-      }
+      const o = rainU.uOff.value;
+      o.x = (o.x + wx * push * dt) % RX; o.z = (o.z + wz * push * dt) % RZ; o.y = (o.y + fall * dt) % RY;
+      rainU.uTail.value.set(-tx, len, -tz);
       rainGeo.setDrawRange(0, cnt * 2);
-      rainAttr.needsUpdate = true;
     }
   }
 

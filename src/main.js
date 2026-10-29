@@ -303,7 +303,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = false; // อัปเดตเงาเป็นช่วงๆ (ดูใน loop) ลดภาระ GPU
-let lastShadowAt = 0, baseRatio = 1, dynScale = 1, dynCool = 0;
+let slowCount = 0, shadowTick = 0, baseRatio = 1, dynScale = 1, dynCool = 0;
 let gpuName = '';
 try {
   const gl = renderer.getContext();
@@ -722,10 +722,11 @@ const forest = (() => {
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4126, roughness: 1 });
   const leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, vertexColors: true });
   const FMAX = 4000;
-  const mk = (geo, mat) => new THREE.InstancedMesh(geo, mat, FMAX);
+  // แยกป่าเป็นช่อง (tile) แต่ละช่องเป็น InstancedMesh ของตัวเอง ให้ three.js ตัดช่องที่อยู่นอกจอทิ้งเอง (frustum culling)
+  const TILE = 38;
   const G = {
-    con: { trunk: mk(trunkGeo(0.7, 0.07, 0.04), trunkMat), crown: mk(coniferCrown(2, 8, 1), leafMat), n: 0 },
-    brd: { trunk: mk(trunkGeo(0.62, 0.09, 0.05), trunkMat), crown: mk(broadleafCrown(5, 1), leafMat), n: 0 },
+    con: { tg: trunkGeo(0.7, 0.07, 0.04), cg: coniferCrown(2, 8, 1), tm: trunkMat, cm: leafMat, list: [], tiles: [] },
+    brd: { tg: trunkGeo(0.62, 0.09, 0.05), cg: broadleafCrown(5, 1), tm: trunkMat, cm: leafMat, list: [], tiles: [] },
   };
   const rnd = mulberry32(20241029);
   const dummy = new THREE.Object3D();
@@ -747,22 +748,30 @@ const forest = (() => {
     if (conifer) color.setRGB(0.09 + rnd() * 0.08, 0.30 + rnd() * 0.18, 0.13 + rnd() * 0.08, THREE.SRGBColorSpace);
     else if (rnd() < 0.08) color.setRGB(0.80 + rnd() * 0.15, 0.55 + rnd() * 0.2, 0.15, THREE.SRGBColorSpace);   // ใบเหลือง/ส้มประปราย
     else color.setRGB(0.20 + rnd() * 0.15, 0.50 + rnd() * 0.22, 0.14 + rnd() * 0.08, THREE.SRGBColorSpace);
-    const i = g.n++;
-    g.trunk.setMatrixAt(i, dummy.matrix);
-    g.crown.setMatrixAt(i, dummy.matrix);
-    g.crown.setColorAt(i, color);
+    g.list.push({ m: dummy.matrix.clone(), c: color.clone(), k: Math.floor((x + 95) / TILE) * 16 + Math.floor((z + 95) / TILE), order: placed });
     placed++;
   }
-  for (const g of Object.values(G)) for (const m of [g.trunk, g.crown]) {
-    m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true;
-    m.frustumCulled = false; m.count = g.n; scene.add(m);
+  for (const g of Object.values(G)) {
+    const byTile = new Map();
+    for (const it of g.list) { let a = byTile.get(it.k); if (!a) byTile.set(it.k, a = []); a.push(it); }
+    for (const arr of byTile.values()) {
+      const mkMesh = (geo, mat, withColor) => {
+        const m = new THREE.InstancedMesh(geo, mat, arr.length);
+        arr.forEach((it, i) => { m.setMatrixAt(i, it.m); if (withColor) m.setColorAt(i, it.c); });
+        m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true;
+        m.computeBoundingSphere(); m.computeBoundingBox();   // คำนวณตอนจำนวนเต็ม เพื่อให้ตัดนอกจอได้ถูกต้อง
+        m.frustumCulled = true; scene.add(m);
+        return m;
+      };
+      g.tiles.push({ n: arr.length, trunk: mkMesh(g.tg, g.tm, false), crown: mkMesh(g.cg, g.cm, true) });
+    }
   }
   return {
     setCount(n) {
       const f = placed ? Math.min(1, n / placed) : 0;
-      for (const g of Object.values(G)) {
-        const c = Math.floor(g.n * f);
-        for (const m of [g.trunk, g.crown]) { m.count = c; m.visible = c > 0; }
+      for (const g of Object.values(G)) for (const t of g.tiles) {
+        const c = Math.floor(t.n * f);
+        for (const m of [t.trunk, t.crown]) { m.count = c; m.visible = c > 0; }
       }
     },
   };
@@ -1815,7 +1824,18 @@ const SM = {
   steel: new THREE.MeshStandardMaterial({ color: 0xaeb6bd, roughness: 0.5, metalness: 0.5 }),
   crane: new THREE.MeshStandardMaterial({ color: 0xf2c230, roughness: 0.6 }),
   load: new THREE.MeshStandardMaterial({ color: 0x8a5a3a, roughness: 0.8 }),
-  puff: new THREE.MeshBasicMaterial({ color: 0xd8ccb8, transparent: true, opacity: 0.55, depthWrite: false }),
+  // ฝุ่นไซต์ก่อสร้าง: สไปรท์ฟุ้งนุ่ม (เดิมเป็นทรงกลมทึบครึ่งโปร่ง เห็นเป็นวงกลมขาวแข็งๆ)
+  puff: (() => {
+    let map = null;
+    try {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+      const c = cv.getContext('2d'), gr = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gr.addColorStop(0, 'rgba(255,255,255,0.55)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.22)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      c.fillStyle = gr; c.fillRect(0, 0, 64, 64);
+      map = new THREE.CanvasTexture(cv); map.colorSpace = THREE.SRGBColorSpace;
+    } catch (e) { map = null; }
+    return new THREE.SpriteMaterial({ map, color: 0xc9bca4, transparent: true, opacity: map ? 0.8 : 0.25, depthWrite: false, fog: true });
+  })(),
 };
 const siteNetGeo = new THREE.PlaneGeometry(1, 1);
 const siteSph = new THREE.SphereGeometry(0.5, 8, 6);
@@ -1876,7 +1896,7 @@ function setupSite(g, baseCount, t, i) {
   const lo = mk(boxGeo, SM.load, 0, -0.22, 0, 0.1, 0.06, 0.06, jib);
   // ฝุ่น
   const dust = [];
-  for (let k = 0; k < 6; k++) { const d = new THREE.Mesh(siteSph, SM.puff); d.position.set(cx + (Math.sin(k * 2.3) * hx), 0.1, cz + (Math.cos(k * 1.7) * hz)); site.add(d); dust.push(d); }
+  for (let k = 0; k < 6; k++) { const d = new THREE.Sprite(SM.puff); d.position.set(cx + (Math.sin(k * 2.3) * hx), 0.1, cz + (Math.cos(k * 1.7) * hz)); site.add(d); dust.push(d); }
   constructing.set(i, { i, t, body, H, F: Math.max(2, Math.min(9, Math.round(H / 0.3))), cx, cz, hx, hz, dirt, fence, sc, poles, rings, spacing, nets, netMat, crane, mast, jib, jl, cable, lo, lamp, dust, ph: i * 1.7 });
 }
 
@@ -1925,7 +1945,7 @@ function updateSite(e, time) {
 
 function addPuffs(wx, wy, wz, n = 9) {
   for (let k = 0; k < n; k++) {
-    const m = new THREE.Mesh(siteSph, SM.puff);
+    const m = new THREE.Sprite(SM.puff);
     const ang = (k / n) * Math.PI * 2 + Math.random();
     m.position.set(wx, wy + 0.08, wz);
     scene.add(m);
@@ -2111,7 +2131,7 @@ function buildTile(x, z) {
   }
   meshes[i] = g;
   tileGroup.add(g);
-  if (swayList.length) swayTiles.set(i, swayList);
+  if (swayList.length) { swayList.g = g; swayTiles.set(i, swayList); }
   swayList = null;
 }
 
@@ -3624,6 +3644,7 @@ function boatClick(e) {
   return true;
 }
 
+const _pv = new THREE.Matrix4(), _fr = new THREE.Frustum(), _sp = new THREE.Sphere();
 let swayFrame = 0;
 let fpsAvg = 60;
 let cntCache = null, cntT = 0;
@@ -3657,7 +3678,8 @@ function loop(now) {
 
   lastTargetsAt -= dt;
   if (lastTargetsAt <= 0) { lastTargetsAt = 1; updateAgentTargets(); }
-  agents.update(dt, night, speed, { rain: weather.state.rain, dark: lampLevel, hospital: ccache.hospital + ccache.hospital_p > 0, police: policeCover(), accidentRate: 1 - 0.3 * policeCover(), drunk: ccache.pub > 0 ? clamp(nightLevel * 1.2, 0, 1) * Math.min(1, 0.4 + 0.3 * ccache.pub) * (agents.checkpointActive() ? 0.3 : 1) : 0, cam: camera.position });
+  _pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _fr.setFromProjectionMatrix(_pv);
+  agents.update(dt, night, speed, { rain: weather.state.rain, dark: lampLevel, hospital: ccache.hospital + ccache.hospital_p > 0, police: policeCover(), accidentRate: 1 - 0.3 * policeCover(), drunk: ccache.pub > 0 ? clamp(nightLevel * 1.2, 0, 1) * Math.min(1, 0.4 + 0.3 * ccache.pub) * (agents.checkpointActive() ? 0.3 : 1) : 0, cam: camera.position, frustum: _fr });
   for (const ev of agents.takeEvents()) onAgentEvent(ev);
   animateFires(performance.now() / 1000);
   updateMinimap(dt);
@@ -3673,7 +3695,9 @@ function loop(now) {
   const sw1 = swayClock * (1.3 + W.wind * 2.2), sw2 = swayClock * 1.1;
   const swA = 0.015 + 0.09 * W.wind, swB = 0.01 + 0.05 * W.wind;
   swayFrame ^= 1;
-  if (swayFrame) for (const arr of swayTiles.values()) {   // อัปเดตต้นไม้สลับเฟรม (ตาแยกไม่ออก แต่เบาลงครึ่งหนึ่ง)
+  if (swayFrame) for (const arr of swayTiles.values()) {
+    _sp.center.copy(arr.g.position); _sp.radius = 2.5;
+    if (!_fr.intersectsSphere(_sp)) continue;   // ช่องที่อยู่นอกจอไม่ต้องโยกต้นไม้   // อัปเดตต้นไม้สลับเฟรม (ตาแยกไม่ออก แต่เบาลงครึ่งหนึ่ง)
     for (const s of arr) {
       s.obj.rotation.z = Math.sin(sw1 + s.ph) * swA * s.k;
       s.obj.rotation.x = Math.cos(sw2 + s.ph) * swB * s.k;
@@ -3685,6 +3709,8 @@ function loop(now) {
   audioStatsT -= dt;
   if (audioStatsT <= 0) { audioStatsT = 0.5; refreshAudioStats(); }
   const camDist = camera.position.distanceTo(controls.target);
+  // ระนาบใกล้ขยับตามระยะกล้อง: ลดการสั่นของพื้นผิวที่ซ้อนกัน (z-fighting) เช่น เส้นถนน/พื้นไกลๆ
+  { const nn = Math.min(2.5, Math.max(0.25, camDist * 0.04)); if (Math.abs(nn - camera.near) > 0.05) { camera.near = nn; camera.updateProjectionMatrix(); } }
   const lightning = W.flash > 0.85 && prevFlash <= 0.85;
   prevFlash = W.flash;
   {
@@ -3707,7 +3733,8 @@ function loop(now) {
   controls.target.y = 0.4;
 
   controls.update();
-  if (now - lastShadowAt > (fpsAvg < 40 ? 120 : 66)) { lastShadowAt = now; renderer.shadowMap.needsUpdate = true; }
+  // เงาอัปเดตทุกเฟรมเมื่อ FPS ดี (กันเงารถ/คนสะดุดเป็นจังหวะ) ถ้าเครื่องช้าจึงเว้นเฟรม
+  if ((++shadowTick) % (fpsAvg >= 48 ? 1 : fpsAvg >= 30 ? 2 : 3) === 0) renderer.shadowMap.needsUpdate = true;
   if (useBloom) {
     bloomPass.strength = 0.15 + 0.7 * nightLevel;
     composer.render();
@@ -3734,11 +3761,13 @@ function loop(now) {
     fpsAvg = fpsNow;
     dynCool -= fpsTime;
     if (dynCool <= 0 && !menu.isOpen) {
+      // ปรับความละเอียดอัตโนมัติ: ลดเฉพาะตอนช้ามากจริงๆ (<28 FPS ติดกัน 2 รอบ) และไม่เพิ่มกลับเอง
+      // (การเปลี่ยนความละเอียดบ่อยๆ ทำให้ภาพกะพริบ)
       let ns = dynScale;
-      if (fpsNow < 38 && dynScale > 0.55) ns = Math.max(0.55, dynScale - 0.15);
-      else if (fpsNow > 58 && dynScale < 1) ns = Math.min(1, dynScale + 0.1);
+      if (fpsNow < 28 && dynScale > 0.75) { slowCount++; if (slowCount >= 2) { ns = Math.max(0.75, dynScale - 0.125); slowCount = 0; } }
+      else slowCount = 0;
       if (ns !== dynScale) {
-        dynScale = ns; dynCool = 2;
+        dynScale = ns; dynCool = 4;
         const r = Math.max(0.6, baseRatio * dynScale);
         renderer.setPixelRatio(r); renderer.setSize(window.innerWidth, window.innerHeight);
         if (composer) { composer.setPixelRatio(r); composer.setSize(window.innerWidth, window.innerHeight); }

@@ -602,6 +602,10 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     return true;
   }
 
+  const _vs = new THREE.Sphere();
+  // อยู่ในมุมมองกล้องหรือไม่ (เผื่อขอบ) — นอกจอไม่ต้องคำนวณท่าเดิน
+  function inView(a, fr) { if (!fr) return true; _vs.center.copy(a.obj.position); _vs.radius = 1.5; return fr.intersectsSphere(_vs); }
+
   function animate(a) {
     const s = Math.sin(a.phase);
     if (a.type === 'person') {
@@ -1020,16 +1024,24 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
 
     // รถเบรกเมื่อมีรถคันหน้าในเลนเดียวกัน (รวมรถที่จอดเสียหลังอุบัติเหตุ)
     const cars = agents.car;
+    // แบ่งรถตามช่อง ให้เช็คเฉพาะรถในช่องเดียวกัน/ช่องถัดไป (เดิมเทียบทุกคันกับทุกคัน O(n²))
+    const bucket = new Map();
+    for (const o of cars) { const k = o.x * 4096 + o.z; const l = bucket.get(k); if (l) l.push(o); else bucket.set(k, [o]); }
     for (const a of cars) {
       if (a.crash) { a.speedNow = 0; continue; }
       a.speedNow = a.speed * wetSlow * signalFactor(a);
       if (checkpoint && a.x === checkpoint.x && a.z === checkpoint.z) { a.speedNow *= 0.3; if (a.s > 0.4 && a.s < 0.5 && !a.chk) { a.chk = true; checkpoint.stopped++; } }
-      for (const o of cars) {
-        if (o === a || o.d[0] !== a.d[0] || o.d[1] !== a.d[1] || o.pair === a) continue;
-        let gap = null;
-        if (o.x === a.x && o.z === a.z && o.s > a.s) gap = o.s - a.s;
-        else if (o.x === a.x + a.d[0] && o.z === a.z + a.d[1]) gap = 1 - a.s + o.s;
-        if (gap !== null && gap < 0.6) a.speedNow = Math.min(a.speedNow, a.speed * clamp01((gap - 0.36) / 0.24));
+      const same = bucket.get(a.x * 4096 + a.z), nxt = bucket.get((a.x + a.d[0]) * 4096 + (a.z + a.d[1]));
+      for (let pass = 0; pass < 2; pass++) {
+        const lst = pass ? nxt : same;
+        if (!lst) continue;
+        for (const o of lst) {
+          if (o === a || o.d[0] !== a.d[0] || o.d[1] !== a.d[1] || o.pair === a) continue;
+          let gap = null;
+          if (o.x === a.x && o.z === a.z && o.s > a.s) gap = o.s - a.s;
+          else if (o.x === a.x + a.d[0] && o.z === a.z + a.d[1]) gap = 1 - a.s + o.s;
+          if (gap !== null && gap < 0.6) a.speedNow = Math.min(a.speedNow, a.speed * clamp01((gap - 0.36) / 0.24));
+        }
       }
     }
 
@@ -1050,8 +1062,8 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
           a.obj.visible = true;
           const near = d2 < NEAR2;
           if (a.near !== near) { a.near = near; for (const p of a.lodParts) p.visible = near; a.full.visible = !near; }
-          if (near) animate(a);
-        } else animate(a);
+          if (near && inView(a, env.frustum)) animate(a);
+        } else if (inView(a, env.frustum)) animate(a);
       }
       if (removed) agents[type] = arr.filter(a => !a.dead);
     }
