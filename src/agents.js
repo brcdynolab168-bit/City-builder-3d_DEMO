@@ -729,6 +729,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     if (!l || a.cool > 0) return;
     const e = l[(Math.random() * l.length) | 0];
     if (Math.random() >= 0.5 * e.v.w) return;
+    place(a);   // คนที่อยู่นอกจอไม่ได้ถูกจัดตำแหน่งทุกเฟรม: จัดก่อนเริ่มเดินเข้าร้าน
     const p = a.obj.position;
     a.visit = { v: e.v, dx: e.dx, dz: e.dz, t: 0, phase: 0, from: [p.x, p.y, p.z], to: [e.rx - N / 2 + 0.5 + e.dx * 0.86, p.y, e.rz - N / 2 + 0.5 + e.dz * 0.86], dwell: 8 + Math.random() * 24 };
   }
@@ -807,6 +808,13 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   const _vs = new THREE.Sphere();
   // อยู่ในมุมมองกล้องหรือไม่ (เผื่อขอบ) — นอกจอไม่ต้องคำนวณท่าเดิน
   function inView(a, fr) { if (!fr) return true; _vs.center.copy(a.obj.position); _vs.radius = 1.5; return fr.intersectsSphere(_vs); }
+  // อยู่ในจอไหม จากตำแหน่งบนตาราง (ไม่ต้องจัดตำแหน่งในฉากก่อน)
+  function onScreen(a, fr) {
+    if (!fr) return true;
+    _vs.center.set(a.x - N / 2 + 0.5 + a.d[0] * a.s, groundY(a.x, a.z), a.z - N / 2 + 0.5 + a.d[1] * a.s);
+    _vs.radius = 1.2;
+    return fr.intersectsSphere(_vs);
+  }
 
   function animate(a) {
     const s = Math.sin(a.phase);
@@ -948,6 +956,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     // ควัน + กรวยจราจร + ป้ายสามเหลี่ยม
     const props = new THREE.Group();
     root.add(props);
+    place(a); if (b) place(b);   // อาจอยู่นอกจอ (ตำแหน่งในฉากยังไม่อัปเดต)
     const base = (b || a).obj.position;
     const back = [-a.d[0], -a.d[1]];
     for (let k = 0; k < 3; k++) {
@@ -1643,8 +1652,12 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
         if (a.racer && !a.crash) { a.ttl -= dt; if (a.ttl <= 0) { removeAgent(a); removed = true; continue; } }
         if (a.kind !== 'car') a.speedNow = a.speed * signalFactor(a);
         if (!a.crash && sdt > 0 && !advance(a, sdt)) { removeAgent(a); removed = true; continue; }
-        place(a);
         if (type === 'person' && sdt > 0) maybeVisit(a, sdt);
+        if (a.visit) continue;
+        // นอกจอ: ยังเดิน/ขับต่อในระบบจำลอง แต่ไม่ต้องจัดตำแหน่ง ท่าทาง และแอนิเมชันในฉาก (รถที่เกิดเหตุจัดเสมอ)
+        if (!a.crash && !onScreen(a, env.frustum)) { a.obj.visible = false; continue; }
+        a.obj.visible = true;
+        place(a);
         if (a.role === 'rbike' && a.rig) stuntUpdate(a, dt, sdt);
         if (a.full && cam) {
           // ระยะจากกล้อง: ไกลมาก = ซ่อน, ไกล = โมเดลรวมชิ้นเดียว ไม่แกว่งแขนขา, ใกล้ = เคลื่อนไหวเต็ม

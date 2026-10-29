@@ -1900,6 +1900,12 @@ function buildVariant(bg, type, v, r, r2) {
 // ---------------------------------------------------------------
 const tileGroup = new THREE.Group();
 scene.add(tileGroup);
+// ฉากและกลุ่มช่องไม่เคยขยับ: ปิดการคำนวณ matrix อัตโนมัติ ไม่งั้นทุกเฟรม Three.js จะบังคับคำนวณตำแหน่งของทุกชิ้นในฉากใหม่หมด
+// (ของที่ขยับได้ เช่น รถ คน ต้นไม้โยก ยังอัปเดตตัวเองตามปกติ)
+scene.matrixAutoUpdate = false; tileGroup.matrixAutoUpdate = false;
+// ช่องที่ไม่มีอะไรขยับ: คำนวณตำแหน่งครั้งเดียวตอนสร้าง แล้วข้ามทั้งช่องในการอัปเดตทุกเฟรม (เรียกแบบบังคับเท่านั้นถึงจะคำนวณใหม่)
+function frozenMatrixWorld(force) { if (force) THREE.Object3D.prototype.updateMatrixWorld.call(this, true); }
+let tilesCullDirty = true;   // ต้องคำนวณใหม่ว่าช่องไหนอยู่ในกล้อง (ช่องถูกสร้างใหม่)
 const meshes = new Array(N * N).fill(null);
 const incidents = [];   // เหตุขัดข้องที่ยังไม่ได้ซ่อม (ไฟดับ/ท่อแตก/ถนนพัง)
 
@@ -2225,6 +2231,8 @@ function animateConstruction(dt, time) {
       if (!cs) { done.push(e); continue; }
       if (speed > 0 && !menu.isOpen) cs.p = Math.min(1, cs.p + dt * speed / cs.dur);
       if (cs.p >= 1) { done.push(e); continue; }
+      const sg = meshes[e.i];
+      if (sg) { _sp.center.copy(sg.position); _sp.radius = 3; if (!_fr.intersectsSphere(_sp)) continue; }
       updateSite(e, time);
     }
     for (const e of done) {
@@ -2410,13 +2418,17 @@ function buildTile(x, z) {
   } else {
     const spins = [];
     g.traverse(o => { if (o.userData.spin) spins.push(o); });
-    if (spins.length) spinTiles.set(i, spins);
+    if (spins.length) { spins.g = g; spinTiles.set(i, spins); }
     try { mergeStatic(g, new Set([...swayList.map(s => s.obj), ...spins])); } catch (err) { console.warn('merge ข้าม:', err); }
   }
   meshes[i] = g;
   if (incidents.length) applyBlackoutTile(i);   // สร้างช่องใหม่กลางย่านไฟดับ ให้ดับด้วย
   tileGroup.add(g);
   if (swayList.length) { swayList.g = g; swayTiles.set(i, swayList); }
+  g.updateMatrixWorld(true);
+  if (!swayList.length && !spinTiles.has(i) && !t.cs) g.updateMatrixWorld = frozenMatrixWorld;
+  g.userData.cullR = 1.6 + 0.75 * Math.max(t.fw || 1, t.fd || 1);   // รัศมีทดสอบกล้อง (อาคารหลายช่องใหญ่กว่า)
+  tilesCullDirty = true;
   swayList = null;
 }
 
@@ -4677,7 +4689,15 @@ function boatClick(e) {
   return true;
 }
 
-const _pv = new THREE.Matrix4(), _fr = new THREE.Frustum(), _sp = new THREE.Sphere();
+const _pv = new THREE.Matrix4(), _fr = new THREE.Frustum(), _sp = new THREE.Sphere(), _pvLast = new THREE.Matrix4();
+// ช่องที่อยู่นอกกล้องซ่อนทั้งช่อง (เผื่อขอบ ~2 ช่อง ให้เงาของตึกที่อยู่ริมจอยังทอดเข้ามาในจอได้)
+function cullTiles() {
+  for (const g of meshes) {
+    if (!g) continue;
+    _sp.center.set(g.position.x, g.position.y + 0.6, g.position.z); _sp.radius = g.userData.cullR + 2;
+    g.visible = _fr.intersectsSphere(_sp);
+  }
+}
 let swayFrame = 0, levelT = 0.5;
 let fpsAvg = 60;
 let cntCache = null, cntT = 0;
@@ -4712,6 +4732,7 @@ function loop(now) {
   lastTargetsAt -= dt;
   if (lastTargetsAt <= 0) { lastTargetsAt = 1; updateAgentTargets(); }
   _pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _fr.setFromProjectionMatrix(_pv);
+  if (tilesCullDirty || !_pvLast.equals(_pv)) { _pvLast.copy(_pv); tilesCullDirty = false; cullTiles(); }
   agents.update(dt, night, speed, { rain: weather.state.rain, dark: lampLevel, hospital: ccache.hospital + ccache.hospital_p > 0, police: policeCover(), accidentRate: 1 - 0.3 * policeCover(), drunk: ccache.pub > 0 ? clamp(nightLevel * 1.2, 0, 1) * Math.min(1, 0.4 + 0.3 * ccache.pub) * (agents.checkpointActive() ? 0.3 : 1) : 0, cam: camera.position, frustum: _fr });
   for (const ev of agents.takeEvents()) onAgentEvent(ev);
   animateFires(performance.now() / 1000);
@@ -4745,7 +4766,10 @@ function loop(now) {
   levelT -= dt;
   if (levelT <= 0) { levelT = 3; checkLevelUp(); }
   const spin = dt * Math.min(speed, 1) * (0.4 + 2.2 * W.wind);   // กังหันลมหมุนตามแรงลม หยุดเมื่อพักเกม
-  for (const arr of spinTiles.values()) for (const o of arr) o.rotation.z -= spin;
+  for (const arr of spinTiles.values()) {
+    _sp.center.copy(arr.g.position); _sp.radius = 2;
+    if (_fr.intersectsSphere(_sp)) for (const o of arr) o.rotation.z -= spin;
+  }
   aqOverlay.visible = currentTool === 'water' && currentVar.water === 'well';
   const camDist = camera.position.distanceTo(controls.target);
   // ระนาบใกล้ขยับตามระยะกล้อง: ลดการสั่นของพื้นผิวที่ซ้อนกัน (z-fighting) เช่น เส้นถนน/พื้นไกลๆ
