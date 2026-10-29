@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { pickVehicle, makeProp, hasProp, PROP_H } from './vehicles.js';
+import { pickVehicle } from './vehicles.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ---------------------------------------------------------------
@@ -373,11 +373,6 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     return r;
   }
   function makePerson() {
-    if (hasProp('person') && Math.random() < 0.3) {   // คนจากโมเดล .glb (ยืนนิ่ง ใช้ส่วนน้อยเพื่อไม่ให้หนัก)
-      const v = makeProp('person', PROP_H.person);
-      const g = new THREE.Group(); g.add(v);
-      return { obj: g, legs: [new THREE.Group(), new THREE.Group()], arms: [new THREE.Group(), new THREE.Group()], lodParts: [], full: null, near: true, glb: true };
-    }
     const G = personGeos(Math.floor(Math.random() * 28));
     const g = new THREE.Group();
     const bodyM = mesh(G.body, M.vc, false);
