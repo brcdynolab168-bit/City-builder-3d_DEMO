@@ -1653,6 +1653,7 @@ function buildVariant(bg, type, v, r, r2) {
 const tileGroup = new THREE.Group();
 scene.add(tileGroup);
 const meshes = new Array(N * N).fill(null);
+const incidents = [];   // เหตุขัดข้องที่ยังไม่ได้ซ่อม (ไฟดับ/ท่อแตก/ถนนพัง)
 
 // ---------------------------------------------------------------
 // อุปกรณ์ถนน: ไฟจราจร ทางม้าลาย เส้นหยุด ป้ายจราจร/ป้ายชื่อถนน
@@ -2017,6 +2018,7 @@ function buildTile(x, z) {
     const ph = Math.max(0.06, ty - tileMinH[i] + 0.08);
     put(g, boxGeo, M.plinth, 0, -ph / 2 + 0.005, 0, 0.99, ph, 0.99);
   }
+  addEdgeGuard(g, x, z, ty, t.t === 'road');
   const baseCount = g.children.length;
   const r2 = hash(x * 3 + 1, z * 5 + 2);
   const rot = () => facing(x, z, r);
@@ -2133,9 +2135,33 @@ function buildTile(x, z) {
     try { mergeStatic(g, new Set(swayList.map(s => s.obj))); } catch (err) { console.warn('merge ข้าม:', err); }
   }
   meshes[i] = g;
+  if (incidents.length) applyBlackoutTile(i);   // สร้างช่องใหม่กลางย่านไฟดับ ให้ดับด้วย
   tileGroup.add(g);
   if (swayList.length) { swayList.g = g; swayTiles.set(i, swayList); }
   swayList = null;
+}
+
+// รั้ว/ราวกันตกตามขอบช่องที่ติดน้ำ ขอบแผนที่ หรือหน้าผาเตี้ยๆ (ช่องข้างเคียงที่มีอะไรสร้างอยู่แล้วไม่ต้องมี)
+// ถนน/สะพาน = ราวเหล็กโปร่ง, ช่องอื่น = กำแพงเตี้ยมีราว
+function addEdgeGuard(g, x, z, ty, isRoad) {
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const nx = x + dx, nz = z + dz, inb = inBounds(nx, nz);
+    if (inb && state.tiles[nz * N + nx]) continue;
+    const nh = inb ? (tileIsWater[nz * N + nx] ? -9 : tileMaxH[nz * N + nx]) : terrainH(nx - N / 2 + 0.5, nz - N / 2 + 0.5);
+    if (ty - nh < 0.28) continue;
+    const alongX = dz !== 0, ex = dx * 0.465, ez = dz * 0.465;
+    const sx = alongX ? 0.96 : 0.03, sz = alongX ? 0.03 : 0.96;
+    if (isRoad) {
+      put(g, boxGeo, M.metal, ex, 0.15, ez, sx, 0.028, sz);
+      put(g, boxGeo, M.metal, ex, 0.095, ez, sx, 0.02, sz);
+      for (let k = -1.5; k <= 1.5; k++) put(g, boxGeo, M.concrete, alongX ? k * 0.3 : ex, 0.09, alongX ? ez : k * 0.3, 0.035, 0.18, 0.035);
+    } else {
+      put(g, boxGeo, M.concrete, ex, 0.08, ez, alongX ? 0.99 : 0.07, 0.16, alongX ? 0.07 : 0.99);
+      put(g, boxGeo, M.plinth, ex, 0.17, ez, alongX ? 0.99 : 0.09, 0.02, alongX ? 0.09 : 0.99);
+      put(g, boxGeo, M.metal, ex, 0.26, ez, sx, 0.02, sz);
+      for (let k = -1.5; k <= 1.5; k++) put(g, boxGeo, M.metal, alongX ? k * 0.3 : ex, 0.22, alongX ? ez : k * 0.3, 0.025, 0.1, 0.025);
+    }
+  }
 }
 
 function buildBigTile(g, x, z, tl, ty) {
@@ -2309,7 +2335,6 @@ function applyTool(x, z) {
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const adjRoad = (x, z) => isType(x + 1, z, 'road') || isType(x - 1, z, 'road') || isType(x, z + 1, 'road') || isType(x, z - 1, 'road');
 
-const incidents = [];   // เหตุขัดข้องที่ยังไม่ได้ซ่อม (ไฟดับ/ท่อแตก/ถนนพัง)
 function computeStats() {
   const s = {
     pop: 0, jobsCom: 0, jobsInd: 0, powerCap: 0, powerUse: 0, waterCap: 0, waterUse: 0,
@@ -2421,6 +2446,11 @@ function addNews(kind, ...parts) {
   if (kind === 'bad') toast(newsText(it));
   renderNews();
   return it;
+}
+// ---------- รายการโทรทัศน์: ตามไปทำข่าวเหตุการณ์ในเมือง (โหนกระแส ฯลฯ) ----------
+const tvShows = () => t('tv.shows').split('|');
+function tvNews(key, params = {}, delay = 25, honk = false) {
+  later(delay + Math.random() * 20, () => addNews('info', ['tv.air', { show: honk ? t('tv.honk') : pickOf(tvShows()) }], [key, params]));
 }
 const casPart = (inj, dead) => (dead ? ['news.cas.dead', { inj, dead }] : inj ? ['news.cas.inj', { inj }] : ['news.cas.none', {}]);
 
@@ -2586,6 +2616,34 @@ const IM = {
   white: new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.6 }),
   red: new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.6 }),
 };
+// ไฟดับทั้งย่าน: หน้าต่างตึก/บ้าน และไฟข้างถนนในรัศมี BLACKOUT_R ช่อง ดับลง (สลับเป็นวัสดุที่ไม่เรืองแสง) เมื่อซ่อมเสร็จสลับกลับ
+const BLACKOUT_R = 2.8;
+const darkMatCache = new Map();
+let litSet = null, litSetN = -1;
+const darkOf = m => { let d = darkMatCache.get(m); if (!d) { d = m.clone(); d.emissive = new THREE.Color(0x000000); d.emissiveIntensity = 0; darkMatCache.set(m, d); } return d; };
+const isLitMat = m => { if (!litSet || litSetN !== facadeMats.length) { litSet = new Set(facadeMats); litSet.add(M.lampGlow); litSetN = facadeMats.length; } return litSet.has(m); };
+function blackoutTile(i, on) {
+  const g = meshes[i];
+  if (!g) return;
+  g.traverse(o => {
+    if (!o.isMesh) return;
+    if (on) {
+      if (o.userData.litOrig) return;
+      const m = o.material;
+      if (Array.isArray(m)) { if (m.some(isLitMat)) { o.userData.litOrig = m; o.material = m.map(x => (isLitMat(x) ? darkOf(x) : x)); } }
+      else if (isLitMat(m)) { o.userData.litOrig = m; o.material = darkOf(m); }
+    } else if (o.userData.litOrig) { o.material = o.userData.litOrig; o.userData.litOrig = null; }
+  });
+}
+function tileInBlackout(i, inc) {
+  const tl = state.tiles[i], x = i % N, z = Math.floor(i / N);
+  const cx = x + (tl?.fw || 1) / 2, cz = z + (tl?.fd || 1) / 2;
+  return Math.hypot(cx - (inc.x + 0.5), cz - (inc.z + 0.5)) <= BLACKOUT_R;
+}
+function applyBlackoutTile(i) { if (incidents.some(o => o.kind === 'power' && tileInBlackout(i, o))) blackoutTile(i, true); }
+function blackoutZone(inc, on) {
+  for (let i = 0; i < meshes.length; i++) if (meshes[i] && tileInBlackout(i, inc)) blackoutTile(i, on);
+}
 const incDiscGeo = new THREE.CircleGeometry(1, 40), incRingGeo = new THREE.RingGeometry(0.97, 1, 40);
 function buildIncidentVisual(inc) {
   const g = new THREE.Group();
@@ -2593,7 +2651,7 @@ function buildIncidentVisual(inc) {
   const fl = (geo, mat, x, y, z, r) => { const m = add(geo, mat, x, y, z, r, r, r); m.rotation.x = -Math.PI / 2; return m; };
   inc.anim = { sparks: [], drops: [] };
   if (inc.kind === 'power') {
-    fl(incDiscGeo, IM.zone, 0, -0.02, 0, 2.6); fl(incRingGeo, IM.ring, 0, -0.015, 0, 2.6);   // ย่านที่ไฟดับ
+    fl(incDiscGeo, IM.zone, 0, -0.02, 0, BLACKOUT_R); fl(incRingGeo, IM.ring, 0, -0.015, 0, BLACKOUT_R);   // ย่านที่ไฟดับ
     add(cylGeo, IM.pole, 0.3, 0.28, 0.3, 0.025, 0.56, 0.025);
     add(boxGeo, IM.pole, 0.3, 0.5, 0.3, 0.22, 0.016, 0.016);
     add(boxGeo, IM.trafo, 0.3, 0.44, 0.3, 0.08, 0.1, 0.07);
@@ -2639,6 +2697,7 @@ function startIncident(kind) {
   const inc = { kind, x, z, t: 0, crew: 0, noCrew: false, cIdx: 0, dispatchAt: 6 + Math.random() * 8, deadline: 150 + Math.random() * 70, road: roadAt(x, z), state: 'open' };
   buildIncidentVisual(inc);
   incidents.push(inc);
+  if (kind === 'power') blackoutZone(inc, true);
   if (kind === 'road') agents.setHazard(x, z, 0.3);
   withAt(x, z, () => addNews('bad', ['news.inc.' + kind + '.start', { road: inc.road }]));
   audio.sfx('error');
@@ -2650,6 +2709,7 @@ function fixIncident(inc, how) {
   if (k < 0) return;
   incidents.splice(k, 1);
   scene.remove(inc.grp);
+  if (inc.kind === 'power') { blackoutZone(inc, false); for (const o of incidents) if (o.kind === 'power') blackoutZone(o, true); }
   if (inc.kind === 'road') agents.setHazard(inc.x, inc.z, 0);
   withAt(inc.x, inc.z, () => {
     if (how === 'self') addNews('warn', ['news.inc.' + inc.kind + '.selffix', {}]);
@@ -2681,6 +2741,7 @@ function tickIncidents() {
         inc.cIdx++;
         if (!has && inc.cIdx === 3) addNews('warn', ['news.inc.' + inc.kind + '.build', {}]);
         else addNews('warn', ['news.inc.' + inc.kind + '.c' + Math.floor(Math.random() * 4), { name: villagerName(), road: inc.road }]);
+        if (inc.cIdx === 3 && Math.random() < 0.7) tvNews('tv.inc.' + inc.kind, { road: inc.road }, 8, Math.random() < 0.4);
       }
     });
     // กันค้าง: ทีมซ่อมไม่มา/ไม่มีหน่วยงาน
@@ -2688,6 +2749,7 @@ function tickIncidents() {
   }
 }
 function animateIncidents(time) {
+  IM.zone.opacity = 0.04 + 0.26 * lampLevel;   // วงเงามืดเห็นชัดตอนกลางคืน
   for (const inc of incidents) {
     const A = inc.anim; if (!A) continue;
     if (A.beacon) A.beacon.visible = Math.sin(time * 8) > 0;
@@ -2698,7 +2760,7 @@ function animateIncidents(time) {
   }
 }
 function clearIncidents() {
-  for (const o of incidents) { scene.remove(o.grp); if (o.kind === 'road') agents.setHazard(o.x, o.z, 0); }
+  for (const o of incidents) { scene.remove(o.grp); if (o.kind === 'road') agents.setHazard(o.x, o.z, 0); if (o.kind === 'power') blackoutZone(o, false); }
   incidents.length = 0;
 }
 function maybeStartIncident(s, pShort, wShort) {
@@ -2769,7 +2831,7 @@ function cityEvents(s) {
     if (Math.random() < p) {
       const mi = pickOf(flam);
       startFire(mi);
-      withAt(mi % N, Math.floor(mi / N), () => addNews('bad', ['news.fire.start', { road: roadAt(mi % N, Math.floor(mi / N)) }]));
+      withAt(mi % N, Math.floor(mi / N), () => { const rd = roadAt(mi % N, Math.floor(mi / N)); addNews('bad', ['news.fire.start', { road: rd }]); if (Math.random() < 0.6) tvNews('tv.fire', { road: rd }, 15); });
       audio.sfx('error');
     }
   }
@@ -2828,11 +2890,27 @@ function cityEvents(s) {
       const gx = gi % N, gz = Math.floor(gi / N), road = roadAt(gx, gz);
       curAt = { x: gx, z: gz };
       addNews('bad', [state.tiles[gi]?.v === 'bank' ? 'news.robbery.bank' : 'news.robbery', { road }]);
+      if (Math.random() < 0.6) tvNews('tv.robbery', { road }, 30);
       const caught = ccache.police > 0 && Math.random() < 0.55 + 0.4 * policeCover(pop);
       later(18 + Math.random() * 15, () => addNews(caught ? 'good' : 'warn', [caught ? 'news.robbery.caught' : (ccache.police > 0 ? 'news.robbery.escape' : 'news.robbery.nopolice'), {}]));
       curAt = null;
       break;
     }
+  }
+
+  // ตารางรายการทีวีประจำเมือง: ข่าวเช้า/เที่ยง ละคร รายการคุย พยากรณ์ สลาก
+  flags.tv = (flags.tv ?? 60) - 1;
+  if (flags.tv <= 0 && pop > 60) {
+    flags.tv = 90 + Math.random() * 90;
+    const hr = tod * 24, P = pop.toLocaleString();
+    let pk;
+    if (state.day % 15 === 0 && flags.lotDay !== state.day) { flags.lotDay = state.day; pk = ['tv.lottery', { num: String(100000 + Math.floor(Math.random() * 900000)), name: villagerName() }]; }
+    else if (Math.random() < 0.3) pk = [W.rain > 0.5 ? 'tv.weather.rain' : 'tv.weather.sun', {}];
+    else if (hr >= 5 && hr < 9) pk = ['tv.morning', { pop: P }];
+    else if (hr >= 11 && hr < 14) pk = ['tv.noon', { pop: P }];
+    else if (hr >= 18.5 && hr < 22) pk = ['tv.drama', {}];
+    else pk = ['tv.talk', {}];
+    addNews('info', ['tv.air', { show: pk[0] === 'tv.talk' && Math.random() < 0.5 ? t('tv.honk') : pickOf(tvShows()) }], pk);
   }
 
   // ข่าวทั่วไปตามสิ่งที่มีในเมือง
@@ -2858,7 +2936,7 @@ function onAgentEvent(ev) {
   if (ev && ev.e === 'pack') {
     curAt = { x: ev.x, z: ev.z };
     const road = ev.axis === 'row' ? rowName(ev.z) : colName(ev.x);
-    addNews('warn', ['news.pack.' + ev.kind, { road, n: ev.n }]);
+    addNews('warn', [ev.kind === 'bike' && Math.random() < 0.6 ? 'news.pack.teen' : 'news.pack.' + ev.kind, { road, n: ev.n }]);
     audio.sfx('error');
     later(30 + Math.random() * 14, () => addNews(ccache.police > 0 ? 'good' : 'info', [ccache.police > 0 ? 'news.pack.caught' : 'news.pack.gone', {}]));
     curAt = null;
@@ -2881,13 +2959,23 @@ function onAgentEvent(ev) {
   S.acc++; S.inj += ev.injured; S.dead += ev.dead;
   if (ev.cause !== 'breakdown') audio.sfx('crash');
   const deadRecs = [];
-  for (let k = 0; k < ev.dead; k++) deadRecs.push(regAdd('death', { cause: ev.cause, age: ev.bike ? 16 + Math.random() * 30 : 18 + Math.random() * 52, road }));
-  addNews('bad', [ev.cause === 'race' && ev.bike ? 'news.crash.racebike' : 'news.crash.' + ev.cause, { road }], casPart(ev.injured, ev.dead),
+  for (let k = 0; k < ev.dead; k++) deadRecs.push(regAdd('death', { cause: ev.cause, age: ev.teen ? 14 + Math.random() * 3 : ev.bike ? 16 + Math.random() * 30 : 18 + Math.random() * 52, road }));
+  addNews('bad', [ev.wheelie ? 'news.crash.wheelie' : ev.cause === 'race' && ev.bike ? 'news.crash.racebike' : 'news.crash.' + ev.cause, { road }], casPart(ev.injured, ev.dead),
     ...(deadRecs.length ? [['news.dead.name', { name: nameOf(deadRecs[0]), age: deadRecs[0].age }]] : []));
   if (ev.clip) {
     later(5 + Math.random() * 6, () => addNews('info', [ev.cause === 'race' ? 'news.clip.race' : 'news.clip', { page: pickOf(PAGES), views: Math.round(12000 + Math.random() * 480000).toLocaleString() }]));
   }
   if (ev.cause === 'race' && ccache.police > 0) later(40 + Math.random() * 30, () => addNews('good', ['news.arrest', {}]));
+  // สื่อและชาวเน็ตตามข่าว
+  if (ev.teen && deadRecs.length) {
+    const nm = nameOf(deadRecs[0]), ag = deadRecs[0].age;
+    later(8 + Math.random() * 8, () => addNews('info', ['news.teen.angel', { name: nm, age: ag }]));
+    tvNews('tv.teen.field', { road, name: nm, age: ag }, 25, true);
+    tvNews('tv.teen.host', { n: 20 + Math.floor(Math.random() * 140) }, 55, true);
+    later(85 + Math.random() * 25, () => addNews('info', ['news.teen.funeral', { name: nm, age: ag }]));
+    later(110 + Math.random() * 30, () => addNews('warn', ['news.teen.campaign', {}]));
+  } else if (ev.teen) tvNews('tv.teen.hurt', { road }, 25, true);
+  else if (ev.dead && Math.random() < 0.5) tvNews('tv.acc', { road }, 30);
   curAt = null;
 }
 

@@ -219,7 +219,21 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     }
     lamps.push(part(boxGeo, 0xfff6d8, 0, 0.118, 0.079, 0.03, 0.02, 0.008));
     lamps.push(part(boxGeo, 0xdd2a1a, 0, 0.078, -0.125, 0.026, 0.014, 0.008));
-    return (bikeCache[key] = { body: merge([...base, ...sit]), lie: merge([...base, ...lie]), lamps: merge(lamps) });
+    return (bikeCache[key] = { body: merge([...base, ...sit]), lie: merge([...base, ...lie]), bare: merge(base), lamps: merge(lamps) });
+  }
+  // คนขับที่กระเด็นมานอนบนถนนหลังล้ม (ใช้ตอนรถซิ่งล้ม)
+  const riderCache = [];
+  function riderLieGeo(i) {
+    i %= BIKE_COLS.length;
+    if (riderCache[i]) return riderCache[i];
+    const [, jacket, helmet] = BIKE_COLS[i], L = [];
+    L.push(part(boxGeo, jacket, 0, 0.012, 0, 0.044, 0.024, 0.1));
+    L.push(part(sphGeo, helmet, 0, 0.02, 0.07, 0.04, 0.04, 0.042));
+    for (const sx of [-1, 1]) {
+      L.push(part(boxGeo, 0x2f3e4e, sx * 0.014, 0.01, -0.09, 0.016, 0.016, 0.085, 0, sx * 0.15));
+      L.push(part(boxGeo, jacket, sx * 0.035, 0.012, 0.035, 0.011, 0.011, 0.08, 0, sx * -0.5));
+    }
+    return (riderCache[i] = merge(L));
   }
   function makeBike(grab = false, stunt = false) {
     const gm = glbWrap('bikes');
@@ -227,7 +241,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       const rig = new THREE.Group(); rig.position.set(0, 0.03, -0.085);
       const inner = new THREE.Group(); inner.position.set(0, -0.03, 0.085);
       inner.add(gm.obj.children[0]); rig.add(inner); gm.obj.add(rig);
-      return { ...gm, rig, bodyMesh: dummyMesh(), lieMesh: null, isBike: true, pitch: 0 };
+      return { ...gm, rig, bodyMesh: dummyMesh(), lieMesh: null, bareMesh: null, isBike: true, pitch: 0 };
     }
     const G = bikeGeos((Math.random() * 12) | 0, grab);
     const g = new THREE.Group();
@@ -239,9 +253,10 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     const body = mesh(G.body, M.vc, false);
     inner.add(body, lamps);
     let lie = null;
-    if (stunt) { lie = mesh(G.lie, M.vc, false); lie.visible = false; inner.add(lie); }
+    let bare = null;
+    if (stunt) { lie = mesh(G.lie, M.vc, false); lie.visible = false; inner.add(lie); bare = mesh(G.bare, M.vc, false); bare.visible = false; inner.add(bare); }
     rig.add(inner); g.add(rig);
-    return { obj: g, rig, bodyMesh: body, lieMesh: lie, headMesh: lamps, tailMesh: lamps, isBike: true, pitch: 0 };
+    return { obj: g, rig, bodyMesh: body, lieMesh: lie, bareMesh: bare, headMesh: lamps, tailMesh: lamps, isBike: true, pitch: 0 };
   }
 
   // ---------- รถเมล์ ----------
@@ -757,13 +772,22 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     const cars = agents.car.filter(c => !c.crash && c.s > 0.42 && c.s < 0.78 && tileType(c.x, c.z) === 'road');
     if (cars.length < 1) return false;
     const racerCars = cars.filter(c => c.racer);
-    const a = racerCars.length && Math.random() < 0.65 ? pick(racerCars) : pick(cars);
+    const whRacers = racerCars.filter(c => c.stunt === 'wheelie');
+    const a = whRacers.length && Math.random() < 0.8 ? pick(whRacers) : racerCars.length && Math.random() < 0.65 ? pick(racerCars) : pick(cars);
     // รถคันหลังที่ชนท้าย (ในช่องเดียวกัน เลนเดียวกัน)
     const b = agents.car.find(o => o !== a && !o.crash && o.d[0] === a.d[0] && o.d[1] === a.d[1] && o.x === a.x && o.z === a.z && o.s < a.s && o.s > a.s - 0.45);
     const victims = [a];
     a.crash = { yaw: (Math.random() < 0.5 ? -1 : 1) * (0.15 + Math.random() * 0.2), roll: 0.03, t: 0 };
     a.lat = 0.19;
-    if (b) { b.s = Math.max(0, a.s - 0.33); b.crash = { yaw: (Math.random() < 0.5 ? -1 : 1) * (0.1 + Math.random() * 0.25), roll: -0.03, t: 0 }; victims.push(b); }
+    const tipOver = v => {   // มอเตอร์ไซค์ซิ่งล้มคว่ำ คนขับหลุดจากรถ
+      if (!(v.racer && v.isBike && v.bareMesh)) return false;
+      v.flip = v.stunt === 'wheelie'; v.stunt = null;
+      v.crash.roll = (Math.random() < 0.5 ? -1 : 1) * (1.15 + Math.random() * 0.3); v.crash.yaw *= 2;
+      v.bodyMesh.visible = false; if (v.lieMesh) v.lieMesh.visible = false; v.bareMesh.visible = true;
+      return true;
+    };
+    const teenBike = tipOver(a);
+    if (b) { b.s = Math.max(0, a.s - 0.33); b.crash = { yaw: (Math.random() < 0.5 ? -1 : 1) * (0.1 + Math.random() * 0.25), roll: -0.03, t: 0 }; victims.push(b); tipOver(b); }
     // สาเหตุและผู้ได้รับผลกระทบ
     const rain = lastEnv.rain, night = lastEnv.night;
     let cause;
@@ -799,9 +823,10 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     });
     const brk = cause === 'breakdown';
     accident = { victims, props, puffs, t: 0, state: 'crash', amb: null, ambTimer: 6 + Math.random() * 6, tx: a.x, tz: a.z, hold: 0, noAmb: brk, tow: null, towAt: brk ? 7 + Math.random() * 5 : 18 + Math.random() * 8, towDone: false, noTow: false };
+    accident.teen = teenBike;
     accident.dead = dead; accident.coronerAt = 10 + Math.random() * 5; accident.bodiesTaken = !dead;
     buildScene(accident, a, b, dead, injured);
-    events.push({ e: 'crash', cause, injured, dead, x: a.x, z: a.z, axis: a.d[0] !== 0 ? 'row' : 'col', clip: Math.random() < 0.5, bike: !!a.isBike, racer: !!a.racer });
+    events.push({ e: 'crash', cause, injured, dead, x: a.x, z: a.z, axis: a.d[0] !== 0 ? 'row' : 'col', clip: Math.random() < 0.5, bike: !!a.isBike, racer: !!a.racer, teen: teenBike, wheelie: !!a.flip });
     return true;
   }
 
@@ -971,6 +996,21 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       ac.sceneG.add(g);
       ac.bodies.push({ g, from: g.position.clone(), yaw: g.rotation.y });
     }
+    // เด็กแว้นที่กระเด็นออกจากรถ นอนอยู่บนถนน (ผู้เสียชีวิตถูกคลุมผ้าขาวทีหลัง)
+    ac.riders = [];
+    if (ac.teen) {
+      const nr = Math.min(3, dead + Math.min(2, injured));
+      for (let k = 0; k < nr; k++) {
+        const g = mesh(riderLieGeo((Math.random() * 12) | 0), M.vc, false);
+        const along = 0.34 + 0.13 * k, lat = (k % 2 ? -1 : 1) * (0.05 + Math.random() * 0.04);
+        const to = new THREE.Vector3(base.x + d[0] * along + perp[0] * lat, base.y - 0.03 + 0.003, base.z + d[1] * along + perp[1] * lat);
+        g.position.set(base.x, to.y, base.z); g.rotation.y = Math.atan2(d[0], d[1]) + (Math.random() - 0.5) * 1.2;
+        ac.sceneG.add(g);
+        const isDead = k < dead;
+        if (isDead && ac.bodies[k]) ac.bodies[k].g.visible = false;
+        ac.riders.push({ g, from: new THREE.Vector3(base.x, to.y, base.z), to, dead: isDead, body: isDead ? ac.bodies[k] : null, swapped: false });
+      }
+    }
     // คนมุงดู: ยืนริมทางเท้าสองฝั่ง หันเข้าหาจุดเกิดเหตุ ทยอยมา
     ac.crowd = [];
     const n = Math.min(11, dead ? 6 + dead * 2 + Math.floor(Math.random() * 3) : (injured > 1 ? 3 : 1) + Math.floor(Math.random() * 3));
@@ -1001,6 +1041,13 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   }
   function updateScene(ac, sdt, nowT) {
     if (!ac.sceneG) return;
+    if (ac.riders) for (const r of ac.riders) {
+      const u = clamp01(ac.t / 0.9), e = 1 - (1 - u) * (1 - u);
+      r.g.position.set(r.from.x + (r.to.x - r.from.x) * e, r.to.y + Math.sin(u * Math.PI) * 0.12, r.from.z + (r.to.z - r.from.z) * e);
+      r.g.rotation.x = u < 1 ? u * 6 : 0;
+      if (r.dead && !r.swapped && ac.t > 7) { r.swapped = true; r.g.visible = false; if (r.body && !ac.bodiesTaken) r.body.g.visible = true; }
+      if (!r.dead && ac.state === 'leave' && ac.hold > 1) r.g.visible = false;
+    }
     for (const c of ac.crowd) {
       const o = c.p.obj;
       if (c.gone) continue;
@@ -1209,7 +1256,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
 
   // ท่าโชว์ของเด็กแว้น: ยกหน้า (wheelie) / นอนขับ / ขับปกติ สลับกันเป็นช่วงๆ
   function stuntUpdate(a, dt, sdt) {
-    if (a.crash) { a.rig.rotation.x = 0; return; }
+    if (a.crash) { a.rig.rotation.x = a.flip ? -1.15 : 0; return; }
     a.stuntT -= dt;
     if (a.stuntT <= 0) {
       if (a.stunt) { a.stunt = null; a.stuntT = 1.5 + Math.random() * 3; }
