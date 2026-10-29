@@ -13,7 +13,7 @@ export const FOOT = {
   'service:temple': [3, 3], 'service:church': [2, 3], 'service:mosque': [3, 3],
   'com:mall': [3, 2], 'com:market': [2, 2], 'com:dealer': [2, 1], 'com:fishing': [1, 1],
   'com:parking': [2, 1], 'service:metro': [2, 1], 'ind:honda': [3, 3], 'ind:toyota': [4, 3], 'ind:bmw': [3, 3], 'ind:shindengen': [2, 2], 'ind:keihin': [2, 2], 'ind:denso': [3, 2],
-  'power:wind': [1, 1], 'power:hydro': [2, 1], 'power:bio': [2, 1], 'water:well': [1, 1], 'com:ev': [1, 1], 'service:freight': [3, 2],
+  'power:wind': [1, 1], 'power:hydro': [2, 1], 'power:bio': [2, 1], 'water:well': [1, 1], 'com:ev': [1, 1], 'service:freight': [3, 2], 'service:cemetery': [2, 2], 'com:cafe': [1, 1], 'com:game': [1, 1], 'com:pharmacy': [1, 1], 'com:pet': [1, 1],
   'farm:rice': [3, 2], 'farm:crop': [2, 2], 'farm:barn': [3, 2], 'farm:orchard': [2, 2],
   'park:plaza': [2, 2], 'park:play': [1, 1], 'park:sports': [2, 2], 'park:garden': [3, 3],
   'park:fountain': [1, 1], 'park:flowers': [1, 1], 'park:pond': [1, 1], 'park:pavilion': [1, 1], 'park:picnic': [1, 1],
@@ -55,6 +55,13 @@ export function createBig(c) {
     flower: [0xe91e63, 0xffeb3b, 0xff7043, 0xab47bc, 0xffffff].map(x => std(x, { roughness: 0.8 })),
     tarp: [0xe53935, 0x1e88e5, 0x43a047, 0xfb8c00, 0x8e24aa, 0xfdd835].map(x => std(x, { roughness: 0.8, side: THREE.DoubleSide })),
     tire: std(0x1a1a1a, { roughness: 0.9 }),
+    stone: std(0x9a9a96, { roughness: 0.85 }),
+    cafeWall: std(0x6d4c3d, { roughness: 0.8 }), cream: std(0xf3e6cf, { roughness: 0.7 }),
+    gameWall: std(0x23213a, { roughness: 0.6 }),
+    neonPink: std(0xff3d9a, { emissive: 0xff3d9a, emissiveIntensity: 0.9 }), neonCyan: std(0x2de2ff, { emissive: 0x2de2ff, emissiveIntensity: 0.9 }),
+    neonGreen: std(0x18c964, { emissive: 0x18c964, emissiveIntensity: 0.9 }),
+    petWall: std(0xffd8a8, { roughness: 0.75 }), aquarium: std(0x4fc3f7, { roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.7 }),
+    stoneDark: std(0x5f605d, { roughness: 0.8 }),
   };
   const domeGeo = new THREE.SphereGeometry(0.5, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
   const sphereGeo = new THREE.SphereGeometry(0.5, 16, 10);
@@ -800,6 +807,59 @@ export function createBig(c) {
     lamp(bg, -0.4, 0.3, 0.2);
   }
 
+  // ----- ร้านเล็ก 1×1: ตัวอาคาร + กระจกหน้าร้าน + ประตู + ป้าย (คืนตำแหน่ง z ของหน้าร้าน) -----
+  function shopShell(bg, wall, trim, sign, signBg, signFg, h = 0.46) {
+    const fz = -0.18 + 0.252;
+    ground(bg, 1, 1, M.walk);
+    put(bg, boxGeo, wall, 0, y0 + h / 2, -0.18, 0.78, h, 0.5);
+    put(bg, boxGeo, trim, 0, y0 + h + 0.015, -0.18, 0.82, 0.03, 0.54);
+    put(bg, boxGeo, M.glassShop, -0.08, y0 + 0.12, fz + 0.004, 0.5, 0.17, 0.008);
+    put(bg, boxGeo, M.door, 0.27, y0 + 0.09, fz + 0.004, 0.11, 0.16, 0.01);
+    signAt(bg, sign, signBg, signFg, 0, y0 + h - 0.08, fz + 0.006, 0.7, 0.12, 36);
+    return fz;
+  }
+  function cafe(bg) {
+    const fz = shopShell(bg, MT.cafeWall, MT.cream, t('sign.cafe'), '#3e2723', '#f3e6cf');
+    put(bg, boxGeo, MT.cream, 0, y0 + 0.24, fz + 0.08, 0.78, 0.012, 0.16).rotation.x = 0.35;   // กันสาดผ้า
+    for (const x of [-0.25, 0.1]) {                                                            // โต๊ะนั่งหน้าร้าน + ร่ม
+      put(bg, cylGeo, M.white, x, y0 + 0.05, fz + 0.24, 0.1, 0.01, 0.1);
+      put(bg, cylGeo, M.metal, x, y0 + 0.025, fz + 0.24, 0.012, 0.05, 0.012);
+      for (const sx of [-1, 1]) put(bg, boxGeo, MT.woodDark, x + sx * 0.08, y0 + 0.03, fz + 0.24, 0.04, 0.012, 0.04);
+      put(bg, cylGeo, M.metal, x, y0 + 0.12, fz + 0.24, 0.006, 0.18, 0.006);
+      put(bg, coneGeo, MT.tarp[2], x, y0 + 0.22, fz + 0.24, 0.2, 0.05, 0.2);
+    }
+    put(bg, cylGeo, M.white, 0.32, y0 + 0.4, fz + 0.03, 0.06, 0.05, 0.06);                    // ป้ายแก้วกาแฟ
+    shrub(bg, -0.38, fz + 0.36, 0.08);
+  }
+  function gameShop(bg) {
+    const fz = shopShell(bg, MT.gameWall, MT.neonCyan, t('sign.game'), '#120f24', '#2de2ff');
+    put(bg, boxGeo, MT.neonPink, 0, y0 + 0.005, fz + 0.002, 0.78, 0.012, 0.012);              // ไฟนีออนขอบล่าง
+    for (const sx of [-1, 1]) put(bg, boxGeo, MT.neonPink, sx * 0.39, y0 + 0.23, fz + 0.002, 0.012, 0.44, 0.012);
+    for (const x of [-0.26, -0.08]) {                                                          // ตู้เกมหลังกระจก
+      put(bg, boxGeo, MT.gameWall, x, y0 + 0.08, fz - 0.05, 0.08, 0.15, 0.06);
+      put(bg, boxGeo, x < -0.2 ? MT.neonCyan : MT.neonPink, x, y0 + 0.12, fz - 0.018, 0.06, 0.05, 0.004);
+    }
+    put(bg, boxGeo, MT.neonGreen, -0.3, y0 + 0.4, fz + 0.03, 0.08, 0.05, 0.01);                // จอยเกมนีออน
+  }
+  function pharmacy(bg) {
+    const fz = shopShell(bg, M.white, MT.neonGreen, t('sign.pharmacy'), '#0b8a43', '#ffffff');
+    // ป้ายกากบาทสีเขียวเรืองแสงยื่นออกจากผนัง
+    put(bg, boxGeo, M.metal, 0.36, y0 + 0.42, fz + 0.04, 0.01, 0.01, 0.08);
+    put(bg, boxGeo, MT.neonGreen, 0.36, y0 + 0.42, fz + 0.09, 0.016, 0.11, 0.035);
+    put(bg, boxGeo, MT.neonGreen, 0.36, y0 + 0.42, fz + 0.09, 0.016, 0.035, 0.11);
+    for (let k = 0; k < 3; k++) put(bg, boxGeo, M.white, -0.08, y0 + 0.06 + k * 0.05, fz - 0.03, 0.46, 0.008, 0.05);   // ชั้นวางยา
+    for (let k = 0; k < 6; k++) put(bg, boxGeo, MT.tarp[k % MT.tarp.length], -0.28 + k * 0.08, y0 + 0.075, fz - 0.03, 0.03, 0.025, 0.03);
+  }
+  function petShop(bg) {
+    const fz = shopShell(bg, MT.petWall, MT.orangeRoof, t('sign.pet'), '#e65100', '#ffffff');
+    put(bg, boxGeo, MT.aquarium, -0.22, y0 + 0.1, fz - 0.03, 0.2, 0.1, 0.05);                 // ตู้ปลาโชว์หน้าร้าน
+    put(bg, boxGeo, M.metal, -0.22, y0 + 0.045, fz - 0.03, 0.21, 0.01, 0.06);
+    put(bg, boxGeo, MT.wood, 0.05, y0 + 0.05, fz + 0.2, 0.12, 0.08, 0.1);                     // บ้านหมาโชว์
+    put(bg, coneGeo, MT.redRoof, 0.05, y0 + 0.11, fz + 0.2, 0.15, 0.05, 0.13).rotation.y = Math.PI / 4;
+    for (let k = 0; k < 3; k++) put(bg, boxGeo, MT.tarp[k + 1], -0.3 + k * 0.1, y0 + 0.03, fz + 0.18, 0.07, 0.05, 0.05);   // กระสอบอาหารสัตว์
+    put(bg, sphereGeo, MT.orangeRoof, 0.3, y0 + 0.4, fz + 0.02, 0.07, 0.07, 0.015);            // ป้ายรอยเท้า
+  }
+
   // =============================================================
   // สวนเล็ก 1×1 หลายแบบ
   // =============================================================
@@ -1223,7 +1283,49 @@ export function createBig(c) {
     lamp(bg, -0.2, 0.75, 0.4); lamp(bg, 1.4, 0.75, 0.4);
   }
 
+  // สุสาน: หลุมศพหลายแบบ (ป้ายหิน / ไม้กางเขน / ฮวงซุ้ยจีน) กำแพงเตี้ย ประตูหน้า ศาลาพักญาติ ต้นไม้ร่มรื่น
+  function cemetery(bg) {
+    ground(bg, 2, 2, M.park);
+    put(bg, boxGeo, M.path, 0, y0 + 0.01, 0.1, 0.16, 0.01, 1.7);                          // ทางเดินกลางจากประตู
+    put(bg, boxGeo, M.path, 0, y0 + 0.01, -0.2, 1.7, 0.01, 0.12);
+    // กำแพงเตี้ยรอบ เว้นช่องประตูด้านหน้า (+z)
+    for (const sx of [-1, 1]) put(bg, boxGeo, MT.wall, sx * 0.94, y0 + 0.04, 0, 0.04, 0.08, 1.9);
+    put(bg, boxGeo, MT.wall, 0, y0 + 0.04, -0.94, 1.9, 0.08, 0.04);
+    for (const sx of [-1, 1]) {
+      put(bg, boxGeo, MT.wall, sx * 0.56, y0 + 0.04, 0.94, 0.78, 0.08, 0.04);
+      put(bg, boxGeo, MT.stoneDark, sx * 0.13, y0 + 0.1, 0.94, 0.06, 0.2, 0.06);          // เสาประตู
+    }
+    put(bg, boxGeo, MT.stoneDark, 0, y0 + 0.21, 0.94, 0.32, 0.03, 0.06);
+    signAt(bg, t('sign.cemetery'), '#4e4e4e', '#ffffff', 0, y0 + 0.25, 0.975, 0.4, 0.07, 24);
+    // แถวหลุมศพ
+    let k = 0;
+    for (let row = 0; row < 4; row++) for (let col = 0; col < 6; col++) {
+      const x = -0.78 + col * 0.31 + (col >= 3 ? 0.08 : -0.08), z = -0.72 + row * 0.38 + (row >= 2 ? 0.1 : 0);
+      if (row === 3 && Math.abs(x) < 0.4) continue;                                        // เว้นที่ให้ศาลา/ทางเข้า
+      const kind = (row * 7 + col * 3 + k++) % 5;
+      put(bg, boxGeo, M.concrete, x, y0 + 0.008, z + 0.04, 0.13, 0.014, 0.17);              // แท่นหลุม
+      if (kind === 0) {                                                                       // ฮวงซุ้ยจีน: เนินโค้งมีกำแพงเกือกม้า
+        put(bg, sphereGeo, MT.stone, x, y0 + 0.012, z + 0.03, 0.12, 0.07, 0.12);
+        put(bg, torusGeo, MT.stoneDark, x, y0 + 0.02, z + 0.03, 0.16, 0.16, 0.12).rotation.x = Math.PI / 2;
+        put(bg, boxGeo, MT.stoneDark, x, y0 + 0.05, z - 0.03, 0.08, 0.07, 0.015);
+      } else if (kind === 1) {                                                                // ไม้กางเขน
+        put(bg, boxGeo, M.white, x, y0 + 0.07, z, 0.014, 0.12, 0.014);
+        put(bg, boxGeo, M.white, x, y0 + 0.1, z, 0.06, 0.014, 0.014);
+      } else {                                                                                // ป้ายหินโค้ง
+        put(bg, boxGeo, kind === 2 ? MT.stoneDark : MT.stone, x, y0 + 0.045, z, 0.07, 0.07, 0.016);
+        put(bg, cylGeo, kind === 2 ? MT.stoneDark : MT.stone, x, y0 + 0.08, z, 0.07, 0.016, 0.07).rotation.x = Math.PI / 2;
+      }
+      if (kind === 3) put(bg, sphereGeo, MT.flower[(row + col) % MT.flower.length], x + 0.04, y0 + 0.02, z + 0.05, 0.03, 0.025, 0.03);   // ดอกไม้เยี่ยมหลุม
+    }
+    // ศาลาพักญาติ + กระถางธูป
+    for (const [x, z] of [[-0.18, 0.38], [0.18, 0.38], [-0.18, 0.66], [0.18, 0.66]]) put(bg, cylGeo, MT.woodDark, x, y0 + 0.11, z, 0.02, 0.22, 0.02);
+    put(bg, coneGeo, MT.redRoof, 0, y0 + 0.28, 0.52, 0.56, 0.12, 0.42).rotation.y = Math.PI / 4;
+    put(bg, cylGeo, MT.gold, 0, y0 + 0.03, 0.52, 0.07, 0.05, 0.07);
+    tree(bg, -0.8, 0.75, 1.1, 0.2); tree(bg, 0.8, 0.75, 1.0, 0.7); tree(bg, -0.82, -0.82, 1.2, 0.4); tree(bg, 0.82, -0.82, 0.9, 0.9);
+  }
+
   const MAP = {
+    'service:cemetery': cemetery, 'com:cafe': cafe, 'com:game': gameShop, 'com:pharmacy': pharmacy, 'com:pet': petShop,
     'power:wind': wind, 'power:hydro': hydro, 'power:bio': bio, 'water:well': well, 'com:ev': evStation, 'service:freight': freight,
     'com:parking': parking, 'service:metro': metro,
     'ind:honda': honda, 'ind:toyota': toyota, 'ind:bmw': bmw, 'ind:shindengen': shindengen, 'ind:keihin': keihin, 'ind:denso': denso,

@@ -93,6 +93,10 @@ const VARIANTS = {
     { k: 'fishing', label: 'ร้านอุปกรณ์ตกปลา', cost: 240,  jobs: 5, power: 2, water: 1 },
     { k: 'pub',     label: 'สถานบันเทิง',      cost: 1300, jobs: 28, power: 12, water: 5, tax: 20, note: '2×1 ช่อง กลางคืนคึกคัก ระวังเมาแล้วขับ' },
     { k: 'tuner',   label: 'ร้านแต่งรถ',       cost: 850,  jobs: 12, power: 6, water: 2, tax: 9, note: '2×1 ช่อง รถซิ่งมารวมตัว' },
+    { k: 'cafe',     label: 'ร้านกาแฟ',          cost: 220,  jobs: 5,  power: 3, water: 3, tax: 3, note: 'คนแวะซื้อกาแฟตอนเช้า' },
+    { k: 'pharmacy', label: 'ร้านขายยา',         cost: 260,  jobs: 4,  power: 2, water: 1, tax: 3, note: 'ช่วยเรื่องสุขภาพเบื้องต้น' },
+    { k: 'game',     label: 'ร้านเกม',           cost: 300,  jobs: 4,  power: 6, water: 1, tax: 4, note: 'ที่เที่ยวของวัยรุ่นตอนเย็น' },
+    { k: 'pet',      label: 'ร้านอุปกรณ์สัตว์เลี้ยง', cost: 240, jobs: 4, power: 2, water: 2, tax: 2, note: 'คนเลี้ยงหมาแมวมากขึ้น' },
     { k: 'ev',      label: 'สถานีชาร์จ EV',     cost: 450,  jobs: 3,  power: 14, water: 0, tax: 5, note: 'คนหันมาใช้รถยนต์ไฟฟ้า' },
   ],
   park: [
@@ -160,6 +164,7 @@ const VARIANTS = {
     { k: 'church',   label: 'โบสถ์คริสต์',     cost: 900,  jobs: 6, power: 3, water: 3, upkeep: 6, note: '2×3 ช่อง' },
     { k: 'drag',     label: 'สนามแข่งรถคลอง 5', cost: 3200, jobs: 30, power: 14, water: 6, upkeep: 22, tax: 30, note: '3×7 ช่อง สนามแข่งถูกกฎหมาย ลดรถซิ่งบนถนน' },
     { k: 'mosque',   label: 'มัสยิด',          cost: 1200, jobs: 6, power: 3, water: 4, upkeep: 8, note: '3×3 ช่อง' },
+    { k: 'cemetery', label: 'สุสาน',           cost: 700,  jobs: 4, power: 1, water: 2, upkeep: 4, note: '2×2 ช่อง ที่ฝังศพ ญาติมาเยี่ยม' },
     { k: 'freight',  label: 'สถานีขนส่งสินค้า', cost: 2600, jobs: 45, power: 8, water: 4, upkeep: 18, note: '3×2 ช่อง ส่งออก/นำเข้าสินค้า' },
   ],
   // ถนน: ซอยแคบ / ถนน 2 เลน / ถนนสายหลัก 4 เลน (แซงได้) / ทางหลวง 4 เลน มีแบริเออร์กลาง (คนเดินไม่ได้ อาคารใช้เป็นทางเข้าไม่ได้)
@@ -175,13 +180,13 @@ const DEFAULT_V = { res: 'zone', com: 'zone', ind: 'zone', power: 'gas', water: 
 const UNLOCK_LV = {
   'road:avenue': 2, 'road:highway': 3,
   'res:twin': 2, 'res:apt': 2, 'res:condo': 3, 'res:tower': 4, 'res:sky': 5,
-  'com:lotus': 2, 'com:market': 2, 'com:dealer': 2, 'com:gold': 2, 'com:parking': 2, 'com:ev': 2,
+  'com:game': 2, 'com:pet': 2, 'com:lotus': 2, 'com:market': 2, 'com:dealer': 2, 'com:gold': 2, 'com:parking': 2, 'com:ev': 2,
   'com:bank': 3, 'com:mall': 3, 'com:pub': 3, 'com:tuner': 3,
   'ind:shindengen': 3, 'ind:keihin': 3, 'ind:honda': 3, 'ind:denso': 4, 'ind:toyota': 4, 'ind:bmw': 5,
   'farm:barn': 2, 'park:plaza': 2, 'park:sports': 2, 'park:garden': 3,
   'power:wind': 2, 'power:bio': 2, 'power:thermal': 3, 'power:hydro': 3, 'water:big': 3,
   'service:hospital': 2, 'service:police': 2, 'service:fire': 2, 'service:taxi': 2, 'service:grab': 2, 'service:pea': 2, 'service:pwa': 2,
-  'service:temple': 2, 'service:mosque': 2, 'service:church': 2,
+  'service:temple': 2, 'service:mosque': 2, 'service:church': 2, 'service:cemetery': 2,
   'service:dohw': 3, 'service:school_p': 3, 'service:hospital_p': 3, 'service:bus': 3, 'service:freight': 3,
   'service:bu': 4, 'service:metro': 4, 'service:drag': 4,
 };
@@ -2865,7 +2870,7 @@ const later = (sec, fn) => { const at = curAt; sched.push({ t: sec, fn: at ? () 
 const roadAt = (x, z) => (Math.random() < 0.5 ? rowName(z) : colName(x));
 
 function civicCounts() {
-  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, pea: 0, pwa: 0, dohw: 0, gold: [], flammable: [], parking: 0, metro: 0, honda: 0, toyota: 0, bmw: 0, shindengen: 0, keihin: 0, denso: 0, temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0, ev: 0, freight: 0 };
+  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, pea: 0, pwa: 0, dohw: 0, gold: [], flammable: [], parking: 0, metro: 0, honda: 0, toyota: 0, bmw: 0, shindengen: 0, keihin: 0, denso: 0, temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0, ev: 0, freight: 0, cafe: 0, pharmacy: 0, game: 0, pet: 0 };
   state.tiles.forEach((tl, i) => {
     if (!tl || tl.t === 'part' || (tl.cs && !tl.cs.to)) return;
     if (tl.t === 'service') c[tl.v] = (c[tl.v] || 0) + 1;
@@ -2896,9 +2901,10 @@ function civicSnapshot() {
   const ac = agents.counts();
   const nd = calcNeeds({
     pop: s.pop, powerUse: s.powerUse, powerCap: s.powerCap, waterUse: s.waterUse, waterCap: s.waterCap,
-    jobs: s.jobs, workers: demo.workers, hospitals: cc.hospital + 0.6 * cc.hospital_p, schools: cc.school + 0.7 * cc.school_p, universities: cc.bu, transit: cc.bus * 2 + cc.taxi + cc.grab,
-    police: cc.police, fire: cc.fire, parks: cc.parks, roads: s.roads, liveCars: ac.car, kids: demo.child + demo.youth,
+    jobs: s.jobs, workers: demo.workers, hospitals: cc.hospital + 0.6 * cc.hospital_p + 0.08 * cc.pharmacy, schools: cc.school + 0.7 * cc.school_p, universities: cc.bu, transit: cc.bus * 2 + cc.taxi + cc.grab,
+    police: cc.police, fire: cc.fire, parks: cc.parks + 3 * cc.game, roads: s.roads, liveCars: ac.car, kids: demo.child + demo.youth,
     green: s.green, chargers: cc.ev, evCars: ac.ev, shops: s.jobsCom,
+    cemeteries: cc.cemetery || 0, temples: cc.temple + cc.mosque + cc.church,
   });
   return { s, demo, cc, ac, nd };
 }
@@ -2980,6 +2986,9 @@ const VENUE = {   // base = น้ำหนักพื้นฐาน, cat = �
   'com:pub': { base: 1.0, cat: 'fun', time: 'night' }, 'com:gas': { base: 0.4, cat: 'other', time: 'day' }, 'com:dealer': { base: 0.5, cat: 'shop', time: 'day' },
   'com:tuner': { base: 0.4, cat: 'other', time: 'eve' }, 'com:fishing': { base: 0.4, cat: 'shop', time: 'morning' }, 'com:zone': { base: 0.6, cat: 'shop', time: 'day' },
   'com:parking': { base: 0.5, cat: 'other', time: 'day' }, 'service:metro': { base: 1.6, cat: 'transit', time: 'rush' }, 'service:bus': { base: 0.7, cat: 'transit', time: 'rush' },
+  'service:cemetery': { base: 0.4, cat: 'worship', time: 'morning' },
+  'com:cafe': { base: 1.1, cat: 'food', time: 'morning' }, 'com:pharmacy': { base: 0.8, cat: 'health', time: 'day' },
+  'com:game': { base: 0.9, cat: 'fun', time: 'eve' }, 'com:pet': { base: 0.7, cat: 'shop', time: 'day' },   // ญาติไปเยี่ยมหลุมช่วงเช้า
   'service:temple': { base: 0.9, cat: 'worship', time: 'temple' }, 'service:church': { base: 0.8, cat: 'worship', time: 'church' }, 'service:mosque': { base: 0.8, cat: 'worship', time: 'mosque' },
   'service:hospital': { base: 0.9, cat: 'health', time: 'office' }, 'service:hospital_p': { base: 0.8, cat: 'health', time: 'office' },
 };
@@ -4483,8 +4492,9 @@ function updateAgentTargets() {
 
   const cars = (s.pop * 0.1 + s.jobsCom * 0.07 + s.jobsInd * 0.1 + Math.min(6, s.roads * 0.12)) * rush * (0.25 + 0.75 * awake);
   const people = (s.pop * 0.16 + s.jobs * 0.04 + s.parks * 1.5 + Math.min(4, s.roads * 0.08)) * awake * rainy;
-  const dogs = s.pop * 0.02 * (0.4 + 0.6 * awake) * rainy;
-  const cats = s.pop * 0.015 * (0.4 + 0.6 * awake) * (1 - 0.5 * W.rain);
+  const petMul = 1 + 0.2 * Math.min(3, ccache.pet);   // มีร้านอุปกรณ์สัตว์เลี้ยง คนเลี้ยงหมาแมวมากขึ้น
+  const dogs = s.pop * 0.02 * (0.4 + 0.6 * awake) * rainy * petMul;
+  const cats = petMul * s.pop * 0.015 * (0.4 + 0.6 * awake) * (1 - 0.5 * W.rain);
   const transitCut = 1 - (s.carCut || 0);
   carDemand = cars * transitCut;
   agents.setTargets({
@@ -4811,3 +4821,44 @@ window.addEventListener('beforeunload', save);
 // มือถือมักไม่ส่ง beforeunload ตอนปัดแอปทิ้ง: เซฟตอนหน้าถูกซ่อนด้วย
 window.addEventListener('pagehide', save);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
+
+// ---------------------------------------------------------------
+// แจ้งเตือนเวอร์ชันใหม่แบบเรียลไทม์: เช็ค version.json บนเว็บทุก 60 วินาที และตอนกลับมาที่แท็บ
+// ถ้ารหัสไม่ตรงกับ __BUILD_ID__ ที่ฝังในเกม = มีเวอร์ชันใหม่ขึ้นแล้ว → แถบแจ้งเตือน + ปุ่มรีเฟรช
+// กดรีเฟรช: เซฟก่อน โหลดหน้าใหม่ แล้วเข้าเกมต่อทันที (dev mode ไม่มีไฟล์นี้ จึงไม่แจ้ง)
+// ---------------------------------------------------------------
+{
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;display:none;align-items:center;gap:10px;'
+    + 'padding:8px 8px 8px 14px;border-radius:12px;background:#1e2a38;color:#fff;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.35);max-width:calc(100vw - 32px)';
+  const msg = document.createElement('span');
+  const go = document.createElement('button');
+  go.style.cssText = 'border:0;border-radius:8px;padding:6px 12px;background:#ffb300;color:#3a2600;font-weight:700;cursor:pointer;white-space:nowrap';
+  const later = document.createElement('button');
+  later.textContent = '×';
+  later.style.cssText = 'border:0;background:none;color:#cfd8dc;font-size:18px;cursor:pointer;padding:0 4px';
+  bar.append(msg, go, later);
+  document.body.appendChild(bar);
+  const label = () => { msg.textContent = '🔄 ' + t('upd.new'); go.textContent = t('upd.btn'); later.title = t('upd.later'); };
+  label(); onLang(label);
+  go.onclick = () => { save(); if (!menu.isOpen) Saves.setAutoStart(); location.reload(); };
+  later.onclick = () => { bar.style.display = 'none'; };   // ปิดไว้ก่อน จะเตือนอีกเมื่อมีเวอร์ชันที่ใหม่กว่านี้
+  let seen = __BUILD_ID__;
+  async function checkUpdate() {
+    try {
+      const r = await fetch('./version.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return;
+      const { id } = await r.json();
+      if (id && id !== __BUILD_ID__ && id !== seen) { seen = id; bar.style.display = 'flex'; audio.sfx('menu'); }
+    } catch { /* ออฟไลน์/ไม่มีไฟล์: ข้าม */ }
+  }
+  setInterval(checkUpdate, 60000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
+  setTimeout(checkUpdate, 5000);
+  // เพิ่งอัปเดตมา: บอกผู้เล่น
+  try {
+    const prev = localStorage.getItem('mini-city-build');
+    if (prev && prev !== __BUILD_ID__) setTimeout(() => toast(t('upd.done')), 1500);
+    localStorage.setItem('mini-city-build', __BUILD_ID__);
+  } catch {}
+}

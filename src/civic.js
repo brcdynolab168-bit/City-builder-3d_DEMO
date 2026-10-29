@@ -68,6 +68,8 @@ export function needs(inp) {
     // เมืองใหญ่ขึ้นคนเริ่มอยากได้อากาศสะอาด (ไฟฟ้าจากพลังงานสะอาด) และที่ชาร์จรถ EV ที่มีอยู่
     ['clean', inp.pop < 300 ? 100 : clamp(35 + 65 * (inp.green || 0) / 0.4)],
     ['charge', !inp.evCars ? 100 : clamp(100 * (inp.chargers || 0) * 8 / inp.evCars)],
+    // เมืองโตขึ้นต้องมีที่ฝังศพ: สุสานรองรับได้มาก วัด (มีเมรุ) มัสยิด โบสถ์ ช่วยได้บางส่วน
+    ['rites', inp.pop < 300 ? 100 : clamp(25 + 100 * ((inp.cemeteries || 0) * 2500 + (inp.temples || 0) * 700) / p)],
     ['shops', !has ? 100 : clamp(100 * (inp.shops || 0) / Math.max(1, p * 0.3))],
     ['traffic', !inp.roads ? 100 : clamp(100 - 100 * Math.max(0, inp.liveCars / (inp.roads * 0.45) - 0.45) / 0.55 + 6 * (inp.transit || 0))],
   ].map(([k, v]) => ({ k, v: Math.round(v) }));
