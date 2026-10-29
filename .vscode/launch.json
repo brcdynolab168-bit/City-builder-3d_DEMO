@@ -1,0 +1,13 @@
+{
+    // รัน `npm run dev` ใน Terminal ค้างไว้ก่อน แล้วกด F5 เพื่อเปิด Chrome
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "chrome",
+            "request": "launch",
+            "name": "Launch Chrome against localhost",
+            "url": "http://localhost:8080",
+            "webRoot": "${workspaceFolder}"
+        }
+    ]
+}

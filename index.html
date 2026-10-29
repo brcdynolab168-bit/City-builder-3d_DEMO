@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Mini City 3D</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #1b2430; font-family: "Segoe UI", "Noto Sans Thai", sans-serif; color: #fff; user-select: none; -webkit-user-select: none; }
+    #app { position: fixed; inset: 0; touch-action: none; }
+    canvas { display: block; touch-action: none; }
+
+    #hud { position: fixed; top: 10px; left: 10px; right: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; pointer-events: none; }
+    .card { background: rgba(20, 28, 40, .82); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 8px 14px; pointer-events: auto; }
+    .stat { display: flex; flex-direction: column; min-width: 90px; }
+    .stat small { opacity: .6; font-size: 11px; }
+    .stat b { font-size: 18px; }
+    .bad { color: #ff6b6b; }
+    .demand { display: flex; gap: 8px; align-items: flex-end; height: 100%; }
+    .bar { width: 18px; height: 34px; background: rgba(255,255,255,.12); border-radius: 3px; position: relative; overflow: hidden; }
+    .bar i { position: absolute; left: 0; right: 0; bottom: 0; transition: height .4s; }
+    .bar span { position: absolute; bottom: -1px; width: 100%; text-align: center; font-size: 10px; font-weight: 700; color: #fff; text-shadow: 0 0 3px #000; }
+
+    #toolbar { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 8px; max-width: calc(100vw - 20px); overflow-x: auto; }
+    .tool { background: rgba(255,255,255,.08); border: 1px solid transparent; color: #fff; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 14px; text-align: center; min-width: 88px; white-space: nowrap; }
+    .tool small { display: block; opacity: .6; font-size: 11px; }
+    .tool:hover { background: rgba(255,255,255,.18); }
+    .tool.active { border-color: #4fc3f7; background: rgba(79,195,247,.22); }
+
+    #speed { position: fixed; bottom: 12px; right: 12px; display: flex; gap: 6px; padding: 8px; }
+    #speed button, #reset { background: rgba(255,255,255,.08); color: #fff; border: 1px solid transparent; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+    #speed button.active { border-color: #4fc3f7; }
+    #reset { position: fixed; bottom: 12px; left: 12px; }
+
+    #toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: rgba(200,50,50,.9); padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+    #toast.show { opacity: 1; }
+
+    #side { position: fixed; top: 80px; right: 10px; width: 262px; font-size: 12px; line-height: 1.6; display: flex; flex-direction: column; gap: 8px; }
+    #side .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .seg { display: flex; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; overflow: hidden; }
+    .seg button { background: transparent; border: 0; color: #fff; padding: 5px 11px; cursor: pointer; font-size: 12px; }
+    .seg button.active { background: rgba(79,195,247,.38); }
+    .cam { display: flex; gap: 6px; }
+    .cam button { flex: 1; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.15); color: #fff; border-radius: 8px; padding: 6px 0; font-size: 15px; cursor: pointer; }
+    .cam button:hover { background: rgba(255,255,255,.2); }
+    .dim { opacity: .65; font-size: 11px; }
+    #helpText { opacity: .85; }
+
+    @media (max-width: 760px) {
+      #side { top: auto; bottom: 86px; width: 220px; }
+      #hud .stat { min-width: 70px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="hud">
+    <div class="card stat"><small>เงิน</small><b id="money">0</b></div>
+    <div class="card stat"><small>ประชากร</small><b id="pop">0</b></div>
+    <div class="card stat"><small>งาน</small><b id="jobs">0</b></div>
+    <div class="card stat"><small>ไฟฟ้า (ใช้/ผลิต)</small><b id="power">0/0</b></div>
+    <div class="card stat"><small>รายได้สุทธิ/วัน</small><b id="net">0</b></div>
+    <div class="card stat"><small>วันที่</small><b id="day">0</b></div>
+    <div class="card demand" title="ความต้องการ: R=ที่อยู่อาศัย C=พาณิชย์ I=อุตสาหกรรม">
+      <div class="bar"><i id="dR" style="background:#4caf50"></i><span>R</span></div>
+      <div class="bar"><i id="dC" style="background:#2196f3"></i><span>C</span></div>
+      <div class="bar"><i id="dI" style="background:#ffc107"></i><span>I</span></div>
+    </div>
+  </div>
+
+  <div id="side" class="card">
+    <div class="row"><b>กราฟิก</b>
+      <div class="seg" id="qSeg">
+        <button data-q="low">ต่ำ</button><button data-q="med">กลาง</button><button data-q="high">สูง</button>
+      </div>
+    </div>
+    <div class="dim" id="qDesc"></div>
+    <div class="row"><b>ควบคุม</b>
+      <div class="seg" id="mSeg">
+        <button data-m="trackpad">ทัชแพด</button><button data-m="mouse">เมาส์</button>
+      </div>
+    </div>
+    <div class="cam">
+      <button id="camL" title="หมุนซ้าย (Q)">⟲</button>
+      <button id="camR" title="หมุนขวา (E)">⟳</button>
+      <button id="camIn" title="ซูมเข้า (+)">＋</button>
+      <button id="camOut" title="ซูมออก (-)">－</button>
+      <button id="camHome" title="กลับมุมมองเริ่มต้น">⌂</button>
+    </div>
+    <div id="helpText"></div>
+    <div class="dim" id="fps"></div>
+  </div>
+
+  <div id="toolbar" class="card"></div>
+  <div id="speed" class="card">
+    <button data-s="0">⏸</button><button data-s="1" class="active">▶ 1x</button><button data-s="3">⏩ 3x</button>
+  </div>
+  <button id="reset">เริ่มเมืองใหม่</button>
+  <div id="toast"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
