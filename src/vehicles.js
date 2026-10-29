@@ -8,7 +8,7 @@ import('three/addons/utils/SkeletonUtils.js').then(m => { if (m.clone) skClone =
 // ความยาวเป้าหมายในหน่วยของเกม (ตัวถังด้านหน้า-หลัง)
 export const VEH_LEN = { cars: 0.36, bikes: 0.22, buses: 0.58, boats: 1.3, dogs: 0.2, cats: 0.15, police: 0.38, taxis: 0.36, sports: 0.37 };
 // หมวดที่ย่อ/ขยายตามความสูงแทนความยาว (คน)
-export const VEH_H = { cops: 0.1 };
+export const VEH_H = { cops: 0.16 };
 // ถ้าโมเดลหันหัวผิดทาง ให้ปรับค่านี้ (Math.PI = กลับหัว, ±Math.PI/2 = หันข้าง)
 export const VEH_YAW = { cars: 0, bikes: 0, buses: 0, boats: 0, dogs: 0, cats: 0, police: 0, taxis: 0, cops: 0, sports: 0 };
 

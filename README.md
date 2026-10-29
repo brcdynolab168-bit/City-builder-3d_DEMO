@@ -145,3 +145,4 @@ npm run dev
 - ลดงานที่ทำซ้ำทุกเฟรม (ภาพ/แสง/เงาเหมือนเดิม)
 - "Police Station" โดย VertexForge (https://sketchfab.com/prankscare99) — CC BY 4.0
 - "Fire Station No. 1" โดย CommonSpence (https://sketchfab.com/commonspence) — CC BY 4.0
+

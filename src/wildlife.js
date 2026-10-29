@@ -238,6 +238,8 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
   function update(dt, env = {}) {
     t += dt;
     const night = env.night || 0, rain = env.rain || 0;
+    // คลื่นท้ายเรือไม่รับแสง: กลางคืนต้องหรี่ลง ไม่งั้นกราฟิกสูง (bloom) จะเรืองเป็นลำแสงขาว
+    { const wc = 1 - 0.8 * Math.min(1, night * 1.2); wakeMat.color.setScalar(wc); M.wake.color.setScalar(wc); }
     const wv = env.wind || { x: 1, z: 0 }, wm = env.windMag || 0;
 
     // นกออกหากินช่วงกลางวัน และไม่บินตอนฝนแรง
