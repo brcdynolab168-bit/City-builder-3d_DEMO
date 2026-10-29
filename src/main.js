@@ -69,6 +69,8 @@ const VARIANTS = {
     { k: 'twin',  label: 'ทาวน์เฮาส์',      cost: 260,  pop: 15, power: 4,  water: 6 },
     { k: 'apt',   label: 'อพาร์ตเมนต์',     cost: 480,  pop: 36, power: 8,  water: 11 },
     { k: 'condo', label: 'คอนโด',           cost: 1000, pop: 90, power: 16, water: 25 },
+    { k: 'tower', label: 'ตึกสูง',           cost: 1800, pop: 170, power: 30, water: 44, req: { pop: 900 },             note: 'ตึกสูง 14–20 ชั้น (1×1) หรืออัปเกรดจากคอนโดด้วยการดับเบิลคลิก' },
+    { k: 'sky',   label: 'ตึกระฟ้า',         cost: 4200, pop: 330, power: 56, water: 80, req: { pop: 2500, metro: 1 },    note: 'ตึกระฟ้า 26–38 ชั้น (1×1) ต้องมีสถานีรถไฟฟ้ารองรับ' },
   ],
   com: [
     { k: 'zone',  label: 'โซนพาณิชย์ (โตเอง)', cost: 30, note: 'ร้านค้า/สำนักงาน โตเองตามความต้องการ' },
@@ -78,6 +80,7 @@ const VARIANTS = {
     { k: 'shabu', label: 'ร้านชาบู',        cost: 360,  jobs: 12,  power: 5,  water: 6,  tax: 4, note: 'ชาบู หม้อไฟ' },
     { k: 'mookata', label: 'หมูกระทะ',      cost: 340,  jobs: 12,  power: 3,  water: 5,  tax: 4, note: 'หมูกระทะ บุฟเฟต์' },
     { k: 'restaurant', label: 'ร้านอาหาร',  cost: 280,  jobs: 10,  power: 4,  water: 5,  tax: 3, note: 'ร้านอาหารตามสั่ง/ทั่วไป' },
+    { k: 'parking', label: 'ลานจอดรถ',     cost: 500,  jobs: 3,   power: 1,  water: 0,  upkeep: 3, note: '2×1 ช่อง เก็บค่าจอดรถ ปรับค่าจอดได้ในแท็บการเดินทาง' },
     { k: 'gas',   label: 'ปั๊มน้ำมัน',       cost: 450,  jobs: 9,   power: 4,  water: 3 },
     { k: 'lotus', label: 'โลตัส',           cost: 700,  jobs: 32,  power: 10, water: 8,  note: 'ซูเปอร์มาร์เก็ต' },
     { k: 'mall',  label: 'ห้างสรรพสินค้า',   cost: 2400, jobs: 100, power: 30, water: 22, note: '3×2 ช่อง' },
@@ -142,6 +145,7 @@ const VARIANTS = {
     { k: 'pea',      label: 'การไฟฟ้า',       cost: 1200, jobs: 24, power: 10, water: 6, upkeep: 20, note: '2×2 ช่อง ส่งช่างซ่อมไฟดับ' },
     { k: 'pwa',      label: 'การประปา',        cost: 1200, jobs: 24, power: 8, water: 4, upkeep: 20, note: '2×2 ช่อง ส่งช่างซ่อมท่อแตก' },
     { k: 'dohw',     label: 'กรมทางหลวง',      cost: 1300, jobs: 28, power: 8, water: 6, upkeep: 22, note: '2×2 ช่อง ส่งทีมซ่อมถนนพัง' },
+    { k: 'metro',    label: 'สถานีรถไฟฟ้า',  cost: 2400, jobs: 30, power: 20, water: 4, upkeep: 35, note: '2×1 ช่อง ลดรถบนถนน ต้องอยู่ใกล้บ้าน (รัศมี ~9 ช่อง) ลานจอดรถใกล้สถานีช่วยเพิ่มผู้โดยสาร' },
     { k: 'bus',      label: 'อู่รถเมล์',       cost: 1400, jobs: 30, power: 6, water: 6, upkeep: 20, tax: 12, note: '3×2 ช่อง มีรถเมล์วิ่ง ลดรถติด' },
     { k: 'taxi',     label: 'อู่แท็กซี่',      cost: 800,  jobs: 14, power: 3, water: 3, upkeep: 8, tax: 10, note: '2×2 ช่อง มีแท็กซี่วิ่ง' },
     { k: 'grab',     label: 'จุดรวมแกร็บ',    cost: 600,  jobs: 10, power: 3, water: 2, upkeep: 6, tax: 8, note: '2×1 ช่อง รถและมอไซค์แกร็บ' },
@@ -160,14 +164,15 @@ const OEMS = ['honda', 'toyota', 'bmw'];
 const SUPPLIERS = { honda: ['keihin', 'shindengen'], toyota: ['denso', 'shindengen'], bmw: ['denso', 'shindengen'] };   // ซัพพลายเออร์ที่ช่วยให้ค่ายรถได้ผลผลิตเพิ่ม
 const MAKER_OF = { shindengen: OEMS, keihin: ['honda'], denso: ['toyota', 'bmw'] };                                     // ซัพพลายเออร์ต้องมีค่ายรถคู่ค้า
 const EDU_SKILL = { school: 120, school_p: 180, bu: 700 };                                                               // แรงงานมีความรู้ที่โรงเรียน/มหาวิทยาลัยผลิตได้
-function indReqFail(k) {   // คืน [คีย์ข้อความ, พารามิเตอร์] ถ้ายังไม่ผ่านเงื่อนไข
-  const V = VARIANTS.ind.find(v => v.k === k);
+const indReqFail = k => reqFailOf(VARIANTS.ind.find(v => v.k === k));
+function reqFailOf(V) {   // คืน [คีย์ข้อความ, พารามิเตอร์] ถ้ายังไม่ผ่านเงื่อนไข
   if (!V || !V.req) return null;
   const R = V.req, c = ccache, pop = audioStats.pop;
   if (R.pop && pop < R.pop) return ['toast.ind.pop', { n: R.pop }];
   if (R.edu && c.school + c.school_p + c.bu < R.edu) return ['toast.ind.edu', {}];
   if (R.bu && c.bu < R.bu) return ['toast.ind.bu', {}];
   if (R.bank && c.bank < R.bank) return ['toast.ind.bank', {}];
+  if (R.metro && c.metro < R.metro) return ['toast.ind.metro', {}];
   if (R.maker) {
     const ok = R.maker === 'any' ? OEMS.some(m => c[m] > 0) : c[R.maker] > 0;
     if (!ok) return ['toast.ind.maker', { name: R.maker === 'any' ? t('ind.anyoem') : t('v.ind.' + R.maker) }];
@@ -180,6 +185,7 @@ function indReqText(V) {
   if (R.edu) a.push(t('req.edu'));
   if (R.bu) a.push(t('req.bu'));
   if (R.bank) a.push(t('req.bank'));
+  if (R.metro) a.push(t('req.metro'));
   if (R.maker) a.push(t('req.maker', { name: R.maker === 'any' ? t('ind.anyoem') : t('v.ind.' + R.maker) }));
   return a.length ? t('req.need', { list: a.join(' · ') }) : '';
 }
@@ -188,12 +194,14 @@ const ZONES = ['res', 'com', 'ind'];
 const toolLabel = k => t('tool.' + k);
 const toolTip = k => (hasKey('tip.' + k) ? t('tip.' + k) : '');
 const vLabel = (tool, v) => t(`v.${tool}.${v.k}`);
-const vNote = (tool, v) => (hasKey(`v.${tool}.${v.k}.note`) ? t(`v.${tool}.${v.k}.note`) : '') + (tool === 'ind' && v.req ? ' ' + indReqText(v) : '');
+const vNote = (tool, v) => (hasKey(`v.${tool}.${v.k}.note`) ? t(`v.${tool}.${v.k}.note`) : '') + (v.req ? ' ' + indReqText(v) : '');
 
 // ตารางตามระดับตึก (ดัชนี = เลเวล 0..3): คน / งาน / ไฟ / น้ำ ต่อช่อง
 const POP_PER  = [0, 5, 28, 80];   // บ้านเดี่ยว → อพาร์ตเมนต์ → คอนโดสูง
 const JOBS_COM = [0, 6, 20, 60];
 const JOBS_IND = [0, 10, 28, 70];
+let carDemand = 0;   // จำนวนรถที่ต้องการวิ่ง (ใช้คิดรายได้ลานจอดรถ)
+const TRANSIT_ST = { bus: { R: 7, w: 0.12 }, taxi: { R: 5, w: 0.04 }, grab: { R: 5, w: 0.04 }, metro: { R: 9, w: 0.34 } };   // รัศมีบริการ(ช่อง)/น้ำหนักการดึงคนมาใช้ขนส่ง
 const TAX_GROUP = { honda: 'industry', toyota: 'industry', bmw: 'industry', shindengen: 'industry', keihin: 'industry', denso: 'industry', pub: 'leisure', tuner: 'leisure', drag: 'leisure', bank: 'finance', gold: 'finance', hospital_p: 'health', school_p: 'edu', bus: 'transit', taxi: 'transit', grab: 'transit' };
 const POWER_USE = { res: [0, 2, 6, 14], com: [0, 3, 8, 20], ind: [0, 4, 12, 30] };
 const WATER_USE = { res: [0, 3, 9, 22], com: [0, 2, 6, 15], ind: [0, 4, 12, 28] };
@@ -1723,8 +1731,40 @@ function buildUniversity(bg, r) {
 
 const BIG = createBig({ put, boxGeo, cylGeo, coneGeo, icoGeo, planeGeo, M, FM, block, roofCap, signAt, shrub, addTree, band, std, gableGeo, facadeGeo, lot, t, facadeMats, stationModel: pickStation });
 
+// ตึกสูงระดับสูง (1×1): ฐานพาณิชย์ + หอพักอาศัยสูง tier 1 = ตึกสูง, tier 2 = ตึกระฟ้า (ยอดขั้นบันได + เสาอากาศ)
+function buildTower(bg, tier, r, r2) {
+  const y0 = 0.03;
+  const R = n => { const v = Math.sin((r * 12.9898 + r2 * 78.233 + n * 37.719 + tier * 9.7) * 43758.5453); return v - Math.floor(v); };
+  const g = new THREE.Group(); bg.add(g);
+  const mats = pick(FM.res, R(2)), office = pick(FM.office, R(31));
+  const w = 0.7, p = block(g, w + 0.14, 2, w + 0.1, office, 0, y0, 0);
+  trim(g, w + 0.14, w + 0.1, y0, p);
+  roofCap(g, w + 0.14, w + 0.1, p);
+  const tw = w * 0.72, fl = tier === 1 ? 14 + Math.floor(R(6) * 7) : 26 + Math.floor(R(6) * 13);
+  if (tier === 1) {
+    const t1 = block(g, tw, fl, tw, mats, 0, p, 0);
+    const t2 = block(g, tw * 0.72, 2, tw * 0.72, mats, 0, t1, 0);
+    roofCap(g, tw * 0.72, tw * 0.72, t2);
+    put(g, cylGeo, M.metal, 0.08, t2 + 0.1, -0.06, 0.1, 0.2, 0.1);
+    put(g, cylGeo, M.metal, 0, t2 + 0.3, 0, 0.012, 0.4, 0.012);
+  } else {
+    const f1 = Math.round(fl * 0.55), f2 = Math.round(fl * 0.28), f3 = fl - f1 - f2;
+    const t1 = block(g, tw, f1, tw, mats, 0, p, 0);
+    const t2 = block(g, tw * 0.84, f2, tw * 0.84, mats, 0, t1, 0);
+    const t3 = block(g, tw * 0.62, f3, tw * 0.62, pick(FM.glass, R(33)), 0, t2, 0);
+    put(g, boxGeo, M.concrete, 0, t1 + 0.012, 0, tw + 0.04, 0.024, tw + 0.04);
+    put(g, boxGeo, M.concrete, 0, t2 + 0.012, 0, tw * 0.84 + 0.04, 0.024, tw * 0.84 + 0.04);
+    roofCap(g, tw * 0.62, tw * 0.62, t3);
+    put(g, cylGeo, M.metal, 0, t3 + 0.35, 0, 0.016, 0.7, 0.016);
+    put(g, icoGeo, M.beacon, 0, t3 + 0.72, 0, 0.04, 0.04, 0.04);
+  }
+  for (const [sx, sz] of [[-1, 1], [1, 1]]) shrub(g, sx * 0.32, sz * 0.4, 0.1, sx + 2);
+}
+
 function buildVariant(bg, type, v, r, r2) {
   if (type === 'res') {
+    if (v === 'tower') return buildTower(bg, 1, r, r2);
+    if (v === 'sky') return buildTower(bg, 2, r, r2);
     if (v === 'house') return buildZoneBuilding(bg, 'res', 1, r, r2);
     if (v === 'twin') return buildTownhouse(bg, r);
     if (v === 'apt') return buildZoneBuilding(bg, 'res', 2, r, r2);
@@ -2421,6 +2461,8 @@ function applyTool(x, z) {
   const CV = VARIANTS[currentTool] && currentVar[currentTool];
   if (CV && CV !== 'zone' && ['res', 'com', 'service'].includes(currentTool) && !adjRoad(x, z)) { audio.sfx('error'); return toast(t('toast.road')); }
   if (currentTool === 'water' && !nearWater(x, z, 3)) { audio.sfx('error'); return toast(t('toast.nearwater')); }
+  const V0 = VARIANTS[currentTool]?.find(v => v.k === CV);
+  if (V0?.req) { const rq = reqFailOf(V0); if (rq) { audio.sfx('error'); return toast(t(rq[0], rq[1])); } }
   if (state.money < cost2) { audio.sfx('error'); return toast(t('toast.nomoney')); }
   state.money -= cost2;
   state.tiles[i] = VARIANTS[currentTool] ? { t: currentTool, lv: 0, v: currentVar[currentTool] } : { t: currentTool, lv: 0 };
@@ -2440,9 +2482,9 @@ function computeStats() {
   const s = {
     pop: 0, jobsCom: 0, jobsInd: 0, powerCap: 0, powerUse: 0, waterCap: 0, waterUse: 0,
     roads: 0, bridges: 0, parks: 0, plants: 0, wplants: 0, comLv: 0, indLv: 0, junctions: 0, upkeep: 0,
-    extraTax: { finance: 0, health: 0, edu: 0, transit: 0, leisure: 0, industry: 0 }, skillSupply: 0, skillNeed: 0, skillFill: 1,
+    extraTax: { finance: 0, health: 0, edu: 0, transit: 0, leisure: 0, industry: 0, parking: 0 }, skillSupply: 0, skillNeed: 0, skillFill: 1,
   };
-  const brands = [];
+  const brands = [], resL = [], stL = [], pkL = [];
   state.tiles.forEach((t, i) => {
     if (!t) return;
     const lv = t.lv || 0;
@@ -2451,11 +2493,14 @@ function computeStats() {
     if (FV) {
       if (t.t === 'res') s.pop += FV.pop; else if (t.t === 'farm') s.jobsInd += FV.jobs; else if (t.t === 'ind') brands.push(FV.k); else s.jobsCom += FV.jobs;
       if (t.t === 'service') s.skillSupply += EDU_SKILL[t.v] || 0;
+      if (t.t === 'res') resL.push([i % N, Math.floor(i / N), FV.pop]);
+      if (t.t === 'service' && TRANSIT_ST[t.v]) stL.push([i % N, Math.floor(i / N), t.v, t.fw || 1, t.fd || 1]);
+      if (t.t === 'com' && t.v === 'parking') pkL.push([i % N, Math.floor(i / N)]);
       s.powerUse += FV.power; s.waterUse += FV.water; s.upkeep += FV.upkeep || 0;
       if (FV.tax && t.t !== 'ind') s.extraTax[TAX_GROUP[t.v] || 'finance'] += FV.tax;
       return;
     }
-    if (t.t === 'res') { s.pop += POP_PER[lv]; s.powerUse += POWER_USE.res[lv]; s.waterUse += WATER_USE.res[lv]; }
+    if (t.t === 'res') { resL.push([i % N, Math.floor(i / N), POP_PER[lv]]); s.pop += POP_PER[lv]; s.powerUse += POWER_USE.res[lv]; s.waterUse += WATER_USE.res[lv]; }
     else if (t.t === 'com') { s.jobsCom += JOBS_COM[lv]; s.powerUse += POWER_USE.com[lv]; s.waterUse += WATER_USE.com[lv]; s.comLv += lv; }
     else if (t.t === 'ind') { s.jobsInd += JOBS_IND[lv]; s.powerUse += POWER_USE.ind[lv]; s.waterUse += WATER_USE.ind[lv]; s.indLv += lv; }
     else if (t.t === 'road') { s.roads++; if (tileIsWater[i]) s.bridges++; if (isJunction(i % N, Math.floor(i / N))) s.junctions++; }
@@ -2487,11 +2532,37 @@ function computeStats() {
       s.extraTax.industry += V.tax * mul;
     }
   } else s.skillSupply += Math.round(s.pop * 0.03);
+  // การเดินทาง: คนในรัศมีสถานี/อู่ใช้ขนส่งสาธารณะแทนรถส่วนตัว ค่าจอดแพง/ฝนตก/ค่าโดยสารถูก ทำให้คนใช้ขนส่งมากขึ้น
+  const pol = (state.policy ||= { parkFee: 2, fare: 1 });
+  let cov = 0;
+  if (stL.length && s.pop > 0) {
+    for (const st of stL) if (st[2] === 'metro') st.pr = pkL.some(p => Math.hypot(p[0] - st[0], p[1] - st[1]) <= 4);   // Park & Ride
+    let sum = 0;
+    for (const [rx, rz, rp] of resL) {
+      let c = 1;
+      for (const st of stL) {
+        const D = TRANSIT_ST[st[2]], pr = 1 - Math.hypot(rx + 0.5 - (st[0] + st[3] / 2), rz + 0.5 - (st[1] + st[4] / 2)) / D.R;
+        if (pr > 0) c *= 1 - Math.min(0.9, D.w * pr * (st.pr ? 1.35 : 1));
+      }
+      sum += rp * (1 - c);
+    }
+    cov = sum / s.pop;
+  }
+  s.transitCover = cov;
+  s.transitShare = clamp(cov * (1 + 0.12 * (pol.parkFee - 2)) * (1.2 - 0.2 * pol.fare) * (1 + 0.25 * weather.state.rain), 0, 0.6);
+  s.carCut = clamp(s.transitShare * 0.85, 0, 0.5);
+  s.riders = Math.round(s.pop * s.transitShare * 0.6);
+  s.fareIncome = stL.some(x => x[2] === 'bus' || x[2] === 'metro') ? s.riders * pol.fare * 0.03 : 0;
+  s.parkCap = pkL.length * 40;
+  s.parkOcc = Math.min(s.parkCap, Math.round(carDemand * 0.6 * (1 - 0.07 * pol.parkFee)));
+  s.parkIncome = s.parkOcc * pol.parkFee * 0.3;
+  s.extraTax.transit += s.fareIncome;
+  s.extraTax.parking = s.parkIncome;
   s.jobs = s.jobsCom + s.jobsInd;
   // ภาษีแยกประเภท (รวมกันเท่ากับสูตรเดิม + ภาษีพิเศษของธุรกิจใหม่)
   s.taxes = {
     land: s.pop * 0.2, pit: s.pop * 0.25, vat: s.jobsCom * 0.5, corp: s.jobsCom * 0.4 + s.jobsInd * 0.5, ind: s.jobsInd * 0.3,
-    vehicle: s.pop * 0.025, finance: s.extraTax.finance, health: s.extraTax.health, edu: s.extraTax.edu, transit: s.extraTax.transit, leisure: s.extraTax.leisure, industry: s.extraTax.industry,
+    vehicle: s.pop * 0.025, finance: s.extraTax.finance, health: s.extraTax.health, edu: s.extraTax.edu, transit: s.extraTax.transit, leisure: s.extraTax.leisure, industry: s.extraTax.industry, parking: s.extraTax.parking,
   };
   s.income = Object.values(s.taxes).reduce((a, b) => a + b, 0);
   s.expense = s.roads * 0.5 + s.bridges * 1.5 + s.upkeep + s.parks * 2 + s.junctions * 0.5 + (s.incidentCost || 0);
@@ -2592,7 +2663,7 @@ const later = (sec, fn) => { const at = curAt; sched.push({ t: sec, fn: at ? () 
 const roadAt = (x, z) => (Math.random() < 0.5 ? rowName(z) : colName(x));
 
 function civicCounts() {
-  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, pea: 0, pwa: 0, dohw: 0, gold: [], flammable: [], honda: 0, toyota: 0, bmw: 0, shindengen: 0, keihin: 0, denso: 0, temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0 };
+  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, pea: 0, pwa: 0, dohw: 0, gold: [], flammable: [], parking: 0, metro: 0, honda: 0, toyota: 0, bmw: 0, shindengen: 0, keihin: 0, denso: 0, temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0 };
   state.tiles.forEach((tl, i) => {
     if (!tl || tl.t === 'part' || (tl.cs && !tl.cs.to)) return;
     if (tl.t === 'service') c[tl.v] = (c[tl.v] || 0) + 1;
@@ -2648,10 +2719,11 @@ const VENUE = {   // base = น้ำหนักพื้นฐาน, cat = �
   'com:bank': { base: 0.8, cat: 'money', time: 'office' }, 'com:gold': { base: 0.6, cat: 'money', time: 'office' },
   'com:pub': { base: 1.0, cat: 'fun', time: 'night' }, 'com:gas': { base: 0.4, cat: 'other', time: 'day' }, 'com:dealer': { base: 0.5, cat: 'shop', time: 'day' },
   'com:tuner': { base: 0.4, cat: 'other', time: 'eve' }, 'com:fishing': { base: 0.4, cat: 'shop', time: 'morning' }, 'com:zone': { base: 0.6, cat: 'shop', time: 'day' },
+  'com:parking': { base: 0.5, cat: 'other', time: 'day' }, 'service:metro': { base: 1.6, cat: 'transit', time: 'rush' }, 'service:bus': { base: 0.7, cat: 'transit', time: 'rush' },
   'service:temple': { base: 0.9, cat: 'worship', time: 'temple' }, 'service:church': { base: 0.8, cat: 'worship', time: 'church' }, 'service:mosque': { base: 0.8, cat: 'worship', time: 'mosque' },
   'service:hospital': { base: 0.9, cat: 'health', time: 'office' }, 'service:hospital_p': { base: 0.8, cat: 'health', time: 'office' },
 };
-const CATS = ['food', 'shop', 'worship', 'health', 'fun', 'money', 'other'];
+const CATS = ['food', 'shop', 'worship', 'health', 'fun', 'money', 'transit', 'other'];
 function venueW(key, hr, rel) {
   const V = VENUE[key];
   let m;
@@ -2660,6 +2732,7 @@ function venueW(key, hr, rel) {
     case 'day': m = hr >= 8 && hr < 21 ? 0.4 + 0.6 * bump(hr, 14, 4) : 0.03; break;
     case 'mall': m = hr >= 10 && hr < 22 ? 0.4 + 0.6 * bump(hr, 17, 4) : 0; break;
     case 'morning': m = hr >= 5 && hr < 14 ? 0.3 + 0.7 * bump(hr, 8, 2.2) : 0.04; break;
+    case 'rush': m = 0.12 + 0.88 * Math.max(bump(hr, 8, 1.3), bump(hr, 17.5, 1.5)); break;
     case 'office': m = hr >= 8.5 && hr < 16.5 ? 0.5 + 0.5 * bump(hr, 11, 2) : 0; break;
     case 'meal': m = 0.1 + 0.9 * Math.max(bump(hr, 12.3, 1.2), bump(hr, 19, 1.6)); break;
     case 'eve': m = 0.08 + 0.92 * Math.max(0.5 * bump(hr, 12.5, 1.1), bump(hr, 19.8, 1.8)); break;
@@ -2762,6 +2835,19 @@ function indTick(s, pop) {
       if (mi >= 0) withAt(mi % N, Math.floor(mi / N), open); else open();
     }
     flags.indSeen[k] = n;
+  }
+  if ((ccache.metro || 0) > (flags.metroSeen ?? ccache.metro)) {
+    const mi = state.tiles.findIndex(tl => tl && tl.t === 'service' && tl.v === 'metro' && !(tl.cs && !tl.cs.to));
+    const f = () => addNews('good', ['news.metro.open', {}]);
+    if (mi >= 0) withAt(mi % N, Math.floor(mi / N), f); else f();
+  }
+  flags.metroSeen = ccache.metro || 0;
+  flags.parkCool = (flags.parkCool ?? 120) - 1;
+  if (s.parkCap && s.parkOcc >= s.parkCap * 0.97 && flags.parkCool <= 0) {
+    flags.parkCool = 240 + Math.random() * 120;
+    const pi = state.tiles.findIndex(tl => tl && tl.t === 'com' && tl.v === 'parking' && !(tl.cs && !tl.cs.to));
+    const f = () => addNews('info', ['news.park.full', {}]);
+    if (pi >= 0) withAt(pi % N, Math.floor(pi / N), f); else f();
   }
   flags.skillCool = (flags.skillCool ?? 90) - 1;
   if (s.skillNeed && s.skillFill < 0.85 && flags.skillCool <= 0) {
@@ -3078,7 +3164,7 @@ function cityEvents(s) {
   flags.jobs--; flags.traffic--;
   const snap = pop > 40 ? civicSnapshot() : null;
   if (snap && flags.jobs <= 0 && s.jobs < snap.demo.workers * 0.65) { flags.jobs = 150; addNews('warn', ['news.jobs', {}]); }
-  if (snap && flags.traffic <= 0 && s.roads > 6 && snap.ac.car / s.roads > 0.36) { flags.traffic = 160; addNews('warn', ['news.traffic', {}]); }
+  if (snap && flags.traffic <= 0 && s.roads > 6 && snap.ac.car / s.roads > 0.36) { flags.traffic = 160; addNews('warn', ['news.traffic', {}]); if (!ccache.metro) later(14 + Math.random() * 10, () => addNews('info', ['news.traffic.tip', {}])); }
 
   // หลักไมล์ประชากร
   while (flags.milestone < MILES.length && pop >= MILES[flags.milestone]) { addNews('good', ['news.milestone', { n: MILES[flags.milestone].toLocaleString() }]); flags.milestone++; }
@@ -3293,6 +3379,83 @@ function updateFly(dt) {
     if (pingT <= 0) pingRing.visible = false;
   }
 }
+// ----- ดับเบิลคลิกที่บ้าน/ตึก → เลือกอัปเกรดเป็นตึกที่สูงขึ้น (อยู่อาศัยได้มากขึ้น) -----
+const UP_ORDER = ['house', 'twin', 'apt', 'condo', 'tower', 'sky'];
+const upg = document.createElement('div');
+upg.id = 'upg';
+document.body.appendChild(upg);
+{
+  const st = document.createElement('style');
+  st.textContent = `#upg{position:fixed;z-index:9;width:310px;background:rgba(10,15,24,.96);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:6px;opacity:0;pointer-events:none;transform:translateY(6px);transition:opacity .14s,transform .14s;box-shadow:0 14px 36px rgba(0,0,0,.55);color:#fff}
+#upg.show{opacity:1;pointer-events:auto;transform:none}#upg .ft{font-size:11px;color:#f5a524;letter-spacing:.8px;padding:4px 9px 2px;font-weight:600}#upg .cur{font-size:12px;color:#aab4c0;padding:0 9px 6px}
+#upg .fi{display:grid;grid-template-columns:1fr auto;gap:1px 10px;width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:7px;color:#fff;padding:7px 9px;cursor:pointer}
+#upg .fi:hover{background:rgba(255,255,255,.09)}#upg .fi.off{opacity:.5;cursor:not-allowed}#upg .fn{font-size:14px;font-weight:500}#upg .fc{font-size:13px;color:#ffd36a;font-weight:600}
+#upg .fs{grid-column:1/-1;font-size:11px;color:#9aa6b2;line-height:1.35}#upg .fs b{color:#7bd88f}#upg .fs i{color:#ff8a65;font-style:normal}#upg .dim{font-size:11px;color:#8794a1;padding:4px 9px}`;
+  document.head.appendChild(st);
+}
+const hideUpg = () => upg.classList.remove('show');
+function upgradeOptions(i) {
+  const tl = state.tiles[i];
+  if (!tl || tl.t !== 'res') return null;
+  const FV = fixedVariant(tl), lv = tl.lv || 0;
+  if (!FV && lv === 0) return null;
+  const cur = FV ? { pop: FV.pop, cost: FV.cost, name: t('v.res.' + tl.v) } : { pop: POP_PER[lv], cost: [0, 60, 200, 500][lv], name: t('tool.res') + ' · ' + t('bld.lv', { n: lv }) };
+  const opts = UP_ORDER.map(k => VARIANTS.res.find(v => v.k === k)).filter(V => V && V.pop > cur.pop).slice(0, 4)
+    .map(V => ({ V, cost: Math.max(100, Math.round(V.cost - 0.5 * cur.cost)), gain: V.pop - cur.pop, fail: reqFailOf(V) }));
+  return { tl, cur, opts };
+}
+function doUpgrade(i, o) {
+  const tl = state.tiles[i];
+  if (!tl || tl.t !== 'res') return;
+  if (o.fail) { audio.sfx('error'); return toast(t(o.fail[0], o.fail[1])); }
+  if (state.money < o.cost) { audio.sfx('error'); return toast(t('toast.nomoney')); }
+  state.money -= o.cost;
+  state.tiles[i] = { t: 'res', lv: 0, v: o.V.k, cs: { p: 0, dur: 24 } };
+  audio.sfx('place');
+  const x = i % N, z = Math.floor(i / N);
+  refresh(x, z);
+  updateHUD();
+  hideUpg();
+  const name = t('v.res.' + o.V.k);
+  withAt(x, z, () => addNews('good', ['news.upg', { name, n: o.gain }]));
+  toast(t('upg.done', { name, n: o.gain }));
+}
+function showUpgrade(i, cx, cy) {
+  const info = upgradeOptions(i);
+  if (!info) return hideUpg();
+  const { tl, cur, opts } = info;
+  if (tl.cs && !tl.cs.to) { toast(t('upg.busy')); return hideUpg(); }
+  upg.innerHTML = `<div class="ft">${escH(t('upg.title'))}</div><div class="cur">${escH(cur.name)} — ${escH(t('upg.cur', { n: cur.pop }))}</div>`
+    + (opts.length ? opts.map((o, k) => `<button class="fi${o.fail ? ' off' : ''}" data-k="${k}"><span class="fn">${escH(t('v.res.' + o.V.k))}</span><span class="fc">$${o.cost.toLocaleString()}</span><span class="fs"><b>${escH(t('upg.gain', { n: o.gain }))}</b> · ${escH(t('st.use', { p: o.V.power, w: o.V.water }))}${o.fail ? ` · <i>${escH(t(o.fail[0], o.fail[1]))}</i>` : ''}</span></button>`).join('') : `<div class="dim">${escH(t('upg.none'))}</div>`)
+    + `<div class="dim">${escH(t('upg.note'))}</div>`;
+  upg.querySelectorAll('button.fi').forEach(b => { b.onclick = () => doUpgrade(i, opts[+b.dataset.k]); });
+  upg.style.left = Math.max(8, Math.min(window.innerWidth - 320, cx + 12)) + 'px';
+  upg.style.top = Math.max(8, Math.min(window.innerHeight - 260, cy - 30)) + 'px';
+  upg.classList.add('show');
+  pingRing.position.set((i % N) - N / 2 + 0.5, tileY(i % N, Math.floor(i / N)) + 0.12, Math.floor(i / N) - N / 2 + 0.5); pingT = 2; pingRing.visible = true;
+}
+document.addEventListener('pointerdown', e => { if (!upg.contains(e.target)) hideUpg(); });
+window.addEventListener('keydown', e => { if (e.key === 'Escape') hideUpg(); });
+// หาช่องของอาคารที่ถูกชี้จริงๆ (ยิงรังสีใส่โมเดล ไม่ใช่แค่พื้น เพราะตึกสูงมาก)
+function pickBuilding(e) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(tileGroup.children, true);
+  for (const h of hits) {
+    let o = h.object;
+    while (o && o.parent !== tileGroup) o = o.parent;
+    const i = o ? meshes.indexOf(o) : -1;
+    if (i >= 0) return i;
+  }
+  const tl = pickTile(e);
+  return tl ? idx(tl.x, tl.z) : -1;
+}
+renderer.domElement.addEventListener('dblclick', e => {
+  if (currentTool !== 'select') return;
+  const i = pickBuilding(e);
+  if (i >= 0) showUpgrade(i, e.clientX, e.clientY);
+});
 document.addEventListener('dblclick', e => {
   const row = e.target.closest?.('.ni.go');
   if (!row) return;
@@ -3365,6 +3528,17 @@ function tabReligion(pop) {
     + kv(t('v.service.temple'), c.temple) + kv(t('v.service.mosque'), c.mosque) + kv(t('v.service.church'), c.church)
     + `<div class="dim">${escH(t('rel.note'))}</div>`);
 }
+function tabTransport(P) {
+  const { s, nd } = P, pol = state.policy || { parkFee: 2, fare: 1 }, c = ccache, pc = v => Math.round(100 * v) + '%';
+  const traffic = nd.list.find(n => n.k === 'traffic')?.v ?? 100;
+  const stepper = (k, label, val) => `<div class="kv"><span>${escH(label)}</span><b><button class="rf" data-pol="${k}:-1">−</button> $${val} <button class="rf" data-pol="${k}:1">+</button></b></div>`;
+  return sec(t('tr.title'), bar(t('need.traffic'), traffic, moodCol(traffic)) + bar(t('tr.cover'), 100 * s.transitCover, '#4db6ac', pc(s.transitCover))
+      + bar(t('tr.share'), 100 * s.transitShare / 0.6, '#81c784', pc(s.transitShare)) + kv(t('tr.cut'), '−' + pc(s.carCut)) + kv(t('tr.riders'), fmt(s.riders)))
+    + sec(t('tr.stations'), kv(t('v.service.metro'), c.metro) + kv(t('v.service.bus'), c.bus) + kv(t('v.service.taxi') + ' / ' + t('v.service.grab'), c.taxi + ' / ' + c.grab))
+    + sec(t('tr.park'), kv(t('tr.lots'), c.parking) + bar(t('tr.occ'), s.parkCap ? 100 * s.parkOcc / s.parkCap : 0, '#ffb74d', fmt(s.parkOcc) + ' / ' + fmt(s.parkCap))
+      + kv(t('tr.parkinc'), '+' + fmt(s.parkIncome)) + kv(t('tr.fareinc'), '+' + fmt(s.fareIncome)))
+    + sec(t('tr.policy'), stepper('parkFee', t('tr.parkfee'), pol.parkFee) + stepper('fare', t('tr.fare'), pol.fare) + `<div class="dim">${escH(t('tr.tip'))}</div>`);
+}
 function tabPlaces() {
   const list = buildVenueList(), sc = visScale();
   const now = [...list].filter(v => v.inside > 0).sort((a, b) => b.inside - a.inside).slice(0, 6);
@@ -3373,7 +3547,7 @@ function tabPlaces() {
   const cat = {};
   for (const v of list) cat[VENUE[v.key].cat] = (cat[VENUE[v.key].cat] || 0) + v.visits;
   const ct = Math.max(1, Object.values(cat).reduce((a, b) => a + b, 0));
-  const CC = { food: '#ff8a65', shop: '#4fc3f7', worship: '#ffd54f', health: '#ef5350', fun: '#ba68c8', money: '#81c784', other: '#a1887f' };
+  const CC = { food: '#ff8a65', shop: '#4fc3f7', worship: '#ffd54f', health: '#ef5350', fun: '#ba68c8', money: '#81c784', transit: '#4db6ac', other: '#a1887f' };
   return sec(t('places.hot'), today.length ? today.map(v => bar(venueName(v) + ' · ' + t('sign.road') + venueRoad(v), 100 * v.visits / mx, '#ffb74d', fmt(v.visits * sc))).join('') : `<div class="dim">${escH(t('places.none'))}</div>`)
     + sec(t('places.now'), now.length ? now.map(v => kv(venueName(v) + ' · ' + t('sign.road') + venueRoad(v), fmt(v.inside * sc))).join('') : `<div class="dim">${escH(t('places.none'))}</div>`)
     + sec(t('places.cat'), CATS.filter(k => cat[k]).sort((a, b) => cat[b] - cat[a]).map(k => bar(t('cat.' + k), 100 * cat[k] / ct, CC[k], fmt(cat[k] * sc))).join('') || `<div class="dim">${escH(t('places.none'))}</div>`)
@@ -3463,18 +3637,19 @@ function tabReg() {
     + (causes.length ? sec(t('reg.byCause'), causes.map(k => bar(t('reg.cause.' + k), 100 * sh(k) / tot, k === 'old' || k === 'illness' ? '#90a4ae' : '#e57373', fmt(sh(k)))).join('')) : '')
     + `<div class="ptabs sub">${['all', 'birth', 'death'].map(k => `<button data-reg="${k}" class="rf ${k === regFilter ? 'on' : ''}">${escH(t('reg.filter.' + k))}</button>`).join('')}</div>${rows}`;
 }
-const TABS = ['overview', 'pop', 'places', 'reg', 'util', 'fin', 'bld', 'news'];
+const TABS = ['overview', 'pop', 'places', 'transport', 'reg', 'util', 'fin', 'bld', 'news'];
 function renderPop() {
   if (!popPanel || !popOpen) return;
   const keep = popPanel.querySelector('.pbody')?.scrollTop || 0;
   const P = civicSnapshot(), D = cityDetail();
-  const body = { overview: tabOverview, pop: tabPop, places: tabPlaces, reg: tabReg, util: tabUtil, fin: tabFin, bld: tabBld, news: tabNews }[popTab](P, D);
+  const body = { overview: tabOverview, pop: tabPop, places: tabPlaces, transport: tabTransport, reg: tabReg, util: tabUtil, fin: tabFin, bld: tabBld, news: tabNews }[popTab](P, D);
   popPanel.innerHTML = `
     <div class="dh"><b>${escH(t('city.title'))}</b><small>${escH(t('side.drag'))}</small><button class="x" id="popClose">${ICON.close}</button></div>
     <div class="ptabs">${TABS.map(k => `<button data-tab="${k}" class="${k === popTab ? 'on' : ''}">${escH(t('tab.' + k))}</button>`).join('')}</div>
     <div class="pbody">${body}</div>`;
   popPanel.querySelector('#popClose').onclick = () => setPopOpen(false);
   popPanel.querySelectorAll('.ptabs button[data-tab]').forEach(b => { b.onclick = () => { popTab = b.dataset.tab; renderPop(); }; });
+  popPanel.querySelectorAll('button[data-pol]').forEach(b => { b.onclick = () => { const [k, d] = b.dataset.pol.split(':'), p = (state.policy ||= { parkFee: 2, fare: 1 }); p[k] = clamp(p[k] + +d, 0, k === 'parkFee' ? 6 : 4); audio.sfx('select'); renderPop(); }; });
   popPanel.querySelectorAll('button[data-reg]').forEach(b => { b.onclick = () => { regFilter = b.dataset.reg; renderPop(); }; });
   popPanel.querySelector('.pbody').scrollTop = keep;
 }
@@ -4010,7 +4185,8 @@ function updateAgentTargets() {
   const people = (s.pop * 0.16 + s.jobs * 0.04 + s.parks * 1.5 + Math.min(4, s.roads * 0.08)) * awake * rainy;
   const dogs = s.pop * 0.02 * (0.4 + 0.6 * awake) * rainy;
   const cats = s.pop * 0.015 * (0.4 + 0.6 * awake) * (1 - 0.5 * W.rain);
-  const transitCut = 1 - Math.min(0.2, ccache.bus * 0.04);
+  const transitCut = 1 - (s.carCut || 0);
+  carDemand = cars * transitCut;
   agents.setTargets({
     bus: Math.min(ccache.bus * 3, 9), taxi: Math.min(ccache.taxi * 4, 12), grab: Math.min(ccache.grab * 5, 12),
     car: Math.min(Math.round(cars * transitCut), q.cars),

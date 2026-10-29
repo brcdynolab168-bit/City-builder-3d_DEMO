@@ -12,7 +12,7 @@ export const FOOT = {
   'com:pub': [2, 1], 'com:tuner': [2, 1], 'service:drag': [3, 7],
   'service:temple': [3, 3], 'service:church': [2, 3], 'service:mosque': [3, 3],
   'com:mall': [3, 2], 'com:market': [2, 2], 'com:dealer': [2, 1], 'com:fishing': [1, 1],
-  'ind:honda': [3, 3], 'ind:toyota': [4, 3], 'ind:bmw': [3, 3], 'ind:shindengen': [2, 2], 'ind:keihin': [2, 2], 'ind:denso': [3, 2],
+  'com:parking': [2, 1], 'service:metro': [2, 1], 'ind:honda': [3, 3], 'ind:toyota': [4, 3], 'ind:bmw': [3, 3], 'ind:shindengen': [2, 2], 'ind:keihin': [2, 2], 'ind:denso': [3, 2],
   'farm:rice': [3, 2], 'farm:crop': [2, 2], 'farm:barn': [3, 2], 'farm:orchard': [2, 2],
   'park:plaza': [2, 2], 'park:play': [1, 1], 'park:sports': [2, 2], 'park:garden': [3, 3],
   'park:fountain': [1, 1], 'park:flowers': [1, 1], 'park:pond': [1, 1], 'park:pavilion': [1, 1], 'park:picnic': [1, 1],
@@ -1098,7 +1098,41 @@ export function createBig(c) {
   const denso = bg => factory(bg, { W: 3, D: 2, wall: 0xf3f0ec, trim: 0xd32f2f, name: 'DENSO', sBg: '#c62828', sFg: '#ffffff', h: 0.32, cars: 0, tanks: 2,
     extra: (g, c) => { put(g, boxGeo, band(0xcfd8dc), c.W / 2 - 0.55, y0 + 0.5, c.hz - 0.1, 0.3, 0.8, 0.3); for (let k = 0; k < 5; k++) put(g, boxGeo, MT.glass, c.W / 2 - 0.55, y0 + 0.14 + k * 0.14, c.hz - 0.1 + 0.152, 0.22, 0.05, 0.008); } });
 
+  // =============================================================
+  // ลานจอดรถเก็บเงิน (2×1) และสถานีรถไฟฟ้า (2×1)
+  // =============================================================
+  function parking(bg) {
+    ground(bg, 2, 1, M.asphalt);
+    for (const zz of [-0.2, 0.2]) for (let k = 0; k < 10; k++) put(bg, boxGeo, band(0xf2f2f2), -0.85 + k * 0.19, y0 + 0.012, zz, 0.012, 0.004, 0.26);
+    for (const [zz, rot] of [[-0.2, 0], [0.2, Math.PI]]) for (let k = 0; k < 9; k++) if ((k * 5 + (zz > 0 ? 3 : 0)) % 4 !== 0) miniCar(bg, -0.75 + k * 0.19, zz, rot, M.carCols[(k + (zz > 0 ? 2 : 0)) % M.carCols.length], 0.95);
+    put(bg, boxGeo, band(0xe9e4d6), 0.9, y0 + 0.08, 0.0, 0.14, 0.16, 0.14);                       // ป้อมเก็บเงิน
+    put(bg, boxGeo, MT.glass, 0.9, y0 + 0.09, 0.072, 0.1, 0.07, 0.006);
+    put(bg, boxGeo, band(0x1f4fa8), 0.9, y0 + 0.17, 0.0, 0.18, 0.02, 0.18);
+    put(bg, boxGeo, band(0xd32f2f), 0.72, y0 + 0.06, 0.0, 0.012, 0.012, 0.3);                     // ไม้กั้น
+    put(bg, boxGeo, band(0xf2f2f2), 0.72, y0 + 0.062, 0.1, 0.012, 0.012, 0.08);
+    put(bg, cylGeo, M.pole, -0.93, y0 + 0.2, 0.42, 0.014, 0.4, 0.014);
+    signAt(bg, 'P ' + t('sign.parking'), '#1f4fa8', '#ffffff', -0.93, y0 + 0.42, 0.432, 0.26, 0.06, 34);
+  }
+  function metro(bg) {
+    ground(bg, 2, 1, M.concrete);
+    for (const sx of [-0.7, 0.7]) put(bg, boxGeo, band(0xcfd4d8), sx, y0 + 0.26, 0, 0.11, 0.52, 0.11);          // เสาทางยกระดับ
+    put(bg, boxGeo, band(0xb9bfc4), 0, y0 + 0.54, 0, 2.0, 0.05, 0.36);                                          // ตัวราง
+    for (const sz of [-0.07, 0.07]) put(bg, boxGeo, band(0x6b7278), 0, y0 + 0.58, sz, 2.0, 0.012, 0.012);
+    put(bg, boxGeo, band(0xe8f0f6), 0, y0 + 0.68, 0, 1.2, 0.14, 0.2);                                          // ขบวนรถ
+    put(bg, boxGeo, MT.glass, 0, y0 + 0.69, 0.102, 1.1, 0.05, 0.006);
+    put(bg, boxGeo, band(0x2e9c4d), 0, y0 + 0.63, 0.102, 1.2, 0.03, 0.006);
+    put(bg, boxGeo, band(0x9fb0bd), 0, y0 + 0.82, 0, 1.4, 0.03, 0.46);                                          // หลังคาชานชาลา
+    for (const sx of [-0.62, 0.62]) put(bg, boxGeo, band(0x9fb0bd), sx, y0 + 0.7, 0.2, 0.02, 0.24, 0.02);
+    put(bg, boxGeo, band(0xdfe6ec), -0.72, y0 + 0.14, 0.3, 0.4, 0.28, 0.3);                                     // ทางขึ้น/ห้องจำหน่ายตั๋ว
+    put(bg, boxGeo, MT.glass, -0.72, y0 + 0.14, 0.452, 0.34, 0.2, 0.008);
+    put(bg, boxGeo, band(0x2e9c4d), -0.72, y0 + 0.3, 0.3, 0.44, 0.03, 0.34);
+    put(bg, boxGeo, band(0xcfd4d8), -0.3, y0 + 0.28, 0.3, 0.5, 0.025, 0.1).rotation.z = 0.55;                    // บันไดขึ้นชานชาลา
+    signAt(bg, t('sign.metro'), '#2e9c4d', '#ffffff', 0.45, y0 + 0.36, 0.43, 0.8, 0.12, 36);
+    put(bg, boxGeo, band(0x2e9c4d), 0.45, y0 + 0.36, 0.41, 0.84, 0.15, 0.03);
+  }
+
   const MAP = {
+    'com:parking': parking, 'service:metro': metro,
     'ind:honda': honda, 'ind:toyota': toyota, 'ind:bmw': bmw, 'ind:shindengen': shindengen, 'ind:keihin': keihin, 'ind:denso': denso,
     'service:hospital_p': bg => hospital(bg, true), 'service:school_p': bg => school(bg, true), 'com:bank': bank,
     'service:bus': busDepot, 'service:taxi': taxiDepot, 'service:grab': grabDepot,
