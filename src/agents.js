@@ -157,7 +157,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   }
   const CAR_TYPES = ['sedan', 'sedan', 'hatch', 'suv', 'pickup', 'hatch'];
   function makeCar(type = pick(CAR_TYPES), bodyMat = pick(M.car)) {
-    const gm = glbWrap('cars'); if (gm) return gm;
+    const gm = (Math.random() < 0.09 ? glbWrap('sports') : null) || glbWrap('cars'); if (gm) return gm;
     const G = carGeos(type);
     const g = new THREE.Group();
     const bodyM = mesh(G.body, bodyMat);
@@ -268,6 +268,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   }
   // แท็กซี่/แกร็บ: รถปกติ + ป้ายไฟบนหลังคา
   function makeTaxiLike(grab) {
+    if (!grab) { const tx = glbWrap('taxis'); if (tx) return tx; }
     const made = grab ? makeCar(pick(CAR_TYPES), M.grab) : makeCar('sedan', pick(M.taxi));
     if (made.glb) return made;
     const sign = new THREE.Mesh(boxGeo, grab ? M.roofSignG : M.roofSign);
@@ -518,7 +519,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       else if (role === 'taxi') { made = makeTaxiLike(false); speed = 0.9 + Math.random() * 0.15; }
       else if (role === 'grab') { const bk = Math.random() < 0.45; made = bk ? makeBike(true) : makeTaxiLike(true); speed = 1 + Math.random() * 0.2; if (bk) lat = 0.2; }
       else if (role === 'rbike') { made = makeBike(false, true); speed = 1.9 + Math.random() * 0.6; lat = 0.2; }
-      else if (role === 'rcar') { made = makeCar(pick(['sedan', 'hatch'])); speed = 1.7 + Math.random() * 0.5; }
+      else if (role === 'rcar') { made = glbWrap('sports') || makeCar(pick(['sedan', 'hatch'])); speed = 1.7 + Math.random() * 0.5; }
       else if (Math.random() < 0.22) { made = makeBike(); role = 'bike'; speed = 1.1 + Math.random() * 0.25; lat = 0.2; }
       else made = makeCar();
     }
@@ -925,13 +926,15 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     for (const zz of [-0.36, 0.36]) for (let k = 0; k < 5; k++) {
       const c = mesh(coneGeo, M.cone); c.scale.set(0.03, 0.05, 0.03); c.position.set(-0.4 + k * 0.2, 0.025, zz); g.add(c);
     }
-    const pc = makeCar('sedan', M.car[10]);
+    const pc = glbWrap('police') || makeCar('sedan', M.car[10]);
     pc.obj.position.set(0.42, 0, 0.05); pc.obj.rotation.y = 0.1; g.add(pc.obj);
     const lr = mesh(boxGeo, M.strobeR, false), lb = mesh(boxGeo, M.strobeB, false);
     lr.scale.set(0.05, 0.02, 0.03); lr.position.set(0.39, 0.15, 0.05); lb.scale.set(0.05, 0.02, 0.03); lb.position.set(0.45, 0.15, 0.05);
     g.add(lr, lb);
     for (let k = 0; k < 2; k++) {
       const o = new THREE.Group(); o.position.set(-0.05 + k * 0.12, 0, 0.32 - k * 0.05);
+      const cop = pickVehicle('cops');
+      if (cop) { o.add(cop); o.rotation.y = Math.PI + (k ? 0.5 : -0.5); g.add(o); continue; }   // ตำรวจโมเดล .glb (สุ่ม 2 แบบ) หันหน้าเข้าหาถนน
       o.add(mesh(boxGeo, M.white, false)); o.children[0].scale.set(0.035, 0.07, 0.025); o.children[0].position.y = 0.035;
       const hd = mesh(sphGeo, M.white, false); hd.scale.setScalar(0.03); hd.position.y = 0.085; o.add(hd);
       const vest = mesh(boxGeo, M.cone, false); vest.scale.set(0.038, 0.03, 0.028); vest.position.y = 0.045; o.add(vest);

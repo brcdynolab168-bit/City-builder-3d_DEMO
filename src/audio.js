@@ -194,11 +194,11 @@ export function createAudio() {
     f.connect(g); pan(g, rnd() * 2 - 1).connect(ambLP);
   }
   function siren(v) {
-    v *= 0.4;   // เบาลง
+    v *= 0.15;   // เบาลงมาก (ไม่ให้รำคาญ)
     const t = ctx.currentTime;
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = 'sine';
-    for (let i = 0; i < 10; i++) o.frequency.setValueAtTime(i % 2 ? 960 : 700, t + i * 0.55);
+    for (let i = 0; i < 10; i++) o.frequency.setValueAtTime(i % 2 ? 820 : 620, t + i * 0.55);
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(v, t + 0.8);
     g.gain.setValueAtTime(v, t + 4.2);
@@ -458,12 +458,12 @@ export function createAudio() {
       }
       // รถพยาบาลที่กำลังไปช่วยอุบัติเหตุ ไซเรนดังต่อเนื่อง
       timers.amb = (timers.amb ?? 0) - step;
-      if (env.ambulance && timers.amb <= 0 && prox > 0.2) { timers.amb = 5.4; siren(0.05 + 0.2 * near); }
+      if (env.ambulance && timers.amb <= 0 && prox > 0.35) { timers.amb = 5.4; siren(0.05 + 0.2 * near); }
       // ไซเรนรถพยาบาล
       timers.siren -= step;
       if (timers.siren <= 0) {
-        timers.siren = 45 + rnd() * 60;
-        if (env.hospital && prox > 0.3) siren(0.03 + 0.1 * near);
+        timers.siren = 100 + rnd() * 140;
+        if (env.hospital && prox > 0.5) siren(0.03 + 0.1 * near);
       }
       // ระฆังโรงเรียน 07:45
       if (env.school && env.tod > 0.322 && env.tod < 0.33 && lastBellDay !== env.day && prox > 0.25) {

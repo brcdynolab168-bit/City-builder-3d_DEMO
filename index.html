@@ -395,6 +395,18 @@
   <div id="toast"></div>
   <div id="menu"></div>
 
+  <script>
+    // แสดง error แรกที่เกิดขึ้นบนหน้าจอ (ช่วยหาสาเหตุเมื่อหน้าจอว่าง)
+    (function () {
+      function show(msg) {
+        var d = document.getElementById('errbox');
+        if (!d) { d = document.createElement('pre'); d.id = 'errbox'; d.style.cssText = 'position:fixed;left:10px;right:10px;bottom:10px;max-height:40vh;overflow:auto;z-index:99999;background:#300;color:#ffd0d0;border:1px solid #f66;padding:10px;font:12px/1.4 monospace;white-space:pre-wrap;user-select:text'; document.body.appendChild(d); }
+        if (d.textContent.length < 3000) d.textContent += msg + '\n\n';
+      }
+      window.addEventListener('error', function (e) { show('ERROR: ' + e.message + '\n' + (e.filename || '') + ':' + (e.lineno || '') + (e.error && e.error.stack ? '\n' + e.error.stack : '')); });
+      window.addEventListener('unhandledrejection', function (e) { var r = e.reason; show('PROMISE: ' + (r && r.stack ? r.stack : r)); });
+    })();
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

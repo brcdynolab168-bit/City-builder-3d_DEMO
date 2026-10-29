@@ -20,7 +20,7 @@ export const FOOT = {
 
 export function createBig(c) {
   const { put, boxGeo, cylGeo, coneGeo, icoGeo, planeGeo, M, FM, block, roofCap, signAt, shrub, addTree, band, std,
-    gableGeo, facadeGeo, lot, t, facadeMats } = c;
+    gableGeo, facadeGeo, lot, t, facadeMats, stationModel } = c;
   const y0 = 0.03;
 
   // ----- วัสดุเฉพาะ -----
@@ -623,6 +623,13 @@ export function createBig(c) {
   };
   function police(bg) {
     ground(bg, 2, 2, M.concrete);
+    const sm = stationModel && stationModel('police');
+    if (sm) {                       // โมเดล .glb (src/models/stations/police.glb)
+      sm.position.set(0, y0, -0.4);
+      bg.add(sm);
+      put(bg, cylGeo, M.metal, 0.92, y0 + 0.25, 0.3, 0.01, 0.5, 0.01);
+      put(bg, boxGeo, M.beacon, 0.92, y0 + 0.52, 0.3, 0.03, 0.03, 0.03);
+    } else {
     const top = block(bg, 1.3, 3, 0.7, FM.office[1], -0.1, y0, -0.45);
     roofCap(bg, 1.3, 0.7, top);
     put(bg, boxGeo, band(0x1e3f8f), -0.1, y0 + 0.3, -0.45 + 0.355, 1.32, 0.07, 0.01);
@@ -631,6 +638,7 @@ export function createBig(c) {
     put(bg, cylGeo, M.metal, 0.45, top + 0.2, -0.45, 0.012, 0.4, 0.012);
     put(bg, boxGeo, M.beacon, 0.45, top + 0.4, -0.45, 0.03, 0.03, 0.03);
     flag(bg, -0.85, 0.0, 0x1e3f8f, 0.5);
+    }
     put(bg, boxGeo, M.asphalt, 0.1, y0 + 0.012, 0.5, 1.8, 0.01, 0.8);
     for (const [x, ry] of [[-0.55, 0], [-0.25, 0], [0.05, 0]]) { miniCar(bg, x, 0.55, ry, M.white); lightbar(bg, x, y0 + 0.095, 0.55); put(bg, boxGeo, band(0x1e3f8f), x, y0 + 0.05, 0.55, 0.092, 0.012, 0.19); }
     miniCar(bg, 0.45, 0.55, 0, M.carCols[3]);
@@ -638,6 +646,11 @@ export function createBig(c) {
   }
   function fire(bg) {
     ground(bg, 2, 2, M.concrete);
+    const sm = stationModel && stationModel('fire');
+    if (sm) {                       // โมเดล .glb (src/models/stations/fire.glb)
+      sm.position.set(0, y0, -0.38);
+      bg.add(sm);
+    } else {
     const brick = std(0xb04a3a, { roughness: 0.85 });
     put(bg, boxGeo, brick, 0, y0 + 0.2, -0.4, 1.5, 0.4, 0.8);
     put(bg, boxGeo, MT.wall, 0, y0 + 0.41, -0.4, 1.56, 0.03, 0.86);
@@ -650,6 +663,7 @@ export function createBig(c) {
     put(bg, boxGeo, brick, 0.62, y0 + 0.45, -0.55, 0.26, 0.9, 0.26);
     put(bg, boxGeo, MT.wall, 0.62, y0 + 0.91, -0.55, 0.3, 0.03, 0.3);
     for (let k = 0; k < 4; k++) put(bg, boxGeo, MT.glass, 0.62, y0 + 0.2 + k * 0.2, -0.55 + 0.131, 0.1, 0.08, 0.006);
+    }
     truck(bg, -0.4, 0.45, 0, 0xc62828, true);
     truck(bg, 0.15, 0.45, 0, 0xc62828, false);
     put(bg, boxGeo, M.asphalt, 0, y0 + 0.012, 0.5, 1.9, 0.01, 0.7);

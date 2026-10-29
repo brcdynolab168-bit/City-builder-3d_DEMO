@@ -10,7 +10,7 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { createAgents } from './agents.js';
 import { createWeather } from './weather.js';
 import { createWildlife } from './wildlife.js';
-import { VEH_RE, addVehicleModel, vehicleCount } from './vehicles.js';
+import { VEH_RE, STATION_RE, addVehicleModel, addStationModel, pickStation, vehicleCount } from './vehicles.js';
 import { ICON, mountIcons } from './icons.js';
 import { createMinimap } from './minimap.js';
 import { createDrag } from './dragrace.js';
@@ -1133,6 +1133,12 @@ async function loadModels() {
   const jobs = [];
   let ok = 0;
   for (const [path, url] of Object.entries(modelUrls)) {
+    const sm = path.match(STATION_RE);
+    if (sm) {
+      jobs.push(loader.loadAsync(url).then(gltf => { addStationModel(sm[1].toLowerCase(), gltf.scene); ok++; })
+        .catch(err => console.warn('โหลดโมเดลไม่สำเร็จ:', path, err)));
+      continue;
+    }
     const vm = path.match(VEH_RE);
     if (vm) {
       jobs.push(loader.loadAsync(url).then(gltf => { addVehicleModel(vm[1].toLowerCase(), gltf.scene); ok++; })
@@ -1607,7 +1613,7 @@ function buildUniversity(bg, r) {
   shrub(bg, -0.42, 0.42, 0.11, 0); shrub(bg, 0.42, 0.42, 0.11, 2); shrub(bg, -0.18, 0.44, 0.09, 1); shrub(bg, 0.18, 0.44, 0.09, 3);
 }
 
-const BIG = createBig({ put, boxGeo, cylGeo, coneGeo, icoGeo, planeGeo, M, FM, block, roofCap, signAt, shrub, addTree, band, std, gableGeo, facadeGeo, lot, t, facadeMats });
+const BIG = createBig({ put, boxGeo, cylGeo, coneGeo, icoGeo, planeGeo, M, FM, block, roofCap, signAt, shrub, addTree, band, std, gableGeo, facadeGeo, lot, t, facadeMats, stationModel: pickStation });
 
 function buildVariant(bg, type, v, r, r2) {
   if (type === 'res') {
@@ -1653,7 +1659,12 @@ function flatMesh(parent, mat, px, py, pz, sx, sz, ry = 0) {
   return m;
 }
 
-// เสาไฟจราจร 1 ต้นต่อทางเข้าแต่ละด้าน (ชิดซ้ายของรถที่วิ่งเข้ามา) หันหน้าไฟเข้าหารถ
+// ไฟจราจรสไตล์ Econolite 3 ช่อง: ตัวถังดำ แผ่นหลังขอบสะท้อนแสง เลนส์กลม มีฮู้ดบังแดด แขนยึดเสา
+const sigLensGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 14); sigLensGeo.rotateX(Math.PI / 2);                    // แกนตามแนว +z
+const sigRingGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 14); sigRingGeo.rotateX(Math.PI / 2);
+const sigVisorGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 10, 1, true, Math.PI / 2, Math.PI); sigVisorGeo.rotateX(Math.PI / 2);   // ครึ่งท่อด้านบน
+const sigBorderMat = std(0xe8e2b4, { roughness: 0.5, emissive: 0x3a3820, emissiveIntensity: 0.25 });
+const sigVisorMat = new THREE.MeshStandardMaterial({ color: 0x14171a, roughness: 0.7, side: THREE.DoubleSide });
 function addSignalHeads(g, x, z, details) {
   const grp = sigGroup(x, z);
   for (const [dx, dz] of DIRS4) {
@@ -1664,11 +1675,22 @@ function addSignalHeads(g, x, z, details) {
     pole.rotation.y = Math.atan2(dx, dz);
     g.add(pole);
     put(pole, cylGeo, M.pole, 0, 0.25, 0, 0.014, 0.5, 0.014);
-    put(pole, boxGeo, M.housing, 0, 0.32, 0.012, 0.05, 0.15, 0.036);
+    put(pole, cylGeo, M.pole, 0, 0.012, 0, 0.03, 0.024, 0.03);                       // ฐานเสา
     const lm = signalMats[grp][axis];
-    put(pole, boxGeo, lm.r, 0, 0.365, 0.033, 0.03, 0.03, 0.008);
-    put(pole, boxGeo, lm.y, 0, 0.32, 0.033, 0.03, 0.03, 0.008);
-    put(pole, boxGeo, lm.g, 0, 0.275, 0.033, 0.03, 0.03, 0.008);
+    const cy = 0.32;
+    put(pole, boxGeo, M.pole, 0, cy + 0.058, 0.007, 0.01, 0.008, 0.018);              // แขนยึดบน
+    put(pole, boxGeo, M.pole, 0, cy - 0.058, 0.007, 0.01, 0.008, 0.018);              // แขนยึดล่าง
+    put(pole, boxGeo, M.housing, 0, cy, 0.022, 0.044, 0.15, 0.03);                    // ตัวถัง
+    put(pole, boxGeo, M.housing, 0, cy, 0.0, 0.066, 0.176, 0.004);                    // แผ่นหลัง
+    put(pole, boxGeo, sigBorderMat, 0, cy + 0.088, 0.0, 0.066, 0.004, 0.0045);        // ขอบสะท้อนแสง (บน/ล่าง/ซ้าย/ขวา)
+    put(pole, boxGeo, sigBorderMat, 0, cy - 0.088, 0.0, 0.066, 0.004, 0.0045);
+    put(pole, boxGeo, sigBorderMat, 0.031, cy, 0.0, 0.004, 0.176, 0.0045);
+    put(pole, boxGeo, sigBorderMat, -0.031, cy, 0.0, 0.004, 0.176, 0.0045);
+    [[lm.r, 0.045], [lm.y, 0], [lm.g, -0.045]].forEach(([mat, oy]) => {
+      put(pole, sigRingGeo, M.housing, 0, cy + oy, 0.038, 0.036, 0.036, 0.006);       // ขอบเลนส์
+      put(pole, sigLensGeo, mat, 0, cy + oy, 0.041, 0.029, 0.029, 0.006);             // เลนส์ (เปลี่ยนสีตามสัญญาณ)
+      put(pole, sigVisorGeo, sigVisorMat, 0, cy + oy, 0.052, 0.04, 0.04, 0.03);       // ฮู้ดบังแดด
+    });
     if (details >= 1) {
       // ป้ายชื่อถนนที่กำลังจะตัดผ่าน
       const cross = axis === 'x' ? colName(x) : rowName(z);
@@ -3602,6 +3624,12 @@ function boatClick(e) {
   return true;
 }
 
+let swayFrame = 0;
+let fpsAvg = 60;
+let cntCache = null, cntT = 0;
+const agentCounts = dt => { cntT -= dt; if (!cntCache || cntT <= 0) { cntT = 0.25; cntCache = agents.counts(); } return cntCache; };
+const txt = new WeakMap();
+const setTxt = (el, v) => { if (txt.get(el) !== v) { txt.set(el, v); el.textContent = v; } };
 let fpsFrames = 0;
 let fpsTime = 0;
 let acc = 0;
@@ -3644,7 +3672,8 @@ function loop(now) {
   swayClock += dt;
   const sw1 = swayClock * (1.3 + W.wind * 2.2), sw2 = swayClock * 1.1;
   const swA = 0.015 + 0.09 * W.wind, swB = 0.01 + 0.05 * W.wind;
-  for (const arr of swayTiles.values()) {
+  swayFrame ^= 1;
+  if (swayFrame) for (const arr of swayTiles.values()) {   // อัปเดตต้นไม้สลับเฟรม (ตาแยกไม่ออก แต่เบาลงครึ่งหนึ่ง)
     for (const s of arr) {
       s.obj.rotation.z = Math.sin(sw1 + s.ph) * swA * s.k;
       s.obj.rotation.x = Math.cos(sw2 + s.ph) * swB * s.k;
@@ -3659,7 +3688,7 @@ function loop(now) {
   const lightning = W.flash > 0.85 && prevFlash <= 0.85;
   prevFlash = W.flash;
   {
-    const ac = agents.counts();
+    const ac = agentCounts(dt);
     audio.update(dt, {
       racers: agents.racers(), prox: 1 - THREE.MathUtils.smoothstep(camDist, 9, 52),
       wind: W.wind, rain: W.rain, cars: ac.car, people: ac.person, dogs: ac.dog, cats: ac.cat,
@@ -3678,7 +3707,7 @@ function loop(now) {
   controls.target.y = 0.4;
 
   controls.update();
-  if (now - lastShadowAt > 66) { lastShadowAt = now; renderer.shadowMap.needsUpdate = true; }
+  if (now - lastShadowAt > (fpsAvg < 40 ? 120 : 66)) { lastShadowAt = now; renderer.shadowMap.needsUpdate = true; }
   if (useBloom) {
     bloomPass.strength = 0.15 + 0.7 * nightLevel;
     composer.render();
@@ -3690,18 +3719,19 @@ function loop(now) {
   fpsFrames++;
   fpsTime += dt;
   if (fpsTime >= 0.5) {
-    const c = agents.counts();
+    const c = agentCounts(0.5);
     $('fps').textContent = `FPS ${Math.round(fpsFrames / fpsTime)}` + (gpuName ? ` · ${gpuName}` : '');
-    $('live').textContent = t('live', c);
+    setTxt($('live'), t('live', c));
     // นาฬิกา สภาพอากาศ อุณหภูมิ ลม
-    $('clock').textContent = clockText();
-    $('period').textContent = t('tod.' + periodNow);
-    $('wxIcon').innerHTML = ICON[weather.iconKey()];
-    $('wxText').textContent = t('wx.' + weather.label());
-    $('temp').textContent = Math.round(tempC) + '°C';
-    $('windv').textContent = t('wind', { n: Math.round(8 + W.wind * 42) });
+    setTxt($('clock'), clockText());
+    setTxt($('period'), t('tod.' + periodNow));
+    { const ik = weather.iconKey(); if (txt.get($('wxIcon')) !== ik) { txt.set($('wxIcon'), ik); $('wxIcon').innerHTML = ICON[ik]; } }
+    setTxt($('wxText'), t('wx.' + weather.label()));
+    setTxt($('temp'), Math.round(tempC) + '°C');
+    setTxt($('windv'), t('wind', { n: Math.round(8 + W.wind * 42) }));
     // ปรับความละเอียดภาพอัตโนมัติ: ถ้า FPS ตก ลดความละเอียดลงทีละนิด ถ้าเหลือแรงก็เพิ่มกลับ
     const fpsNow = fpsFrames / fpsTime;
+    fpsAvg = fpsNow;
     dynCool -= fpsTime;
     if (dynCool <= 0 && !menu.isOpen) {
       let ns = dynScale;

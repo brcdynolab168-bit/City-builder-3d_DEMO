@@ -150,10 +150,9 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
     },
   };
   const PLAN = [
-    ['fishing', 1.25, 0.9], ['fishing', 1.25, 0.8], ['longtail', 1.1, 1.8], ['longtail', 1.1, 1.6], ['sail', 1.35, 0.9],
-    ['row', 1.3, 0.45], ['row', 1.3, 0.38], ['barge', 1, 0.55], ['ferry', 1.15, 1.1],
+    ['fishing', 1.25, 0.9], ['row', 1.3, 0.4], ['longtail', 1.1, 1.8], ['barge', 1, 0.55], ['sail', 1.35, 0.9], ['ferry', 1.15, 1.1],
   ];
-  const LANES = [0.85, 0.85, 0.4, 1.25, 0.85, 1.25, 1.25, 0.4, 0.4];   // ระยะจากกลางแม่น้ำ (เรือเดินสวนกันคนละฝั่ง)
+  const LANES = [0.85, 1.25, 0.4, 0.4, 0.85, 1.25];   // ระยะจากกลางแม่น้ำ (เรือเดินสวนกันคนละฝั่ง)
   PLAN.forEach(([kind, sc, sp], i) => {
     if (!withBoats) return;
     const g = new THREE.Group(), inner = new THREE.Group();
@@ -170,7 +169,7 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
     root.add(g);
     const dir = i % 2 ? -1 : 1;
     const bx = X0 + 4 + (i * 5.3) % (X1 - X0 - 8), zp0 = 0.3 * Math.cos(bx * 0.1 + 0.6) + 0.378 * Math.cos(bx * 0.27 + 2);
-    boats.push({ ...o, kind, g, inner, x: bx, speed: sp * rnd(0.9, 1.1), v: sp, dir, hd: Math.atan2(dir, dir * zp0), laneAbs: LANES[i], lat: LANES[i] * dir, ph: Math.random() * 10, cool: 0 });
+    boats.push({ ...o, kind, g, inner, wake, x: bx, speed: sp * rnd(0.9, 1.1), v: sp, dir, hd: Math.atan2(dir, dir * zp0), laneAbs: LANES[i], lat: LANES[i] * dir, ph: Math.random() * 10, cool: 0 });
   });
 
   // เรือจอดริมตลิ่ง: สุ่มตำแหน่ง/ชนิดใหม่ทุกครั้งที่เริ่มเกม
@@ -178,7 +177,7 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
   if (withBoats) {
     const kinds = ['fishing', 'longtail', 'row', 'row', 'longtail', 'fishing'];
     const used = [];
-    for (let k = 0; k < 3 + Math.floor(Math.random() * 2); k++) {
+    for (let k = 0; k < 2 + (Math.random() < 0.4 ? 1 : 0); k++) {
       let x = 0, ok = false;
       for (let tries = 0; tries < 20 && !ok; tries++) {
         x = rnd(X0 + 3, X1 - 6);
@@ -199,24 +198,39 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
       docked.push({ g, inner, x, z: riverZ(x) + side * 1.5, ph: Math.random() * 10, oars: o.oars });
     }
   }
-  // ใช้โมเดล .glb แทนเรือที่สร้างจากโค้ด (เรียกหลังโหลดไฟล์เสร็จ) -- เรือลากจูงพ่วง/เรือเฟอร์รี่ใช้ความยาวของตัวเอง
+  // ใช้เฉพาะโมเดล .glb (เรือที่สร้างจากโค้ดถูกเอาออก) ขนาดเล็กลง ใหญ่กว่ารถนิดหน่อย (รถยาว ~0.36)
+  const BOAT_LEN = { fishing: 0.72, longtail: 0.62, sail: 0.68, row: 0.5 };
   function useModels() {
     if (!hasVehicle('boats')) return 0;
     let n = 0;
+    const fitWake = (b, L) => {
+      if (!b.wake) return;
+      const wl = L * (b.fast ? 1.8 : b.small ? 0.8 : 1.3);
+      b.wake.scale.set(L * 0.45 + 0.1, wl, 1);
+      b.wake.position.set(0, 0.012, -L * 0.42 - wl / 2);
+    };
+    for (const b of [...boats]) {
+      if (!BOAT_LEN[b.kind]) {   // เรือลากจูง/เรือโดยสาร (โมเดลโค้ด) เอาออก
+        root.remove(b.g); boats.splice(boats.indexOf(b), 1);
+        continue;
+      }
+    }
     for (const b of [...boats, ...docked]) {
       const v = pickVehicle('boats');
       if (!v) continue;
       while (b.inner.children.length) b.inner.remove(b.inner.children[0]);
-      const len = b.len || 1.3;
-      v.scale.multiplyScalar(len / 1.3);
+      const L = BOAT_LEN[b.kind] || 0.6;
+      v.scale.multiplyScalar(L / 1.3);
       b.inner.add(v);
+      b.g.scale.setScalar(1);
+      b.len = L;
+      fitWake(b, L);
       b.oars = null; b.lamp = null;
       n++;
     }
     return n;
   }
-  const pickables = [...boats.map(b => b.g), ...docked.map(b => b.g)];
-  function hit(raycaster) { return pickables.length > 0 && raycaster.intersectObjects(pickables, true).length > 0; }
+  function hit(raycaster) { const pk = [...boats.map(b => b.g), ...docked.map(b => b.g)]; return pk.length > 0 && raycaster.intersectObjects(pk, true).length > 0; }
 
   let t = 0;
 

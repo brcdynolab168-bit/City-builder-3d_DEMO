@@ -124,3 +124,24 @@ npm run dev
 
 ## อัปเดต: ระบบโมเดล .glb สำหรับยานพาหนะและสัตว์
 วางไฟล์ใน `src/models/{cars,bikes,buses,boats,dogs,cats}/` ดูรายละเอียดใน `src/models/README.md` (ไม่มีไฟล์ = ใช้โมเดลจากโค้ดเหมือนเดิม)
+
+## เครดิตโมเดล 3D
+- "Fishing Boat" โดย JasperTobias (https://sketchfab.com/3d-models/fishing-boat-e07c8b9cc38543879a4e2fe145e62df6) — CC BY-NC 4.0 (ห้ามใช้เชิงพาณิชย์)
+- "Boat" โดย Mario Libera / kiolib (https://sketchfab.com/3d-models/boat-57b1ca19f1484559b22c4b8ad408559d) — CC BY 4.0
+- "Dodge Charger SRT (Police)" โดย temich (https://sketchfab.com/3d-models/dodge-charger-srt-police-c6d52512e32d42abb89466ced4d56c1d) — CC BY-NC 4.0 (ห้ามใช้เชิงพาณิชย์) *ลดรายละเอียด/เอาภายในออกเพื่อให้เกมเบาลง*
+- "Police car" โดย Mateusz Woliński / jeandiz — CC BY 4.0
+- "Female Police v1" โดย Michael Constantine / devdesgames — CC BY 4.0
+- "Police" โดย Alihan / BenAlihan — CC BY 4.0
+- "Taxi 2" โดย solid3DDD — CC BY 4.0
+(ไฟล์ .glb ถูกย่อพื้นผิวและตัดส่วนที่ไม่จำเป็นออกเพื่อให้เล่นลื่น)
+- "Generic passenger car pack" โดย Comrade1280 (https://sketchfab.com/comrade1280) — CC BY 4.0 (แยกเป็น 10 คัน: compact, coupe, hatchback, minivan, offroad, pickup, sedan, sport, suv, wagon)
+- "Sport Car Low Poly" และ "Generic Sport Car Low Poly" โดย Han66st (https://sketchfab.com/Han66st) — CC BY 4.0
+- "Traffic Car Pack" โดย JUSTGAME (https://sketchfab.com/ayapenid) — CC BY 4.0
+- "Econolite 8-inch EOI Traffic Signals Pack" โดย Signalrenders (https://sketchfab.com/Signalrenders) — CC BY 4.0 (ใช้เป็นต้นแบบรูปทรงไฟจราจร แล้วสร้างใหม่ด้วยโค้ดให้เบา)
+
+## อัปเดต: รถสปอร์ต/รถ Traffic, ไฟจราจรใหม่, ไซเรนเบาลง, ปรับประสิทธิภาพ
+- ไฟจราจรใหม่: ตัวถังดำ 3 ช่อง แผ่นหลังขอบสะท้อนแสง เลนส์กลม ฮู้ดบังแดด แขนยึดเสา (ยังเปลี่ยนสีตามสัญญาณเดิม)
+- ไซเรนรถพยาบาลเบาลงอีก ถี่น้อยลง และได้ยินเฉพาะตอนซูมเข้าใกล้
+- ลดงานที่ทำซ้ำทุกเฟรม (ภาพ/แสง/เงาเหมือนเดิม)
+- "Police Station" โดย VertexForge (https://sketchfab.com/prankscare99) — CC BY 4.0
+- "Fire Station No. 1" โดย CommonSpence (https://sketchfab.com/commonspence) — CC BY 4.0
