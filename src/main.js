@@ -10,7 +10,7 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { createAgents } from './agents.js';
 import { createWeather } from './weather.js';
 import { createWildlife } from './wildlife.js';
-import { VEH_RE, STATION_RE, addVehicleModel, addStationModel, pickStation, vehicleCount } from './vehicles.js';
+import { VEH_RE, STATION_RE, PROP_RE, addVehicleModel, addStationModel, pickStation, vehicleCount, addPropModel, propList, hasProp, makeProp } from './vehicles.js';
 import { ICON, mountIcons } from './icons.js';
 import { createMinimap } from './minimap.js';
 import { createDrag } from './dragrace.js';
@@ -757,8 +757,64 @@ const forest = (() => {
     m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true;
     m.frustumCulled = false; m.count = g.n; scene.add(m);
   }
+  // ใช้โมเดล .glb (ต้นไม้/หิน) แทนป่าที่สร้างจากโค้ด: ขนาดจริงต่อสัดส่วนเมือง สนสูง 1.1-1.9 ไม้ใบกว้าง 0.9-1.5 มะพร้าว 0.7-1.0 หิน 0.2-0.8
+  // (รถ = 0.36, ตึก 1 ชั้น = 0.16, คน = 0.16, ต้นไม้ในเมือง ~0.5)
+  let modelMeshes = [], modelTotal = 0;
+  function useModels() {
+    const conif = propList('conifer'), broad = propList('broad'), palm = propList('palm'), rock = propList('rock');
+    if (!conif.length && !broad.length) return false;
+    for (const g of Object.values(G)) for (const m of [g.trunk, g.crown]) { scene.remove(m); }
+    for (const m of modelMeshes) scene.remove(m);
+    modelMeshes = [];
+    const inst = new Map();
+    const rnd2 = mulberry32(777), dm = new THREE.Object3D(), col = new THREE.Color();
+    const pickV = l => l[Math.floor(rnd2() * l.length)];
+    const push = (v, kind, x, h, z, sc) => {
+      let e = inst.get(v); if (!e) { e = { v, mats: [], cols: [] }; inst.set(v, e); }
+      dm.position.set(x, h, z);
+      dm.rotation.set((rnd2() - 0.5) * 0.06, rnd2() * 6.28, (rnd2() - 0.5) * 0.06);
+      dm.scale.set(sc * (0.88 + rnd2() * 0.24), sc * (0.92 + rnd2() * 0.22), sc * (0.88 + rnd2() * 0.24));
+      dm.updateMatrix();
+      e.mats.push(dm.matrix.clone());
+      if (kind === 'broad' && rnd2() < 0.08) col.setRGB(1.1, 1.0, 0.62);
+      else { const b = kind === 'rock' ? 0.8 + rnd2() * 0.3 : 0.82 + rnd2() * 0.3; col.setRGB(b, b, b); }
+      e.cols.push(col.clone());
+    };
+    const FM2 = 4000; let n = 0;
+    for (let tries = 0; tries < 80000 && n < FM2; tries++) {
+      const x = (rnd2() - 0.5) * 190, z = (rnd2() - 0.5) * 190;
+      if (Math.abs(x) < N / 2 + 1 && Math.abs(z) < N / 2 + 1) continue;
+      const h = terrainH(x, z);
+      if (h < 0.35 || h > 9.5) continue;
+      if (fbm(x * 0.08 + 5, z * 0.08 + 5, 3) < 0.42) continue;
+      if (rock.length && rnd2() < 0.04) { push(pickV(rock), 'rock', x, h - 0.03, z, 0.2 + rnd2() * 0.6); n++; continue; }
+      if (palm.length && h < 1.0 && rnd2() < 0.5) { push(pickV(palm), 'palm', x, h - 0.03, z, 0.7 + rnd2() * 0.3); n++; continue; }
+      const wantCon = rnd2() < 0.25 + 0.75 * Math.min(1, Math.max(0, (h - 1.5) / 4));
+      if (wantCon && conif.length) push(pickV(conif), 'conifer', x, h - 0.03, z, 1.1 + rnd2() * 0.8);
+      else if (broad.length) push(pickV(broad), 'broad', x, h - 0.03, z, 0.9 + rnd2() * 0.6);
+      else push(pickV(conif), 'conifer', x, h - 0.03, z, 1.1 + rnd2() * 0.8);
+      n++;
+    }
+    modelTotal = n;
+    for (const e of inst.values()) for (const part of e.v.parts) {
+      const m = new THREE.InstancedMesh(part.geo, part.mat, e.mats.length);
+      e.mats.forEach((mt, i) => { m.setMatrixAt(i, mt); m.setColorAt(i, e.cols[i]); });
+      m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      m.frustumCulled = false; m.userData.n = e.mats.length; scene.add(m);
+      modelMeshes.push(m);
+    }
+    usingModels = true;
+    return true;
+  }
+  let usingModels = false;
   return {
+    useModels,
     setCount(n) {
+      if (usingModels) {
+        const f = modelTotal ? Math.min(1, n / modelTotal) : 0;
+        for (const m of modelMeshes) { const c = Math.floor(m.userData.n * f); m.count = c; m.visible = c > 0; }
+        return;
+      }
       const f = placed ? Math.min(1, n / placed) : 0;
       for (const g of Object.values(G)) {
         const c = Math.floor(g.n * f);
@@ -1087,6 +1143,16 @@ function addTree(parent, px, pz, s, r) {
   const pivot = new THREE.Group();
   pivot.position.set(px, 0, pz);
   parent.add(pivot);
+  // โมเดล .glb (src/models/trees): สน / มะพร้าว (~10%) / ไม้ใบกว้าง  สูง ~0.5-0.6 หน่วย (เทียบรถ 0.36, ตึก 1 ชั้น 0.16)
+  const gk = r > 0.72 ? 'conifer' : (r < 0.1 && hasProp('palm') ? 'palm' : 'broad');
+  const gt = hasProp(gk) ? makeProp(gk, (gk === 'conifer' ? 0.62 : gk === 'palm' ? 0.55 : 0.48) * s, (r * 7.31) % 1) : null;
+  if (gt) {
+    gt.position.set(0, 0.035, 0);
+    gt.rotation.y = r * 9;
+    pivot.add(gt);
+    if (swayList) swayList.push({ obj: pivot, ph: r * 40, k: 0.6 + 0.8 * hash(Math.round(px * 100), Math.round(pz * 100)) });
+    return;
+  }
   const conif = r > 0.72;
   const k = 0.32 * s;
   put(pivot, cityTrunkGeo, M.trunk, 0, 0.04, 0, k * 1.2, k * 1.1, k * 1.2, r * 6);
@@ -1133,6 +1199,12 @@ async function loadModels() {
   const jobs = [];
   let ok = 0;
   for (const [path, url] of Object.entries(modelUrls)) {
+    const pm = path.match(PROP_RE);
+    if (pm) {
+      jobs.push(loader.loadAsync(url).then(gltf => { addPropModel(pm[1].toLowerCase(), !!pm[2] || pm[3].toLowerCase().startsWith('far_'), pm[3], gltf.scene); ok++; })
+        .catch(err => console.warn('โหลดโมเดลไม่สำเร็จ:', path, err)));
+      continue;
+    }
     const sm = path.match(STATION_RE);
     if (sm) {
       jobs.push(loader.loadAsync(url).then(gltf => { addStationModel(sm[1].toLowerCase(), gltf.scene); ok++; })
@@ -3514,7 +3586,8 @@ applyQuality(settings.quality); // สร้างเมืองครั้ง
 loadModels().then(n => {
   if (n > 0) {
     console.info(`โหลดโมเดล .glb แล้ว ${n} ไฟล์`);
-    if (vehicleCount() > 0) { try { wildlife.useModels(); agents.clear(); } catch (e) { console.warn('ใช้โมเดลยานพาหนะไม่สำเร็จ', e); } }
+    if (vehicleCount() > 0 || hasProp('person')) { try { wildlife.useModels(); agents.clear(); } catch (e) { console.warn('ใช้โมเดลยานพาหนะไม่สำเร็จ', e); } }
+    try { forest.useModels(); } catch (e) { console.warn('ใช้โมเดลต้นไม้/หินไม่สำเร็จ', e); }
     rebuildAll();
   }
 });

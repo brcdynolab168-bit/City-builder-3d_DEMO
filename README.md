@@ -145,3 +145,10 @@ npm run dev
 - ลดงานที่ทำซ้ำทุกเฟรม (ภาพ/แสง/เงาเหมือนเดิม)
 - "Police Station" โดย VertexForge (https://sketchfab.com/prankscare99) — CC BY 4.0
 - "Fire Station No. 1" โดย CommonSpence (https://sketchfab.com/commonspence) — CC BY 4.0
+- "Pine tree" โดย Andriy Shekh (https://sketchfab.com/sheh5262) — CC BY 4.0
+- "Maple tree" โดย atrodler (https://sketchfab.com/atrodler) — CC BY 4.0
+- "Low poly Coconut Palm Tree 3D Model Free" และ "Realistic Coconut Palm Tree 3D Model Free" โดย iGauravRajput (https://sketchfab.com/iGauravRajput) — CC BY 4.0
+- "Low Poly Tree Scene Free" โดย Nicholas-3D (https://sketchfab.com/Nicholas01) — CC BY 4.0 (ใช้ต้นไม้ 3 ต้น)
+- "Stone Rock(part11)" โดย YN14R (https://sketchfab.com/YN14R) — CC BY 4.0 (ใช้เฉพาะหิน)
+- "WIP - Lowpoly People - 2" โดย Loïc Norgeot (https://sketchfab.com/norgeotloic) — CC BY 4.0
+
