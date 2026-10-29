@@ -18,6 +18,7 @@ import { blob, broadleafCrown, coniferCrown, trunkGeo } from './trees.js';
 import { terrainH, terrainColor, fbm, hash2, SEA_Y, WATER_LIMIT, setMap, mapHasRiver } from './terrain.js';
 import { t, hasKey, setLang, getLang, onLang, LANGS } from './i18n.js';
 import * as Saves from './saves.js';
+import * as Online from './online.js';
 import { createAudio } from './audio.js';
 import { createMenu } from './menu.js';
 import { createBig, FOOT } from './big.js';
@@ -32,9 +33,10 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // ---------------------------------------------------------------
 Saves.migrateOld();
 const AUTOSTART = Saves.takeAutoStart();
-let activeId = Saves.getActiveId() || Saves.listSlots()[0]?.id || null;
+const VISIT = Saves.getVisit();   // กำลังดูเมืองเพื่อน: ดูอย่างเดียว ไม่เซฟ ไม่ให้สร้าง/รื้อ
+let activeId = VISIT ? null : Saves.getActiveId() || Saves.listSlots()[0]?.id || null;
 if (activeId) Saves.setActive(activeId);
-const MAP_ID = (activeId && Saves.getSlot(activeId)?.map) || 'river';
+const MAP_ID = VISIT?.map || (activeId && Saves.getSlot(activeId)?.map) || 'river';
 setMap(MAP_ID);
 const audio = createAudio();
 const ECON = 10; // 1 วันในเกมเท่ากับรายได้/รายจ่าย 10 หน่วยของตัวเลขสถิติ
@@ -370,6 +372,7 @@ let saveFailShown = false;
 function save() {
   if (!activeId) return;
   state.tod = tod;
+  state.owner = settings.playerName || '';   // ชื่อผู้สร้างเมือง (ใช้แสดงตอนเพื่อนมาดูเมือง)
   const ok = Saves.saveData(activeId, state, { day: state.day, pop: computeStats().pop, money: Math.floor(state.money) });
   // localStorage เต็ม/ถูกบล็อก: เตือนครั้งเดียวจนกว่าจะเซฟได้อีก
   if (!ok && !saveFailShown) { saveFailShown = true; toast(t('toast.saveFail')); }
@@ -377,7 +380,7 @@ function save() {
 }
 function load() {
   limitsDirty = true;
-  const data = activeId ? Saves.loadData(activeId) : null;
+  const data = VISIT ? VISIT.state : activeId ? Saves.loadData(activeId) : null;
   if (data && Array.isArray(data.tiles) && data.tiles.length === N * N) {
     // ถ้ามีของที่ตกอยู่บนน้ำ (จากเซฟเก่า) ให้ลบทิ้ง ยกเว้นถนน (กลายเป็นสะพาน)
     data.tiles.forEach((tl, i) => { if (tl && tileIsWater[i] && tl.t !== 'road') data.tiles[i] = null; });
@@ -528,7 +531,7 @@ const QUALITY = {
     rain: 7000, forest: 4000, rtx: true,
   },
 };
-const settings = { quality: 'med', mode: 'trackpad', lang: 'th', master: 0.8, sfx: 0.8, music: 0.35, mute: false };
+const settings = { quality: 'med', mode: 'trackpad', lang: 'th', master: 0.8, sfx: 0.8, music: 0.35, mute: false, playerName: '', privacy: 'friends' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch {}
 if (!QUALITY[settings.quality]) settings.quality = 'med';
 if (settings.mode !== 'trackpad' && settings.mode !== 'mouse') settings.mode = 'trackpad';
@@ -2591,7 +2594,7 @@ function buildCost(tool, x, z) {
 }
 
 function applyTool(x, z) {
-  if (currentTool === 'select' || !inBounds(x, z)) return;
+  if (VISIT || currentTool === 'select' || !inBounds(x, z)) return;
   const i = idx(x, z);
   const cur = state.tiles[i];
   const cost = TOOLS[currentTool].cost;
@@ -3687,6 +3690,7 @@ function upgradeOptions(i) {
   return { tl, cur, opts };
 }
 function doUpgrade(i, o) {
+  if (VISIT) return;
   const tl = state.tiles[i];
   if (!tl || tl.t !== 'res') return;
   if (o.fail) { audio.sfx('error'); return toast(t(o.fail[0], o.fail[1])); }
@@ -4025,7 +4029,7 @@ function updateHUD(s = computeStats()) {
   $('powerBar').style.background = s.powerUse >= s.powerCap && s.powerUse > 0 ? 'var(--bad)' : s.powerUse > s.powerCap * 0.85 ? 'var(--warn)' : 'var(--good)';
   $('waterBar').style.width = clamp(s.waterCap ? 100 * s.waterUse / s.waterCap : 0, 0, 100) + '%';
   $('waterBar').style.background = s.waterUse >= s.waterCap && s.waterUse > 0 ? 'var(--bad)' : 'var(--teal)';
-  { const cn = (activeId && Saves.getSlot(activeId)?.name) || 'Mini City'; if ($('cityName').textContent !== cn) $('cityName').textContent = cn; }
+  { const cn = VISIT ? VISIT.name || 'Mini City' : (activeId && Saves.getSlot(activeId)?.name) || 'Mini City'; if ($('cityName').textContent !== cn) $('cityName').textContent = cn; }
   $('dR').style.height = s.demand.res * 100 + '%';
   $('dC').style.height = s.demand.com * 100 + '%';
   $('dI').style.height = s.demand.ind * 100 + '%';
@@ -4559,6 +4563,8 @@ function setSetting(k, v) {
     case 'mute': settings.mute = !!v; audio.setMute(!!v); break;
     case 'quality': applyQuality(v); break;
     case 'mode': applyControlMode(v); break;
+    case 'playerName': settings.playerName = String(v); publishSoon(); break;
+    case 'privacy': settings.privacy = v; publishSoon(); break;
   }
   saveSettings();
 }
@@ -4568,12 +4574,15 @@ const menu = createMenu({
   sfx: n => audio.sfx(n),
   onResume: resumeFromMenu,
   onContinue: () => { if (pausedSpeed !== null) resumeFromMenu(); else startGame(); },
+  online: Online.onlineEnabled() ? { enabled: true, connect: () => Online.connect(settings.playerName, settings.privacy), addFriend: Online.addFriend, removeFriend: Online.removeFriend, listFriends: Online.listFriends, listPublic: Online.listPublic } : null,
+  onVisit: visitCity,
   onNew: (name, map) => {
+    Saves.clearVisit();
     if (activeId) save();
     const id = Saves.createSlot(name, map);
     Saves.setActive(id); Saves.setAutoStart(); location.reload();
   },
-  onLoad: id => { if (activeId) save(); Saves.setActive(id); Saves.setAutoStart(); location.reload(); },
+  onLoad: id => { Saves.clearVisit(); if (activeId) save(); Saves.setActive(id); Saves.setAutoStart(); location.reload(); },
   onDeleted: id => { if (id === activeId) { activeId = null; location.reload(); } },
 });
 $('menuBtn').onclick = openMenu;
@@ -4785,6 +4794,8 @@ function loop(now) {
   if (audioStatsT <= 0) { audioStatsT = 0.5; refreshAudioStats(); }
   levelT -= dt;
   if (levelT <= 0) { levelT = 3; checkLevelUp(); }
+  publishT -= dt;
+  if (publishT <= 0) { publishT = 120; publishCity(); }
   const spin = dt * Math.min(speed, 1) * (0.4 + 2.2 * W.wind);   // กังหันลมหมุนตามแรงลม หยุดเมื่อพักเกม
   for (const arr of spinTiles.values()) {
     _sp.center.copy(arr.g.position); _sp.radius = 2;
@@ -4905,4 +4916,49 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
     if (prev && prev !== __BUILD_ID__) setTimeout(() => toast(t('upd.done')), 1500);
     localStorage.setItem('mini-city-build', __BUILD_ID__);
   } catch {}
+}
+
+// ---------------------------------------------------------------
+// ออนไลน์: อัปโหลดเมืองให้เพื่อนดูทุก 2 นาที (หรือทันทีที่เปลี่ยนชื่อ/ความเป็นส่วนตัว) และเปิดดูเมืองเพื่อน
+// ---------------------------------------------------------------
+let publishT = 30, publishBusy = false;
+function publishSoon() { publishT = Math.min(publishT, 3); }
+async function publishCity() {
+  if (!Online.onlineEnabled() || VISIT || !activeId || publishBusy) return;
+  publishBusy = true;
+  try {
+    const s = computeStats();
+    await Online.connect(settings.playerName, settings.privacy);
+    await Online.publishCity(
+      { name: settings.playerName || '', privacy: settings.privacy, city_name: Saves.getSlot(activeId)?.name || '', pop: s.pop, level: cityLevel(), map: MAP_ID },
+      { ...state, tod },
+    );
+  } catch (err) { console.warn('อัปโหลดเมืองไม่สำเร็จ', err); }
+  publishBusy = false;
+}
+async function visitCity(id) {
+  const r = await Online.fetchCity(id).catch(() => null);
+  if (!r || !Array.isArray(r.data?.tiles) || r.data.tiles.length !== N * N) return toast(t('fr.cantview'));
+  if (activeId) save();
+  if (!Saves.setVisit({ state: r.data, map: r.profile?.map || 'river', name: r.profile?.city_name || '', owner: r.profile?.name || '' })) return toast(t('fr.cantview'));
+  Saves.setAutoStart();
+  location.reload();
+}
+if (VISIT) {
+  // ดูอย่างเดียว: ซ่อนแถบเครื่องมือ ใช้โหมดดูเมือง และมีแถบบอกว่ากำลังดูเมืองใคร + ปุ่มกลับเมืองตัวเอง
+  const st = document.createElement('style');
+  st.textContent = '.visiting #dock,.visiting #toolTab{display:none!important}';
+  document.head.appendChild(st);
+  document.body.classList.add('visiting');
+  selectTool('select');
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:9998;display:flex;align-items:center;gap:10px;'
+    + 'padding:8px 8px 8px 14px;border-radius:12px;background:#0d47a1;color:#fff;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.35);max-width:calc(100vw - 32px)';
+  const msg = document.createElement('span'), back = document.createElement('button');
+  back.style.cssText = 'border:0;border-radius:8px;padding:6px 12px;background:#fff;color:#0d47a1;font-weight:700;cursor:pointer;white-space:nowrap';
+  const label = () => { msg.textContent = '👀 ' + t('fr.visiting', { city: VISIT.name || 'Mini City', owner: VISIT.owner || t('fr.noname') }); back.textContent = t('fr.back'); };
+  label(); onLang(label);
+  back.onclick = () => { Saves.clearVisit(); Saves.setAutoStart(); location.reload(); };
+  bar.append(msg, back);
+  document.body.appendChild(bar);
 }

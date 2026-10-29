@@ -56,10 +56,12 @@ export function createMenu(h) {
     return `
       <div class="mlogo"><span>MINI</span><b>CITY</b><i>3D</i></div>
       <div class="mtag">${t('menu.tagline')}</div>
+      ${h.settings.get().playerName ? `<div class="mtag">${esc(t('menu.hello', { name: h.settings.get().playerName }))}</div>` : ''}
       <div class="mbtns">
         ${inGame ? btn('resume', t('menu.resume'), '', 'primary') : ''}
         ${act ? `<button class="mb ${inGame ? '' : 'primary'}" data-act="continue"><span>${t('menu.continue')}</span><small>${sub}</small></button>` : ''}
         ${btn('new', t('menu.new'))}
+        ${h.online?.enabled ? btn('friends', '🌏 ' + t('menu.friends')) : ''}
         ${btn('load', t('menu.load') + (slots.length ? ` (${slots.length})` : ''), slots.length ? '' : 'disabled')}
         ${btn('settings', t('menu.settings'))}
       </div>
@@ -102,12 +104,55 @@ export function createMenu(h) {
       <div class="mrow">${btn('back', t('menu.back'))}</div>`;
   }
 
+  // ----- เมืองเพื่อน (ออนไลน์): รหัสของเรา, เพิ่มเพื่อน, รายชื่อเพื่อน, เมืองสาธารณะ -----
+  let frTok = 0;
+  function friendsScreen() {
+    return `
+      <div class="mtitle">🌏 ${t('fr.title')}</div>
+      <div class="msec"><h4>${t('fr.mycode')}</h4><div id="frMe" class="mdesc">${t('fr.loading')}</div></div>
+      <div class="msec"><h4>${t('fr.add')}</h4>
+        <label class="mfield"><span>${t('fr.code')}</span><input id="frCode" maxlength="8" placeholder="${esc(t('fr.codeHint'))}" style="text-transform:uppercase"></label>
+        <div class="mrow">${btn('fradd', t('fr.addBtn'), '', 'primary')}</div>
+        <div id="frMsg" class="mdesc"></div></div>
+      <div class="msec"><h4>${t('fr.list')}</h4><div id="frList" class="slots"><div class="empty">${t('fr.loading')}</div></div></div>
+      <div class="msec"><h4>${t('fr.public')}</h4><div id="frPub" class="slots"><div class="empty">${t('fr.loading')}</div></div></div>
+      <div class="mrow">${btn('back', t('menu.back'))}</div>`;
+  }
+  const cityRow = (f, mine) => `
+    <div class="slot"><div class="si">
+      <b>${esc(f.name || t('fr.noname'))}</b>
+      <span>${esc(f.city_name || '-')} · ${mapName(f.map)} · ${t('fr.stats', { pop: (f.pop || 0).toLocaleString(), lv: f.level || 1 })}</span>
+      <small>${t('load.updated', { t: fmtDate(Date.parse(f.updated_at)) })}${mine ? ' · ' + t(f.canView ? 'fr.open' : 'fr.closed') : ''}</small>
+    </div><div class="sb">
+      ${!mine || f.canView ? `<button class="mb primary" data-act="visit" data-id="${f.id}">${t('fr.visit')}</button>` : ''}
+      ${mine ? `<button class="mb danger" data-act="frdel" data-id="${f.id}">${t('fr.remove')}</button>` : ''}
+    </div></div>`;
+  async function fillFriends() {
+    const tok = ++frTok, O = h.online, q = id => root.querySelector('#' + id);
+    try {
+      const me = await O.connect();
+      if (tok !== frTok || !q('frMe')) return;
+      q('frMe').innerHTML = `<b style="font-size:22px;letter-spacing:3px">${esc(me.code)}</b> · ${esc(t('fr.privacy.' + me.privacy))}<br>${esc(t('fr.shareHint'))}`;
+      const [list, pub] = await Promise.all([O.listFriends(), O.listPublic()]);
+      if (tok !== frTok || !q('frList')) return;
+      q('frList').innerHTML = list.length ? list.map(f => cityRow(f, true)).join('') : `<div class="empty">${t('fr.none')}</div>`;
+      q('frPub').innerHTML = pub.length ? pub.map(f => cityRow(f, false)).join('') : `<div class="empty">${t('fr.nopub')}</div>`;
+    } catch (err) {
+      if (tok === frTok && q('frMe')) q('frMe').textContent = t('fr.error') + ' (' + (err.message || err) + ')';
+    }
+  }
+
   function settingsScreen() {
     const S = h.settings.get();
     const slider = (k, label) => `<label class="mfield sl"><span>${label}</span><input type="range" min="0" max="100" value="${Math.round(S[k] * 100)}" data-slider="${k}"><em>${Math.round(S[k] * 100)}</em></label>`;
     const seg = (key, items, cur) => `<div class="mseg">${items.map(([v, l]) => `<button class="${cur === v ? 'on' : ''}" data-act="set" data-k="${key}" data-v="${v}">${l}</button>`).join('')}</div>`;
     return `
       <div class="mtitle">${t('set.title')}</div>
+      <div class="msec"><h4>${t('set.player')}</h4>
+        <label class="mfield"><span>${t('set.playerName')}</span><input data-text="playerName" maxlength="20" placeholder="${esc(t('set.playerHint'))}" value="${esc(S.playerName || '')}"></label>
+      </div>
+      ${h.online?.enabled ? `<div class="msec"><h4>${t('set.privacy')}</h4>${seg('privacy', [['public', t('fr.privacy.public')], ['friends', t('fr.privacy.friends')], ['private', t('fr.privacy.private')]], S.privacy || 'friends')}
+        <div class="mdesc">${t('fr.privacyDesc.' + (S.privacy || 'friends'))}</div></div>` : ''}
       <div class="msec"><h4>${t('set.language')}</h4>${seg('lang', LANGS.map(l => [l.id, l.name]), getLang())}</div>
       <div class="msec"><h4>${t('set.sound')}</h4>
         ${slider('master', t('set.master'))}${slider('sfx', t('set.sfx'))}${slider('music', t('set.music'))}
@@ -120,14 +165,16 @@ export function createMenu(h) {
   }
 
   function render() {
-    const body = screen === 'new' ? newScreen() : screen === 'load' ? loadScreen() : screen === 'settings' ? settingsScreen() : mainScreen();
+    const body = screen === 'new' ? newScreen() : screen === 'load' ? loadScreen() : screen === 'settings' ? settingsScreen() : screen === 'friends' ? friendsScreen() : mainScreen();
     root.innerHTML = `${langBar()}<div class="mpanel scr-${screen}">${body}</div>`;
+    if (screen === 'friends') fillFriends();
     root.querySelectorAll('canvas[data-map]').forEach(c => drawPreview(c, c.dataset.map));
   }
 
   function go(s) { screen = s; render(); h.sfx?.('menu'); }
 
   root.addEventListener('input', e => {
+    if (e.target.dataset?.text) { h.settings.set(e.target.dataset.text, e.target.value.trim().slice(0, 20)); return; }
     const k = e.target.dataset?.slider;
     if (k) {
       const v = e.target.value / 100;
@@ -150,6 +197,18 @@ export function createMenu(h) {
       case 'new': screen = 'new'; render(); break;
       case 'load': screen = 'load'; render(); break;
       case 'settings': screen = 'settings'; render(); break;
+      case 'friends': screen = 'friends'; render(); break;
+      case 'fradd': {
+        const code = (root.querySelector('#frCode')?.value || '').trim(), msg = root.querySelector('#frMsg');
+        if (!code) break;
+        msg.textContent = t('fr.loading');
+        h.online.addFriend(code)
+          .then(f => { msg.textContent = t('fr.added', { name: f.name || t('fr.noname') }); fillFriends(); })
+          .catch(err => { msg.textContent = t(err.message === 'notfound' ? 'fr.notfound' : err.message === 'self' ? 'fr.self' : 'fr.error'); });
+        break;
+      }
+      case 'frdel': h.online.removeFriend(id).then(fillFriends).catch(() => {}); break;
+      case 'visit': h.onVisit(id); break;
       case 'back': screen = 'main'; render(); break;
       case 'pickmap':
         selMap = el.dataset.v;

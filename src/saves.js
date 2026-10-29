@@ -100,3 +100,9 @@ export const takeAutoStart = () => {
     return v;
   } catch { return false; }
 };
+
+// โหมดเยี่ยมชมเมืองเพื่อน: เก็บเมืองที่กำลังดูไว้ใน sessionStorage ข้ามการรีโหลด (ไม่ปนกับเซฟของเรา)
+const VISIT_KEY = 'mini-city-visit';
+export const setVisit = v => { try { sessionStorage.setItem(VISIT_KEY, JSON.stringify(v)); return true; } catch { return false; } };
+export const getVisit = () => { try { return JSON.parse(sessionStorage.getItem(VISIT_KEY) || 'null'); } catch { return null; } };
+export const clearVisit = () => { try { sessionStorage.removeItem(VISIT_KEY); } catch {} };
