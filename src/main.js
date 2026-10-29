@@ -75,6 +75,9 @@ const VARIANTS = {
     { k: 'seven', label: '7-Eleven',        cost: 160,  jobs: 6,   power: 3,  water: 2,  note: 'ร้านสะดวกซื้อ' },
     { k: 'cj',    label: 'CJ',              cost: 160,  jobs: 6,   power: 3,  water: 2,  note: 'ร้านสะดวกซื้อ' },
     { k: 'kfc',   label: 'KFC',             cost: 320,  jobs: 12,  power: 5,  water: 5,  note: 'ร้านอาหารจานด่วน' },
+    { k: 'shabu', label: 'ร้านชาบู',        cost: 360,  jobs: 12,  power: 5,  water: 6,  tax: 4, note: 'ชาบู หม้อไฟ' },
+    { k: 'mookata', label: 'หมูกระทะ',      cost: 340,  jobs: 12,  power: 3,  water: 5,  tax: 4, note: 'หมูกระทะ บุฟเฟต์' },
+    { k: 'restaurant', label: 'ร้านอาหาร',  cost: 280,  jobs: 10,  power: 4,  water: 5,  tax: 3, note: 'ร้านอาหารตามสั่ง/ทั่วไป' },
     { k: 'gas',   label: 'ปั๊มน้ำมัน',       cost: 450,  jobs: 9,   power: 4,  water: 3 },
     { k: 'lotus', label: 'โลตัส',           cost: 700,  jobs: 32,  power: 10, water: 8,  note: 'ซูเปอร์มาร์เก็ต' },
     { k: 'mall',  label: 'ห้างสรรพสินค้า',   cost: 2400, jobs: 100, power: 30, water: 22, note: '3×2 ช่อง' },
@@ -1478,6 +1481,62 @@ function buildKfc(bg, r) {
   put(bg, boxGeo, M.stopLine, -0.38, 0.042, 0.2, 0.01, 0.002, 0.55);            // ช่องไดรฟ์ทรู
   lot(bg, 0, 0.3, 0.9, 0.36, 2, Math.floor(r * 3));
 }
+// ร้านชาบู: อาคารสีเขียวเข้มทันสมัย ป้ายส้ม ผ้าม่านหน้าร้าน โคมแดง โต๊ะหม้อไฟหน้าร้าน
+function buildShabu(bg, r) {
+  const y0 = 0.03, w = 0.56, d = 0.4, z0 = -0.22;
+  put(bg, boxGeo, band(0x24483a), 0, y0 + 0.11, z0, w, 0.22, d);
+  put(bg, boxGeo, M.glassShop, 0, y0 + 0.09, z0 + d / 2 + 0.004, w * 0.78, 0.12, 0.008);
+  put(bg, boxGeo, band(0xf08a24), 0, y0 + 0.235, z0, w + 0.03, 0.05, d + 0.03);
+  signAt(bg, t('sign.shabu'), '#f08a24', '#ffffff', 0, y0 + 0.235, z0 + d / 2 + 0.02, 0.3, 0.042, 38);
+  put(bg, boxGeo, band(0x1b2f27), 0, y0 + 0.27, z0, w, 0.02, d);
+  for (const sx of [-0.2, 0.2]) put(bg, boxGeo, band(0xd7d1c4), sx, y0 + 0.17, z0 + d / 2 + 0.03, 0.14, 0.03, 0.05);   // ผ้าม่านหน้าร้าน
+  for (const sx of [-0.25, 0.25]) put(bg, icoGeo, M.red, sx, y0 + 0.14, z0 + d / 2 + 0.08, 0.04, 0.05, 0.04);        // โคมแดง
+  put(bg, boxGeo, M.pole, 0.4, y0 + 0.2, 0.05, 0.015, 0.4, 0.015);
+  signAt(bg, t('sign.shabu'), '#f08a24', '#ffffff', 0.4, y0 + 0.4, 0.062, 0.2, 0.05, 38);
+  for (const sx of [-0.2, 0.05]) {   // โต๊ะนั่งนอกร้านพร้อมหม้อ
+    put(bg, boxGeo, M.concrete, sx, y0 + 0.05, 0.14, 0.15, 0.012, 0.11);
+    put(bg, cylGeo, M.metal, sx, y0 + 0.07, 0.14, 0.06, 0.03, 0.06);
+  }
+  lot(bg, 0, 0.36, 0.9, 0.3, 2, Math.floor(r * 3));
+}
+// หมูกระทะ: ศาลาโล่งหลังคาสังกะสี โต๊ะกลมมีเตากระทะ ไฟสายระย้า
+function buildMookata(bg, r) {
+  const y0 = 0.03;
+  put(bg, boxGeo, M.concrete, 0, y0 + 0.006, -0.12, 0.84, 0.012, 0.62);                          // พื้นปูน
+  for (const sx of [-0.38, 0.38]) for (const sz of [-0.4, 0.16]) put(bg, cylGeo, M.pole, sx, y0 + 0.12, sz, 0.02, 0.24, 0.02);
+  put(bg, boxGeo, band(0x8d99a6), 0, y0 + 0.25, -0.12, 0.9, 0.018, 0.68);                         // หลังคาสังกะสี
+  put(bg, boxGeo, band(0xb5362a), 0, y0 + 0.265, -0.12, 0.9, 0.012, 0.1);
+  put(bg, boxGeo, band(0xe9d9a8), 0, y0 + 0.17, -0.45, 0.84, 0.2, 0.012);                         // ฝาหลัง
+  signAt(bg, t('sign.mookata'), '#b5362a', '#ffe9a8', 0, y0 + 0.285, 0.225, 0.52, 0.055, 38);
+  for (const [sx, sz] of [[-0.22, -0.3], [0.22, -0.3], [-0.22, -0.02], [0.22, -0.02]]) {
+    put(bg, cylGeo, M.door, sx, y0 + 0.055, sz, 0.15, 0.03, 0.15);                                 // โต๊ะกลม
+    put(bg, cylGeo, M.metal, sx, y0 + 0.078, sz, 0.07, 0.014, 0.07);                               // กระทะ
+    for (const [ox, oz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) put(bg, boxGeo, M.red, sx + ox * 0.1, y0 + 0.02, sz + oz * 0.1, 0.05, 0.03, 0.05);
+  }
+  for (let k = -3; k <= 3; k++) put(bg, icoGeo, M.lampGlow, k * 0.12, y0 + 0.225, 0.16 + Math.abs(k) * 0.004, 0.018, 0.018, 0.018);   // ไฟสายระย้า
+  put(bg, boxGeo, M.pole, 0.42, y0 + 0.2, 0.34, 0.015, 0.4, 0.015);
+  signAt(bg, t('sign.mookata'), '#b5362a', '#ffe9a8', 0.42, y0 + 0.4, 0.352, 0.2, 0.05, 38);
+  lot(bg, 0, 0.4, 0.9, 0.2, 2, Math.floor(r * 3));
+}
+// ร้านอาหารทั่วไป: ตึกแถวเตี้ย หลังคากระเบื้อง ป้ายไม้ ร่มและโต๊ะริมทาง
+function buildRestaurant(bg, r) {
+  const y0 = 0.03, w = 0.6, d = 0.4, z0 = -0.2;
+  put(bg, boxGeo, band(0xe8d8b4), 0, y0 + 0.1, z0, w, 0.2, d);
+  put(bg, boxGeo, M.glassShop, -0.12, y0 + 0.09, z0 + d / 2 + 0.004, 0.26, 0.11, 0.008);
+  put(bg, boxGeo, M.door, 0.18, y0 + 0.08, z0 + d / 2 + 0.004, 0.1, 0.16, 0.008);
+  put(bg, boxGeo, M.roofTile, 0, y0 + 0.215, z0, w + 0.06, 0.03, d + 0.06);
+  put(bg, boxGeo, M.roofTile, 0, y0 + 0.24, z0, w * 0.7, 0.03, d * 0.6);
+  signAt(bg, t('sign.restaurant'), '#6b3f1d', '#ffe9a8', 0, y0 + 0.19, z0 + d / 2 + 0.02, 0.34, 0.04, 36);
+  put(bg, boxGeo, band(0xc0392b), -0.12, y0 + 0.15, z0 + d / 2 + 0.05, 0.28, 0.012, 0.1);          // กันสาด
+  for (const sx of [-0.3, 0.0, 0.3]) {                                                                // โต๊ะ+ร่มริมทาง
+    put(bg, cylGeo, M.concrete, sx, y0 + 0.045, 0.2, 0.09, 0.02, 0.09);
+    put(bg, cylGeo, M.pole, sx, y0 + 0.1, 0.2, 0.008, 0.12, 0.008);
+    put(bg, coneGeo, band(r > 0.5 ? 0xf1c232 : 0x3a8f5c), sx, y0 + 0.17, 0.2, 0.17, 0.035, 0.17);
+  }
+  put(bg, boxGeo, M.pole, 0.42, y0 + 0.2, -0.0, 0.015, 0.4, 0.015);
+  signAt(bg, t('sign.restaurant'), '#6b3f1d', '#ffe9a8', 0.42, y0 + 0.4, 0.012, 0.2, 0.05, 36);
+  lot(bg, 0, 0.38, 0.9, 0.28, 2, Math.floor(r * 3));
+}
 function buildGasStation(bg, r) {
   const y0 = 0.03;
   put(bg, boxGeo, M.asphalt, 0, 0.035, 0.1, 0.94, 0.01, 0.76);
@@ -1638,6 +1697,9 @@ function buildVariant(bg, type, v, r, r2) {
     if (v === 'seven') return buildConvenience(bg, '7-ELEVEN', 0x1f7a4d, r);
     if (v === 'cj') return buildConvenience(bg, 'CJ', 0x2a62b0, r);
     if (v === 'kfc') return buildKfc(bg, r);
+    if (v === 'shabu') return buildShabu(bg, r);
+    if (v === 'mookata') return buildMookata(bg, r);
+    if (v === 'restaurant') return buildRestaurant(bg, r);
     if (v === 'gas') return buildGasStation(bg, r);
     if (v === 'lotus') return buildSupermarket(bg, r);
     return buildMall(bg, r);
