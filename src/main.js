@@ -175,11 +175,17 @@ function seedStarterCity() {
 // Three.js: ฉาก กล้อง แสง
 // ---------------------------------------------------------------
 const app = document.getElementById('app');
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+let gpuName = '';
+try {
+  const gl = renderer.getContext();
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  gpuName = (ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '').replace(/ANGLE \((.*)\)/, '$1').replace(/Direct3D.*|\(0x.*$/g, '').trim();
+} catch {}
 renderer.toneMapping = THREE.NeutralToneMapping; // คงสีสดไม่ซีดเหมือน ACES
 renderer.toneMappingExposure = 1.0;
 app.appendChild(renderer.domElement);
@@ -396,6 +402,9 @@ const M = {
   housing: std(0x181b1f, { roughness: 0.6 }),
   stopLine: std(0xf4f4f0, { roughness: 0.7 }),
   tank: std(0x9fb4c4, { metalness: 0.35, roughness: 0.45 }),
+  glassShop: std(0x6f93ab, { metalness: 0.6, roughness: 0.15 }),
+  lamp: std(0xcfe8ff, { emissive: 0xaad4ff, emissiveIntensity: 0.25 }),
+  beacon: std(0xff3b30, { emissive: 0xff2010, emissiveIntensity: 1.2 }),
 };
 
 // หลอดไฟจราจร 3 กลุ่ม × 2 แนว × (แดง/เหลือง/เขียว) อัปเดตความสว่างทุกเฟรม
@@ -686,48 +695,90 @@ const BAY = 0.16;   // ความกว้างต่อช่องหน้
 const TEXN = 4;     // 1 เท็กซ์เจอร์ = 4x4 ช่องหน้าต่าง
 
 function makeFacadeMat(o) {
-  const S = 256, n = TEXN, cell = S / n;
+  const S = 512, n = TEXN, cell = S / n;
   const rnd = mulberry32(o.seed);
   const lit = Array.from({ length: n * n }, () => rnd() < o.lit);
+  const blind = Array.from({ length: n * n }, () => rnd());   // ม่าน/มู่ลี่สุ่มต่อบาน
+  const ac = Array.from({ length: n * n }, () => rnd() < (o.ac ?? 0.12));
   const mx = o.mx * cell, my = o.my * cell;
+  const cellRect = (r, c) => ({ x: c * cell + mx, y: r * cell + my, w: cell - 2 * mx, h: cell - 2 * my });
 
   const map = canvasTex(S, S, g => {
     g.fillStyle = o.wall; g.fillRect(0, 0, S, S);
+    // ผิวผนัง: เม็ดทราย + คราบเปื้อนจางๆ แนวตั้ง
+    for (let i = 0; i < 9000; i++) {
+      g.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,.05)' : 'rgba(255,255,255,.06)';
+      g.fillRect(rnd() * S, rnd() * S, 1 + rnd() * 2, 1 + rnd() * 2);
+    }
+    for (let i = 0; i < 26; i++) {
+      const x = rnd() * S, w = 4 + rnd() * 10;
+      const gr = g.createLinearGradient(0, 0, 0, S);
+      gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(40,30,20,.07)');
+      g.fillStyle = gr; g.fillRect(x, 0, w, S);
+    }
     if (o.stripes) {
       g.fillStyle = 'rgba(0,0,0,0.11)';
-      for (let y = 0; y < S; y += 8) g.fillRect(0, y, S, 2);
-    }
-    for (let i = 0; i < 1800; i++) {
-      g.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,.05)' : 'rgba(255,255,255,.05)';
-      g.fillRect(rnd() * S, rnd() * S, 2, 2);
+      for (let y = 0; y < S; y += 12) g.fillRect(0, y, S, 3);
     }
     for (let r = 0; r < n; r++) {
+      // แผ่นพื้น/คานคั่นชั้น
+      g.fillStyle = 'rgba(0,0,0,.16)'; g.fillRect(0, r * cell, S, 3);
+      g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(0, r * cell + 3, S, 2);
       for (let c = 0; c < n; c++) {
-        const x = c * cell + mx, y = r * cell + my, w = cell - 2 * mx, h = cell - 2 * my;
-        g.fillStyle = o.frame; g.fillRect(x - 2, y - 2, w + 4, h + 4);
+        const { x, y, w, h } = cellRect(r, c);
+        const k = r * n + c;
+        // เงาวงกบด้านในช่องหน้าต่าง
+        g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(x - 4, y - 4, w + 8, h + 9);
+        g.fillStyle = o.frame; g.fillRect(x - 3, y - 3, w + 6, h + 6);
         const grd = g.createLinearGradient(0, y, 0, y + h);
         grd.addColorStop(0, o.glassTop); grd.addColorStop(1, o.glassBot);
         g.fillStyle = grd; g.fillRect(x, y, w, h);
-        if (o.mullion) { g.fillStyle = o.frame; g.fillRect(x + w / 2 - 1, y, 2, h); }
-        if (o.sill) { g.fillStyle = 'rgba(255,255,255,.28)'; g.fillRect(x - 3, y + h + 2, w + 6, 3); }
+        // ม่าน/มู่ลี่ในห้อง
+        if (!o.metal && blind[k] < 0.55) {
+          g.fillStyle = blind[k] < 0.25 ? 'rgba(236,226,206,.55)' : 'rgba(190,120,100,.35)';
+          g.fillRect(x, y, w, h * (0.35 + blind[k]));
+        }
+        // แสงสะท้อนเฉียงบนกระจก
+        g.fillStyle = 'rgba(255,255,255,.16)';
+        g.beginPath(); g.moveTo(x, y + h * 0.55); g.lineTo(x + w * 0.55, y); g.lineTo(x + w * 0.85, y); g.lineTo(x, y + h * 0.9); g.closePath(); g.fill();
+        if (o.mullion) { g.fillStyle = o.frame; g.fillRect(x + w / 2 - 1.5, y, 3, h); }
+        else { g.fillStyle = o.frame; g.fillRect(x, y + h * 0.5 - 1, w, 2.5); g.fillRect(x + w / 2 - 1, y, 2.5, h); }
+        if (o.sill) { g.fillStyle = 'rgba(255,255,255,.4)'; g.fillRect(x - 5, y + h + 3, w + 10, 5); g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(x - 5, y + h + 8, w + 10, 3); }
+        if (ac[k] && o.sill) { g.fillStyle = '#d8dadc'; g.fillRect(x + w * 0.1, y + h + 10, w * 0.6, h * 0.22); g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(x + w * 0.1, y + h + 10 + h * 0.15, w * 0.6, 3); }
       }
     }
   });
+
+  // แผนที่นูน: ช่องหน้าต่างลึก วงกบนูน ผนังเรียบ
+  const bump = canvasTex(S, S, g => {
+    g.fillStyle = '#9a9a9a'; g.fillRect(0, 0, S, S);
+    for (let r = 0; r < n; r++) {
+      g.fillStyle = '#c4c4c4'; g.fillRect(0, r * cell, S, 5);
+      for (let c = 0; c < n; c++) {
+        const { x, y, w, h } = cellRect(r, c);
+        g.fillStyle = '#d6d6d6'; g.fillRect(x - 3, y - 3, w + 6, h + 6);
+        g.fillStyle = '#4a4a4a'; g.fillRect(x, y, w, h);
+        if (o.sill) { g.fillStyle = '#e4e4e4'; g.fillRect(x - 5, y + h + 3, w + 10, 5); }
+      }
+    }
+  }, false);
 
   const emi = canvasTex(S, S, g => {
     g.fillStyle = '#000'; g.fillRect(0, 0, S, S);
     for (let r = 0; r < n; r++) {
       for (let c = 0; c < n; c++) {
         if (!lit[r * n + c]) continue;
-        const x = c * cell + mx, y = r * cell + my, w = cell - 2 * mx, h = cell - 2 * my;
-        g.fillStyle = rnd() < 0.7 ? '#ffd08a' : '#ffe9c2';
-        g.fillRect(x, y, w, h);
+        const { x, y, w, h } = cellRect(r, c);
+        const gr = g.createLinearGradient(0, y, 0, y + h);
+        const warm = rnd() < 0.7;
+        gr.addColorStop(0, warm ? '#ffe0a8' : '#fff1d6'); gr.addColorStop(1, warm ? '#ffb85c' : '#ffd9a0');
+        g.fillStyle = gr; g.fillRect(x, y, w, h);
       }
     }
   });
 
   const mat = new THREE.MeshStandardMaterial({
-    map, emissiveMap: emi, emissive: 0xffffff, emissiveIntensity: 0,
+    map, bumpMap: bump, bumpScale: 1.6, emissiveMap: emi, emissive: 0xffffff, emissiveIntensity: 0,
     roughness: o.rough, metalness: o.metal,
   });
   facadeMats.push(mat);
@@ -825,8 +876,34 @@ function block(parent, w, floors, d, mats, px, py, pz) {
   return py + h;
 }
 function roofCap(parent, w, d, y) {
-  put(parent, boxGeo, M.roofFlat, 0, y + 0.015, 0, w + 0.04, 0.03, d + 0.04);
+  put(parent, boxGeo, M.roofFlat, 0, y + 0.012, 0, w, 0.024, d);
+  // ขอบกันตก (parapet) รอบดาดฟ้า
+  const t = 0.022, hh = 0.04;
+  put(parent, boxGeo, M.concrete, 0, y + hh / 2 + 0.02, d / 2 - t / 2, w + 0.02, hh, t);
+  put(parent, boxGeo, M.concrete, 0, y + hh / 2 + 0.02, -d / 2 + t / 2, w + 0.02, hh, t);
+  put(parent, boxGeo, M.concrete, w / 2 - t / 2, y + hh / 2 + 0.02, 0, t, hh, d);
+  put(parent, boxGeo, M.concrete, -w / 2 + t / 2, y + hh / 2 + 0.02, 0, t, hh, d);
+  // ของบนดาดฟ้า: แอร์/ท่อระบายอากาศ (สุ่มคงที่ตามขนาด+ความสูง)
+  const r = (Math.sin(w * 91.7 + y * 53.1 + d * 17.3) * 43758.5) % 1, q = Math.abs(r);
+  if (w > 0.5) {
+    put(parent, boxGeo, M.metal, w * 0.22, y + 0.055, -d * 0.18, 0.13, 0.07, 0.1);
+    put(parent, cylGeo, M.metal, -w * 0.2, y + 0.07, d * 0.12, 0.05, 0.1, 0.05);
+    if (q > 0.5) put(parent, boxGeo, M.concrete, -w * 0.18, y + 0.05, -d * 0.2, 0.12, 0.06, 0.12);
+  }
   return y + 0.03;
+}
+// ฐาน บัวชายคา ประตูทางเข้า ให้ตึกไม่ดูเป็นกล่องเปล่า
+function trim(bg, w, d, y0, top, door = true) {
+  put(bg, boxGeo, M.plinth, 0, y0 + 0.025, 0, w + 0.03, 0.05, d + 0.03);
+  put(bg, boxGeo, M.concrete, 0, top - 0.012, 0, w + 0.05, 0.024, d + 0.05);
+  if (door) {
+    put(bg, boxGeo, M.door, 0, y0 + 0.08, d / 2 + 0.006, 0.1, 0.15, 0.012);
+    put(bg, boxGeo, M.metal, 0, y0 + 0.17, d / 2 + 0.045, 0.2, 0.012, 0.09);
+  }
+}
+const shrubGeo = blob(0.5, 1, 0.75, 1, 4, 0.25, 1);
+function shrub(bg, x, z, s, i = 0) {
+  put(bg, shrubGeo, M.leaf[i % M.leaf.length], x, 0.03 + 0.5 * 0.75 * s, z, s, s, s, i * 1.7);
 }
 // ต้นไม้แกว่งตามลม: เก็บ pivot ไว้ต่อช่อง (ล้างทิ้งเมื่อช่องถูกสร้างใหม่)
 const swayTiles = new Map();
@@ -933,15 +1010,22 @@ function buildZoneBuilding(bg, type, lv, r, r2) {
       put(bg, gableGeo(d + 0.08, w + 0.08, 0.2), M.roofTile, 0, top, 0, 1, 1, 1, Math.PI / 2);
       put(bg, boxGeo, M.brick, 0.16, top + 0.1, 0.04, 0.07, 0.22, 0.07);
       put(bg, boxGeo, M.door, -0.1, y0 + 0.07, d / 2 + 0.003, 0.08, 0.14, 0.01);
+      put(bg, boxGeo, M.concrete, -0.1, y0 + 0.012, d / 2 + 0.05, 0.16, 0.024, 0.1);           // ขั้นบันได
+      put(bg, boxGeo, M.roofTile, -0.1, y0 + 0.175, d / 2 + 0.06, 0.2, 0.014, 0.13);           // กันสาดหน้าบ้าน
+      put(bg, boxGeo, M.plinth, 0, y0 + 0.02, 0, w + 0.03, 0.04, d + 0.03);
+      shrub(bg, 0.12, d / 2 + 0.07, 0.12, 0); shrub(bg, 0.24, d / 2 + 0.06, 0.1, 1); shrub(bg, -0.25, d / 2 + 0.07, 0.11, 2);
+      put(bg, boxGeo, M.concrete, w / 2 + 0.01, y0 + 0.07, 0.0, 0.01, 0.14, 0.5);              // รั้วเตี้ยด้านข้าง
     } else if (lv === 2) {
       const w = 0.7, d = 0.58;
       const top = block(bg, w, 3 + (r2 < 0.5 ? 0 : 1), d, mats, 0, y0, 0);
       const t2 = roofCap(bg, w, d, top);
-      put(bg, boxGeo, M.metal, 0.16, t2 + 0.04, -0.1, 0.16, 0.08, 0.12);
+      trim(bg, w, d, y0, top);
+      shrub(bg, -0.28, d / 2 + 0.07, 0.12, 1); shrub(bg, 0.28, d / 2 + 0.07, 0.12, 3);
     } else {
       const w = 0.72, d = 0.72;
       const top = block(bg, w, 6 + Math.floor(r2 * 3), d, mats, 0, y0, 0);
       const t2 = roofCap(bg, w, d, top);
+      trim(bg, w, d, y0, top);
       put(bg, cylGeo, M.metal, -0.18, t2 + 0.09, -0.15, 0.16, 0.18, 0.16);
       put(bg, boxGeo, M.concrete, 0.18, t2 + 0.06, 0.15, 0.18, 0.12, 0.18);
     }
@@ -950,24 +1034,35 @@ function buildZoneBuilding(bg, type, lv, r, r2) {
       const w = 0.7, d = 0.6;
       const top = block(bg, w, 2, d, pick(FM.office, r), 0, y0, 0);
       roofCap(bg, w, d, top);
+      trim(bg, w, d, y0, top, false);
+      put(bg, boxGeo, M.glassShop, 0, y0 + 0.08, d / 2 + 0.004, w * 0.85, 0.14, 0.012);      // กระจกหน้าร้าน
       put(bg, boxGeo, pick(M.awning, r2), 0, y0 + FLOOR * 0.95, d / 2 + 0.07, w * 0.9, 0.025, 0.14);
+      put(bg, boxGeo, M.concrete, 0, y0 + FLOOR * 1.12, d / 2 + 0.012, w * 0.9, 0.05, 0.012);   // ป้ายชื่อร้าน
     } else if (lv === 2) {
       const t1 = block(bg, 0.78, 2, 0.78, pick(FM.office, r), 0, y0, 0);
+      trim(bg, 0.78, 0.78, y0, t1);
       const t2 = block(bg, 0.58, 4 + Math.floor(r2 * 3), 0.58, pick(FM.glass, r), 0, t1, 0);
       const t3 = roofCap(bg, 0.58, 0.58, t2);
       put(bg, boxGeo, M.metal, 0.1, t3 + 0.05, 0.05, 0.18, 0.1, 0.18);
     } else {
       const t1 = block(bg, 0.82, 2, 0.82, pick(FM.office, r), 0, y0, 0);
+      trim(bg, 0.82, 0.82, y0, t1);
       const t2 = block(bg, 0.64, 9 + Math.floor(r2 * 7), 0.64, pick(FM.glass, r), 0, t1, 0);
       const t3 = block(bg, 0.44, 2, 0.44, pick(FM.glass, r + 0.4), 0, t2, 0);
       const t4 = roofCap(bg, 0.44, 0.44, t3);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) put(bg, boxGeo, M.concrete, sx * 0.325, y0 + (t2 - y0) / 2 + 0.2, sz * 0.325, 0.025, t2 - y0 - 0.4, 0.025); // เสาครีบมุมตึก
+      put(bg, boxGeo, M.lamp, 0, t3 - 0.02, 0, 0.46, 0.02, 0.46);                              // แถบไฟบนยอด
       put(bg, cylGeo, M.metal, 0, t4 + 0.22, 0, 0.018, 0.44, 0.018);
+      put(bg, icoGeo, M.beacon, 0, t4 + 0.45, 0, 0.04, 0.04, 0.04);
     }
   } else {
     const mats = pick(FM.ind, r);
     if (lv === 1) {
       const top = block(bg, 0.84, 2, 0.66, mats, 0, y0, 0);
       roofCap(bg, 0.84, 0.66, top);
+      trim(bg, 0.84, 0.66, y0, top, false);
+      put(bg, boxGeo, M.metal, 0, y0 + 0.11, 0.345, 0.48, 0.2, 0.012);                         // บานม้วนโรงงาน
+      put(bg, cylGeo, M.metal, 0.38, y0 + 0.16, 0.0, 0.03, 0.32, 0.03);                         // ท่อ
       put(bg, boxGeo, M.door, -0.18, y0 + 0.09, 0.333, 0.2, 0.18, 0.01);
       put(bg, boxGeo, M.door, 0.18, y0 + 0.09, 0.333, 0.2, 0.18, 0.01);
     } else if (lv === 2) {
@@ -1727,7 +1822,9 @@ let fpsTime = 0;
 let acc = 0;
 let saveAcc = 0;
 let last = performance.now();
+const FRAME_MS = 1000 / 144; // จำกัดสูงสุด 144 FPS
 function loop(now) {
+  if (now - last < FRAME_MS - 1) { requestAnimationFrame(loop); return; }
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
 
@@ -1784,7 +1881,7 @@ function loop(now) {
   fpsTime += dt;
   if (fpsTime >= 0.5) {
     const c = agents.counts();
-    $('fps').textContent = `FPS ${Math.round(fpsFrames / fpsTime)}`;
+    $('fps').textContent = `FPS ${Math.round(fpsFrames / fpsTime)}` + (gpuName ? ` · ${gpuName}` : '');
     $('live').textContent = `รถ ${c.car} · คน ${c.person} · หมา ${c.dog} · แมว ${c.cat}`;
     // นาฬิกา สภาพอากาศ อุณหภูมิ ลม
     $('clock').textContent = clockText();
