@@ -42,6 +42,16 @@ export function fbm(x, z, oct = 4) {
 }
 
 // เส้นกลางแม่น้ำ (z ที่ตำแหน่ง x)
+export const MAP_IDS = ['river', 'coast', 'lake', 'island'];
+const MAPS = {
+  river:  { ox: 0,   oz: 0,   river: true,  sea: [25, 40], lake: null, island: false },
+  coast:  { ox: 37,  oz: -21, river: false, sea: [9, 22],  lake: null, island: false },
+  lake:   { ox: -23, oz: 61,  river: false, sea: [25, 40], lake: { x: 3, z: -8, r: 7.5 }, island: false },
+  island: { ox: 77,  oz: 5,   river: false, sea: null,     lake: null, island: true },
+};
+let P = MAPS.river;
+export function setMap(id) { P = MAPS[id] || MAPS.river; }
+export const mapHasRiver = () => P.river;
 export function riverZ(wx) {
   return -9 + 3 * Math.sin(wx * 0.1 + 0.6) + 1.4 * Math.sin(wx * 0.27 + 2);
 }
@@ -50,8 +60,8 @@ export function terrainH(wx, wz) {
   const rC = Math.max(Math.abs(wx), Math.abs(wz));
 
   // เนินเขาเตี้ย + ผิวหยาบเล็กน้อย
-  let h = 0.55 + (fbm(wx * 0.05 + 11.3, wz * 0.05 + 4.7, 3) - 0.5) * 0.9;
-  h += (fbm(wx * 0.25 + 3, wz * 0.25 + 9, 2) - 0.5) * 0.1;
+  let h = 0.55 + (fbm(wx * 0.05 + 11.3 + P.ox, wz * 0.05 + 4.7 + P.oz, 3) - 0.5) * 0.9;
+  h += (fbm(wx * 0.25 + 3 + P.ox, wz * 0.25 + 9 + P.oz, 2) - 0.5) * 0.1;
 
   // กลางแผนที่ราบขึ้น เพื่อให้เริ่มเมืองง่าย
   const cen = 1 - ss(3, 13, Math.hypot(wx, wz));
@@ -63,13 +73,24 @@ export function terrainH(wx, wz) {
   // ภูเขาล้อมรอบ ลดลงทางตะวันออก
   const ring = ss(26, 56, rC);
   const east = 1 - ss(8, 30, wx);
-  h += (3.5 + 13 * fbm(wx * 0.04 + 50, wz * 0.04 + 50, 4)) * ring * east;
+  if (!P.island) h += (3.5 + 13 * fbm(wx * 0.04 + 50 + P.ox, wz * 0.04 + 50 + P.oz, 4)) * ring * east;
 
   // ทะเลทางตะวันออก
-  h = lerp(h, -1.4, ss(25, 40, wx));
+  if (P.sea) h = lerp(h, -1.4, ss(P.sea[0], P.sea[1], wx));
+  if (P.island) {
+    const d = Math.hypot(wx, wz) + (fbm(wx * 0.12 + 5 + P.ox, wz * 0.12 + 5, 2) - 0.5) * 5;
+    h = lerp(h, -1.4, ss(14, 21, d));
+    h += 0.5 * (1 - ss(0, 12, Math.hypot(wx, wz))) * fbm(wx * 0.08 + 9, wz * 0.08 + 3, 2); // เนินกลางเกาะ
+  }
+  if (P.lake) {
+    const L = P.lake;
+    const d = Math.hypot(wx - L.x, wz - L.z) + (fbm(wx * 0.18 + 2, wz * 0.18 + 7, 2) - 0.5) * 3.2;
+    h = Math.min(h, lerp(h, 0.42, (1 - ss(L.r, L.r + 4, d)) * 0.85));
+    h = lerp(h, -0.5, 1 - ss(L.r - 2.2, L.r - 0.2, d));
+  }
 
   // แม่น้ำ (เริ่มจากเชิงเขาทางตะวันตก)
-  const rw = ss(-36, -24, wx);
+  const rw = P.river ? ss(-36, -24, wx) : 0;
   if (rw > 0) {
     const d = Math.abs(wz - riverZ(wx));
     // ที่ราบริมแม่น้ำ: ลดความสูงใกล้ฝั่งให้เรียบ (ไม่ยกขึ้น) เพื่อให้สะพานเชื่อมถนนฝั่งตรงข้ามได้พอดี
@@ -104,5 +125,15 @@ export function terrainColor(h, noise, out) {
   out[0] = Math.min(1, Math.max(0, r + n));
   out[1] = Math.min(1, Math.max(0, g + n));
   out[2] = Math.min(1, Math.max(0, b + n));
+  return out;
+}
+
+// ภาพตัวอย่างแผนที่ (ความสูงของแผนที่ id ในช่วง ±span/2) สำหรับหน้าเลือกแผนที่
+export function previewMap(id, n = 64, span = 64) {
+  const keep = P;
+  P = MAPS[id] || MAPS.river;
+  const out = new Float32Array(n * n);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) out[j * n + i] = terrainH((i / n - 0.5) * span, (j / n - 0.5) * span);
+  P = keep;
   return out;
 }

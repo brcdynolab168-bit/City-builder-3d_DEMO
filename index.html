@@ -6,7 +6,7 @@
   <title>Mini City 3D</title>
   <style>
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #1b2430; font-family: "Segoe UI", "Leelawadee UI", "Noto Sans Thai", sans-serif; color: #fff; user-select: none; -webkit-user-select: none; }
+    html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #1b2430; font-family: "Segoe UI", "Leelawadee UI", "Noto Sans Thai", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; color: #fff; user-select: none; -webkit-user-select: none; }
     #app { position: fixed; inset: 0; touch-action: none; }
     canvas { display: block; touch-action: none; }
     .ic { width: 1.15em; height: 1.15em; vertical-align: -0.2em; flex: none; }
@@ -94,6 +94,66 @@
     #fly .fs { grid-column: 1 / -1; font-size: 11px; opacity: .65; line-height: 1.35; }
     body.ui-hidden #fly { display: none; }
 
+    #side .wbtn { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); color: #fff; border-radius: 8px; padding: 6px 0; cursor: pointer; font-size: 13px; }
+    #side .wbtn:hover { background: rgba(255,255,255,.2); }
+
+    /* ===== หน้า Intro / เมนู ===== */
+    #menu { position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center; padding: 16px; overflow-y: auto;
+      background: radial-gradient(ellipse at center, rgba(8,14,26,.45) 0%, rgba(8,14,26,.82) 100%); backdrop-filter: blur(3px); }
+    #menu.show { display: flex; animation: mfade .35s ease; }
+    @keyframes mfade { from { opacity: 0; } to { opacity: 1; } }
+    body.menu-open #hud, body.menu-open #side, body.menu-open #toolbar, body.menu-open #speed, body.menu-open #reset,
+    body.menu-open #uiToggle, body.menu-open .tab, body.menu-open #fly, body.menu-open #toast { display: none !important; }
+    .mlang { position: fixed; top: 14px; right: 14px; display: flex; gap: 4px; background: rgba(20,28,40,.7); border: 1px solid rgba(255,255,255,.16); border-radius: 10px; padding: 4px; z-index: 2; }
+    .mlang button { background: transparent; border: 0; color: #fff; padding: 6px 12px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+    .mlang button.on { background: rgba(79,195,247,.4); }
+    .mpanel { width: min(560px, 100%); margin: auto; text-align: center; }
+    .mpanel.scr-new { width: min(820px, 100%); }
+    .mpanel.scr-load { width: min(760px, 100%); }
+    .mlogo { font-size: clamp(46px, 9vw, 84px); line-height: 1; font-weight: 800; letter-spacing: 3px; text-shadow: 0 6px 30px rgba(0,0,0,.5); }
+    .mlogo span { color: #9fd8ff; } .mlogo b { color: #fff; } .mlogo i { font-style: normal; color: #ffd27a; margin-left: 10px; }
+    .mtag { opacity: .85; margin: 6px 0 26px; font-size: 16px; }
+    .mbtns { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+    .mb { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: #fff; border-radius: 12px; padding: 13px 18px; cursor: pointer; font-size: 17px; font-weight: 600; transition: background .15s, transform .1s; }
+    .mb small { font-size: 12px; opacity: .7; font-weight: 400; }
+    .mb:hover:not(:disabled) { background: rgba(255,255,255,.2); transform: translateY(-1px); }
+    .mb:disabled { opacity: .35; cursor: default; }
+    .mb.primary { background: linear-gradient(180deg, #3aa8e8, #2477b8); border-color: #7fcdf8; }
+    .mb.primary:hover:not(:disabled) { background: linear-gradient(180deg, #4cb6f2, #2b86cc); }
+    .mb.danger { background: rgba(200,60,60,.25); border-color: rgba(255,120,120,.4); }
+    .mb.danger:hover { background: rgba(220,70,70,.45) !important; }
+    .mfoot { margin-top: 26px; font-size: 12px; opacity: .55; line-height: 1.7; }
+    .mtitle { font-size: 26px; font-weight: 700; margin-bottom: 16px; }
+    .mapgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .mapcard { display: flex; flex-direction: column; gap: 5px; text-align: left; background: rgba(20,28,40,.78); border: 2px solid rgba(255,255,255,.14); border-radius: 12px; padding: 8px; color: #fff; cursor: pointer; transition: border-color .15s, transform .1s; }
+    .mapcard:hover { transform: translateY(-2px); border-color: rgba(255,255,255,.4); }
+    .mapcard.on { border-color: #4fc3f7; background: rgba(40,80,120,.7); }
+    .mapcard canvas { width: 100%; aspect-ratio: 1; border-radius: 8px; image-rendering: auto; background: #123; }
+    .mapcard b { font-size: 15px; } .mapcard small { opacity: .7; font-size: 11.5px; line-height: 1.4; }
+    .mfield { display: flex; align-items: center; gap: 10px; margin: 0 auto 14px; max-width: 420px; text-align: left; }
+    .mfield span { min-width: 90px; opacity: .8; font-size: 14px; }
+    .mfield input[type=text], .mfield input:not([type]) { flex: 1; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.25); color: #fff; border-radius: 8px; padding: 9px 12px; font-size: 15px; font-family: inherit; }
+    .mfield em { min-width: 28px; font-style: normal; opacity: .7; text-align: right; font-size: 13px; }
+    .mfield input[type=range] { flex: 1; }
+    .mrow { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+    .mrow .mb { min-width: 150px; }
+    .slots { display: flex; flex-direction: column; gap: 10px; max-height: 56vh; overflow-y: auto; padding: 2px; }
+    .slot { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; text-align: left; background: rgba(20,28,40,.8); border: 1px solid rgba(255,255,255,.16); border-radius: 12px; padding: 12px 14px; }
+    .slot.cur { border-color: #4fc3f7; }
+    .slot .si { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .slot .si b { font-size: 17px; } .slot .si span { font-size: 13px; opacity: .85; } .slot .si small { opacity: .55; font-size: 11.5px; }
+    .slot .sb { display: flex; gap: 6px; flex-wrap: wrap; }
+    .slot .sb .mb { padding: 7px 12px; font-size: 13px; border-radius: 8px; }
+    .empty { opacity: .6; padding: 30px 0; }
+    .msec { text-align: left; background: rgba(20,28,40,.78); border: 1px solid rgba(255,255,255,.14); border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; }
+    .msec h4 { margin: 0 0 8px; font-size: 14px; opacity: .8; font-weight: 600; }
+    .msec .mfield { max-width: none; margin-bottom: 8px; }
+    .mseg { display: flex; border: 1px solid rgba(255,255,255,.22); border-radius: 9px; overflow: hidden; width: fit-content; }
+    .mseg button { background: transparent; border: 0; color: #fff; padding: 8px 16px; cursor: pointer; font-size: 14px; }
+    .mseg button.on { background: rgba(79,195,247,.42); }
+    .mdesc { font-size: 12px; opacity: .65; margin-top: 8px; line-height: 1.5; }
+    .mchk { font-size: 14px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+
     @media (max-width: 760px) {
       #side { top: auto; bottom: 92px; width: 230px; }
       #hud .stat { min-width: 64px; }
@@ -105,14 +165,14 @@
   <div id="app"></div>
 
   <div id="hud">
-    <div class="card stat"><small><span data-ic="money"></span>เงิน</small><b id="money">0</b></div>
-    <div class="card stat"><small><span data-ic="pop"></span>ประชากร</small><b id="pop">0</b></div>
-    <div class="card stat"><small><span data-ic="jobs"></span>งาน</small><b id="jobs">0</b></div>
-    <div class="card stat" title="ไฟฟ้า ใช้/ผลิต"><small><span data-ic="power"></span>ไฟฟ้า</small><b id="power">0/0</b></div>
-    <div class="card stat" title="น้ำประปา ใช้/ผลิต"><small><span data-ic="water"></span>น้ำประปา</small><b id="water">0/0</b></div>
-    <div class="card stat"><small><span data-ic="net"></span>รายได้สุทธิ/วัน</small><b id="net">0</b></div>
-    <div class="card stat"><small><span data-ic="calendar"></span>วันที่</small><b id="day">0</b></div>
-    <div class="card demand" title="ความต้องการ: R=ที่อยู่อาศัย C=พาณิชย์ I=อุตสาหกรรม">
+    <div class="card stat"><small><span data-ic="money"></span><span data-i18n="hud.money">เงิน</span></small><b id="money">0</b></div>
+    <div class="card stat"><small><span data-ic="pop"></span><span data-i18n="hud.pop">ประชากร</span></small><b id="pop">0</b></div>
+    <div class="card stat"><small><span data-ic="jobs"></span><span data-i18n="hud.jobs">งาน</span></small><b id="jobs">0</b></div>
+    <div class="card stat" data-i18n-title="hud.powerTip"><small><span data-ic="power"></span><span data-i18n="hud.power">ไฟฟ้า</span></small><b id="power">0/0</b></div>
+    <div class="card stat" data-i18n-title="hud.waterTip"><small><span data-ic="water"></span><span data-i18n="hud.water">น้ำประปา</span></small><b id="water">0/0</b></div>
+    <div class="card stat"><small><span data-ic="net"></span><span data-i18n="hud.net">รายได้สุทธิ/วัน</span></small><b id="net">0</b></div>
+    <div class="card stat"><small><span data-ic="calendar"></span><span data-i18n="hud.day">วันที่</span></small><b id="day">0</b></div>
+    <div class="card demand" data-i18n-title="hud.demandTip">
       <div class="bar"><i id="dR" style="background:#4caf50"></i><span>R</span></div>
       <div class="bar"><i id="dC" style="background:#2196f3"></i><span>C</span></div>
       <div class="bar"><i id="dI" style="background:#ffc107"></i><span>I</span></div>
@@ -127,46 +187,48 @@
   </div>
 
   <div id="side" class="card">
-    <div class="row"><b>กราฟิก</b>
+    <div class="row"><b data-i18n="side.graphics">กราฟิก</b>
       <div class="seg" id="qSeg">
-        <button data-q="low">ต่ำ</button><button data-q="med">กลาง</button><button data-q="high">สูง</button>
+        <button data-q="low" data-i18n="q.low">ต่ำ</button><button data-q="med" data-i18n="q.med">กลาง</button><button data-q="high" data-i18n="q.high">สูง</button>
       </div>
     </div>
     <div class="dim" id="qDesc"></div>
-    <div class="row"><b>สภาพอากาศ</b>
+    <div class="row"><b data-i18n="side.weather">สภาพอากาศ</b>
       <div class="seg icons" id="wSeg">
-        <button data-w="auto" class="active" title="อัตโนมัติ (เปลี่ยนเอง)"><span data-ic="auto"></span></button>
-        <button data-w="clear" title="แจ่มใส"><span data-ic="sun"></span></button>
-        <button data-w="cloudy" title="เมฆมาก"><span data-ic="cloud"></span></button>
-        <button data-w="rain" title="ฝนตก"><span data-ic="rain"></span></button>
-        <button data-w="storm" title="พายุฝนฟ้าคะนอง"><span data-ic="storm"></span></button>
+        <button data-w="auto" class="active" data-i18n-title="w.auto"><span data-ic="auto"></span></button>
+        <button data-w="clear" data-i18n-title="w.clear"><span data-ic="sun"></span></button>
+        <button data-w="cloudy" data-i18n-title="w.cloudy"><span data-ic="cloud"></span></button>
+        <button data-w="rain" data-i18n-title="w.rain"><span data-ic="rain"></span></button>
+        <button data-w="storm" data-i18n-title="w.storm"><span data-ic="storm"></span></button>
       </div>
     </div>
-    <div class="row"><b>ควบคุม</b>
+    <div class="row"><b data-i18n="side.control">ควบคุม</b>
       <div class="seg" id="mSeg">
-        <button data-m="trackpad">ทัชแพด</button><button data-m="mouse">เมาส์</button>
+        <button data-m="trackpad" data-i18n="m.trackpad">ทัชแพด</button><button data-m="mouse" data-i18n="m.mouse">เมาส์</button>
       </div>
     </div>
     <div class="cam">
-      <button id="camL" title="หมุนซ้าย (Q)"><span data-ic="rotL"></span></button>
-      <button id="camR" title="หมุนขวา (E)"><span data-ic="rotR"></span></button>
-      <button id="camIn" title="ซูมเข้า (+)"><span data-ic="plus"></span></button>
-      <button id="camOut" title="ซูมออก (-)"><span data-ic="minus"></span></button>
-      <button id="camHome" title="กลับมุมมองเริ่มต้น"><span data-ic="home"></span></button>
+      <button id="camL" data-i18n-title="cam.left"><span data-ic="rotL"></span></button>
+      <button id="camR" data-i18n-title="cam.right"><span data-ic="rotR"></span></button>
+      <button id="camIn" data-i18n-title="cam.in"><span data-ic="plus"></span></button>
+      <button id="camOut" data-i18n-title="cam.out"><span data-ic="minus"></span></button>
+      <button id="camHome" data-i18n-title="cam.home"><span data-ic="home"></span></button>
     </div>
+    <button class="wbtn" id="menuBtn" data-i18n="btn.menu">เมนูหลัก</button>
     <div id="helpText"></div>
     <div class="dim" id="live"></div>
     <div class="dim" id="fps"></div>
   </div>
 
   <div id="toolbar" class="card"></div>
-  <button class="tab" id="sideTab" title="เก็บ/แสดงแผงข้าง">›</button>
-  <button class="tab" id="toolTab" title="เก็บ/แสดงแถบเครื่องมือ">⌄</button>
+  <button class="tab" id="sideTab" data-i18n-title="btn.sideTab">›</button>
+  <button class="tab" id="toolTab" data-i18n-title="btn.toolTab">⌄</button>
   <div id="speed" class="card">
-    <button data-s="0" title="หยุด"><span data-ic="pause"></span></button><button data-s="1" class="active"><span data-ic="play"></span> 1x</button><button data-s="3"><span data-ic="fast"></span> 3x</button>
+    <button data-s="0" data-i18n-title="speed.pause"><span data-ic="pause"></span></button><button data-s="1" class="active"><span data-ic="play"></span> 1x</button><button data-s="3"><span data-ic="fast"></span> 3x</button>
   </div>
-  <button id="reset"><span data-ic="reset"></span> เริ่มเมืองใหม่</button>
+  <button id="reset"><span data-ic="reset"></span> <span data-i18n="btn.reset">เริ่มเมืองใหม่</span></button>
   <div id="toast"></div>
+  <div id="menu"></div>
   <button id="uiToggle" title="ซ่อน/แสดง UI (H)"></button>
 
   <script type="module" src="/src/main.js"></script>

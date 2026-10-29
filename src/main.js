@@ -11,15 +11,30 @@ import { createWeather } from './weather.js';
 import { createWildlife } from './wildlife.js';
 import { ICON, mountIcons } from './icons.js';
 import { blob, broadleafCrown, coniferCrown, trunkGeo } from './trees.js';
-import { terrainH, terrainColor, fbm, hash2, SEA_Y, WATER_LIMIT } from './terrain.js';
+import { terrainH, terrainColor, fbm, hash2, SEA_Y, WATER_LIMIT, setMap, mapHasRiver } from './terrain.js';
+import { t, hasKey, setLang, getLang, onLang, LANGS } from './i18n.js';
+import * as Saves from './saves.js';
+import { createAudio } from './audio.js';
+import { createMenu } from './menu.js';
+
+// ---------------------------------------------------------------
+// เริ่มเกม: อ่านช่องเซฟที่ใช้อยู่ แล้วเลือกแผนที่ก่อนสร้างภูมิประเทศ
+// ---------------------------------------------------------------
+Saves.migrateOld();
+const AUTOSTART = Saves.takeAutoStart();
+let activeId = Saves.getActiveId() || Saves.listSlots()[0]?.id || null;
+if (activeId) Saves.setActive(activeId);
+const MAP_ID = (activeId && Saves.getSlot(activeId)?.map) || 'river';
+setMap(MAP_ID);
+const audio = createAudio();
+const ECON = 10; // 1 วันในเกมเท่ากับรายได้/รายจ่าย 10 หน่วยของตัวเลขสถิติ
 
 // ---------------------------------------------------------------
 // ค่าตั้งต้น / เครื่องมือ
 // ---------------------------------------------------------------
 const N = 48; // ขนาดแผนที่ N x N ช่อง
-const SAVE_KEY = 'mini-city-3d-save-v1';
 const START_MONEY = 20000;
-const DAY_LENGTH_SEC = 180; // เวลาจริงที่ใช้ต่อ 1 วัน (กลางวัน→กลางคืน)
+const DAY_LENGTH_SEC = 300; // 1 วันในเกม = 5 นาทีจริง (ที่ความเร็ว 1x) ทั้งท้องฟ้า เงิน และตัวนับวันเดินพร้อมกัน
 const BRIDGE_Y = 0.5;       // ความสูงพื้นสะพาน
 
 const TOOLS = {
@@ -68,6 +83,7 @@ const VARIANTS = {
   service: [
     { k: 'school',   label: 'โรงเรียน',      cost: 800,  jobs: 26, power: 6,  water: 6,  upkeep: 12, note: 'บ้านรอบๆโตเร็วขึ้น' },
     { k: 'hospital', label: 'โรงพยาบาล',     cost: 1500, jobs: 60, power: 18, water: 15, upkeep: 26, note: 'บ้านรอบๆโตเร็วขึ้น' },
+    { k: 'bu',       label: 'ม.กรุงเทพ',      cost: 2600, jobs: 130, power: 26, water: 22, upkeep: 45, note: 'มหาวิทยาลัย' },
   ],
 };
 const DEFAULT_V = { res: 'zone', com: 'zone', ind: 'zone', power: 'gas', water: 'plant', service: 'school' };
@@ -76,6 +92,10 @@ const variantOf = t => VARIANTS[t.t]?.find(v => v.k === (t.v || DEFAULT_V[t.t]))
 const fixedVariant = t => { const v = variantOf(t); return v && v.k !== 'zone' ? v : null; };
 const toolCost = tool => VARIANTS[tool]?.find(v => v.k === currentVar[tool])?.cost ?? TOOLS[tool].cost;
 const ZONES = ['res', 'com', 'ind'];
+const toolLabel = k => t('tool.' + k);
+const toolTip = k => (hasKey('tip.' + k) ? t('tip.' + k) : '');
+const vLabel = (tool, v) => t(`v.${tool}.${v.k}`);
+const vNote = (tool, v) => (hasKey(`v.${tool}.${v.k}.note`) ? t(`v.${tool}.${v.k}.note`) : '');
 
 // ตารางตามระดับตึก (ดัชนี = เลเวล 0..3): คน / งาน / ไฟ / น้ำ ต่อช่อง
 const POP_PER  = [0, 5, 28, 80];   // บ้านเดี่ยว → อพาร์ตเมนต์ → คอนโดสูง
@@ -139,7 +159,7 @@ let currentTool = 'road';
 let speed = 1;
 
 function newState() {
-  return { money: START_MONEY, day: 0, tiles: new Array(N * N).fill(null) };
+  return { money: START_MONEY, day: 0, tod: 0.3, tiles: new Array(N * N).fill(null) };
 }
 const idx = (x, z) => z * N + x;
 const inBounds = (x, z) => x >= 0 && z >= 0 && x < N && z < N;
@@ -147,19 +167,22 @@ const tileAt = (x, z) => (inBounds(x, z) ? state.tiles[idx(x, z)] : null);
 const isType = (x, z, t) => tileAt(x, z)?.t === t;
 
 function save() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch {}
+  if (!activeId) return;
+  state.tod = tod;
+  Saves.saveData(activeId, state, { day: state.day, pop: computeStats().pop, money: Math.floor(state.money) });
 }
 function load() {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) { seedStarterCity(); return; }
-    const s = JSON.parse(raw);
-    if (s && Array.isArray(s.tiles) && s.tiles.length === N * N) {
-      // เมืองที่เซฟจากรุ่นก่อน (พื้นราบ): อะไรที่ตกอยู่บนแม่น้ำใหม่ ให้ลบทิ้ง ยกเว้นถนน (กลายเป็นสะพาน)
-      s.tiles.forEach((t, i) => { if (t && tileIsWater[i] && t.t !== 'road') s.tiles[i] = null; });
-      state = s;
-    }
-  } catch {}
+  const data = activeId ? Saves.loadData(activeId) : null;
+  if (data && Array.isArray(data.tiles) && data.tiles.length === N * N) {
+    // ถ้ามีของที่ตกอยู่บนน้ำ (จากเซฟเก่า) ให้ลบทิ้ง ยกเว้นถนน (กลายเป็นสะพาน)
+    data.tiles.forEach((tl, i) => { if (tl && tileIsWater[i] && tl.t !== 'road') data.tiles[i] = null; });
+    state = data;
+    if (typeof state.tod === 'number') tod = state.tod;
+    return;
+  }
+  seedStarterCity();
+  tod = state.tod;
+  save();
 }
 
 // เมืองตั้งต้น: ถนนตาราง ไฟจราจรตามทางแยก บ้าน ร้านค้า โรงงาน โรงไฟฟ้า โรงประปา สวน
@@ -195,17 +218,17 @@ function seedStarterCity() {
   // โรงไฟฟ้า/โรงประปา: หาช่องว่างติดถนนที่เหมาะ (ประปาต้องอยู่ใกล้น้ำ)
   const place = (type, ok, near, v) => {
     let best = null, bd = 1e9;
-    for (let z = C - 14; z <= C + 16; z++) for (let x = C - 12; x <= C + 20; x++) {
-      if (!flat(x, z) || state.tiles[idx(x, z)] || !adjRoad(x, z) || !ok(x, z)) continue;
+    for (let z = 1; z < N - 1; z++) for (let x = 1; x < N - 1; x++) {
+      if (!flat(x, z) || state.tiles[idx(x, z)] || !ok(x, z)) continue;
       const d = Math.hypot(x - near.x, z - near.z);
       if (d < bd) { bd = d; best = { x, z }; }
     }
     if (best) { put(best.x, best.z, type); state.tiles[idx(best.x, best.z)].v = v; }
     return !!best;
   };
-  const wp = T(-3, -6), pp = T(14, 4);
+  const wp = T(-2, 3), pp = T(14, 4);
   place('water', (x, z) => nearWater(x, z, 3), wp, 'plant');
-  place('water', (x, z) => nearWater(x, z, 3), T(5, -6), 'plant');
+  place('water', (x, z) => nearWater(x, z, 3) && !isType(x, z, 'water') && Math.hypot(x - wp.x, z - wp.z) > 3, T(2, 3), 'plant');
   place('power', () => true, pp, 'gas');
   place('power', () => true, T(14, 8), 'gas');
   // สวนตรงกลาง
@@ -292,10 +315,11 @@ const QUALITY = {
     rain: 7000, forest: 4000,
   },
 };
-const settings = { quality: 'med', mode: 'trackpad' };
+const settings = { quality: 'med', mode: 'trackpad', lang: 'th', master: 0.8, sfx: 0.8, music: 0.35, mute: false };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch {}
 if (!QUALITY[settings.quality]) settings.quality = 'med';
 if (settings.mode !== 'trackpad' && settings.mode !== 'mouse') settings.mode = 'trackpad';
+if (!LANGS.some(l => l.id === settings.lang)) settings.lang = 'th';
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {} };
 let qualityKey = settings.quality;
 let lastDetails = -1;
@@ -363,7 +387,7 @@ function bridgeAtX(wx) {
   }
   return false;
 }
-const wildlife = createWildlife({ scene, blocked: bridgeAtX });
+const wildlife = createWildlife({ scene, blocked: bridgeAtX, boats: mapHasRiver() });
 const agents = createAgents({
   scene, N,
   tileType: (x, z) => tileAt(x, z)?.t ?? null,
@@ -473,7 +497,7 @@ function updateSignalLamps() {
 }
 
 // ป้ายจราจร/ป้ายชื่อถนน วาดจาก canvas (แคชไว้ใช้ซ้ำ)
-const FONT = '"Leelawadee UI","Tahoma","Noto Sans Thai",sans-serif';
+const FONT = '"Leelawadee UI","Tahoma","Noto Sans Thai","Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif';
 const signMatCache = new Map();
 function signMat(key, draw, w = 128, h = 128) {
   let m = signMatCache.get(key);
@@ -516,12 +540,12 @@ const trafficSign = {
     });
   },
   name(text) {
-    return signMat('name' + text, (g, w, h) => {
+    return signMat('name' + getLang() + text, (g, w, h) => {
       g.fillStyle = '#0b6b3a'; g.fillRect(0, 0, w, h);
       g.strokeStyle = '#fff'; g.lineWidth = 4; g.strokeRect(4, 4, w - 8, h - 8);
       g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.font = `bold ${h * 0.42}px ${FONT}`;
-      g.fillText('ถ.' + text, w / 2, h / 2 + 3);
+      g.fillText(getLang() === 'th' ? 'ถ.' + text : getLang() === 'zh' ? text + ' ' + t('sign.road') : text + ' ' + t('sign.road'), w / 2, h / 2 + 3);
     }, 320, 64);
   },
 };
@@ -681,7 +705,9 @@ let lampLevel = 0;   // ความสว่างของไฟ (กลาง
 let tempC = 30;      // อุณหภูมิ (°C)
 
 function updateSky(dt) {
+  const prevTod = tod;
   tod = (tod + dt / DAY_LENGTH_SEC) % 1;
+  if (tod < prevTod && !menu.isOpen) state.day++; // ข้ามเที่ยงคืน = วันใหม่
   const W = weather.state;
   const ang = (tod - 0.25) * Math.PI * 2;
   const elev = Math.sin(ang);
@@ -1165,14 +1191,14 @@ const band = c => (bandMats[c] ||= std(c, { roughness: 0.6 }));
 // ป้ายตัวอักษร (วาดด้วย canvas เป็นข้อความธรรมดา)
 const textMatCache = new Map();
 function textMat(text, bgc, fg = '#ffffff', fs = 36) {
-  const key = text + bgc + fg + fs;
+  const key = text + bgc + fg + fs;  // (ข้อความรวมภาษาแล้ว)
   let m = textMatCache.get(key);
   if (m) return m;
   const tex = canvasTex(256, 64, (g, w, h) => {
     g.fillStyle = bgc; g.fillRect(0, 0, w, h);
     g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 3; g.strokeRect(3, 3, w - 6, h - 6);
     g.fillStyle = fg;
-    g.font = `bold ${fs}px "Segoe UI","Leelawadee UI","Noto Sans Thai",sans-serif`;
+    g.font = `bold ${fs}px "Segoe UI","Leelawadee UI","Noto Sans Thai","Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif`;
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText(text, w / 2, h / 2 + 2);
   });
@@ -1232,7 +1258,7 @@ function buildGasStation(bg, r) {
   put(bg, boxGeo, M.concrete, 0.17, y0 + 0.012, 0.11, 0.09, 0.024, 0.36);
   for (const sx of [-0.17, 0.17]) for (const sz of [0.0, 0.22]) put(bg, boxGeo, band(0x2f6fb0), sx, y0 + 0.07, sz, 0.05, 0.09, 0.05);
   put(bg, cylGeo, M.pole, 0.42, y0 + 0.25, 0.4, 0.015, 0.5, 0.015);               // เสาป้ายราคา
-  signAt(bg, 'น้ำมัน', '#1b3d6e', '#ffd54a', 0.42, y0 + 0.5, 0.4, 0.22, 0.06, 34);
+  signAt(bg, t('sign.gas'), '#1b3d6e', '#ffd54a', 0.42, y0 + 0.5, 0.4, 0.22, 0.06, 34);
   if (r > 0.4) put(bg, boxGeo, M.carCols[1], -0.17, 0.065, 0.3, 0.1, 0.04, 0.19);
 }
 function buildSupermarket(bg, r) {
@@ -1240,7 +1266,7 @@ function buildSupermarket(bg, r) {
   const top = block(bg, 0.88, 2, 0.5, FM.office[0], 0, y0, -0.22);
   roofCap(bg, 0.88, 0.5, top);
   put(bg, boxGeo, band(0x1e7b4a), 0, y0 + 0.285, -0.22 + 0.25 + 0.01, 0.9, 0.07, 0.025);
-  signAt(bg, 'โลตัส', '#1e7b4a', '#ffffff', 0, y0 + 0.285, -0.22 + 0.25 + 0.024, 0.5, 0.058, 40);
+  signAt(bg, t('sign.lotus'), '#1e7b4a', '#ffffff', 0, y0 + 0.285, -0.22 + 0.25 + 0.024, 0.5, 0.058, 40);
   put(bg, boxGeo, M.glassShop, 0.0, y0 + 0.08, -0.22 + 0.25 + 0.004, 0.32, 0.14, 0.008);   // ทางเข้า
   put(bg, boxGeo, M.white, 0, y0 + 0.17, -0.22 + 0.25 + 0.05, 0.4, 0.014, 0.1);
   lot(bg, 0, 0.3, 0.92, 0.36, 3, Math.floor(r * 4));
@@ -1251,7 +1277,7 @@ function buildMall(bg, r) {
   const t2 = roofCap(bg, 0.92, 0.62, top);
   put(bg, boxGeo, M.glassShop, 0, y0 + 0.17, -0.17 + 0.31 + 0.07, 0.36, 0.32, 0.14);        // อะเทรียมกระจกหน้าห้าง
   put(bg, boxGeo, M.white, 0, y0 + 0.34, -0.17 + 0.31 + 0.07, 0.4, 0.02, 0.18);
-  signAt(bg, 'ห้างสรรพสินค้า', '#7a2f8f', '#ffffff', 0, y0 + 0.5, -0.17 + 0.31 + 0.012, 0.66, 0.08, 30);
+  signAt(bg, t('sign.mall'), '#7a2f8f', '#ffffff', 0, y0 + 0.5, -0.17 + 0.31 + 0.012, 0.66, 0.08, 30);
   put(bg, boxGeo, band(0x7a2f8f), 0, top - 0.04, -0.17, 0.95, 0.03, 0.65);
   put(bg, cylGeo, M.metal, 0.3, t2 + 0.1, -0.2, 0.012, 0.2, 0.012);
   lot(bg, 0, 0.36, 0.92, 0.26, 3, Math.floor(r * 4));
@@ -1276,7 +1302,7 @@ function buildSchool(bg, r) {
   const top2 = block(bg, 0.26, 2, 0.36, FM.res[0], -0.29, y0, -0.01);
   put(bg, gableGeo(0.3, 0.4, 0.1), M.roofTile, -0.29, top2, -0.01, 1, 1, 1, 0);
   put(bg, boxGeo, M.door, 0.0, y0 + 0.07, -0.32 + 0.133, 0.1, 0.14, 0.01);
-  signAt(bg, 'โรงเรียน', '#2f6fb0', '#ffffff', 0.0, y0 + 0.27, -0.32 + 0.14, 0.4, 0.05, 30);
+  signAt(bg, t('sign.school'), '#2f6fb0', '#ffffff', 0.0, y0 + 0.27, -0.32 + 0.14, 0.4, 0.05, 30);
   // สนามกีฬาลู่วิ่ง
   put(bg, cylGeo, M.path, 0.17, 0.036, 0.22, 0.6, 0.006, 0.4);
   put(bg, cylGeo, M.park, 0.17, 0.04, 0.22, 0.5, 0.006, 0.3);
@@ -1294,7 +1320,7 @@ function buildHospital(bg, r) {
   put(bg, boxGeo, M.white, 0.0, y0 + 0.68, fz + 0.005, 0.2, 0.2, 0.008);                    // ป้ายกากบาทแดง
   put(bg, boxGeo, M.red, 0.0, y0 + 0.68, fz + 0.011, 0.04, 0.15, 0.006);
   put(bg, boxGeo, M.red, 0.0, y0 + 0.68, fz + 0.011, 0.15, 0.04, 0.006);
-  signAt(bg, 'โรงพยาบาล', '#c62828', '#ffffff', 0, y0 + 0.5, fz + 0.012, 0.5, 0.06, 30);
+  signAt(bg, t('sign.hospital'), '#c62828', '#ffffff', 0, y0 + 0.5, fz + 0.012, 0.5, 0.06, 30);
   put(bg, boxGeo, M.glassShop, 0, y0 + 0.08, fz + 0.004, 0.3, 0.14, 0.008);
   put(bg, boxGeo, M.white, 0, y0 + 0.17, fz + 0.09, 0.42, 0.018, 0.2);                      // หลังคาทางเข้า/รถพยาบาล
   for (const sx of [-0.18, 0.18]) put(bg, cylGeo, M.concrete, sx, y0 + 0.085, fz + 0.17, 0.02, 0.17, 0.02);
@@ -1344,6 +1370,27 @@ function buildBigWater(bg) {
   put(bg, coneGeo, M.tank, 0.02, y0 + 0.82, -0.26, 0.31, 0.12, 0.31);
 }
 
+function buildUniversity(bg, r) {
+  const y0 = 0.03;
+  // ตึกหลักสูงกลาง + ปีกสองข้าง + ลานหน้าตึก (แบบจำลองสไตล์มหาวิทยาลัย ไม่ใช่แบบจำลองเหมือนจริง)
+  const topC = block(bg, 0.36, 7, 0.4, FM.office[1], 0, y0, -0.2);
+  const tC = roofCap(bg, 0.36, 0.4, topC);
+  for (const sx of [-1, 1]) {
+    const tw = block(bg, 0.3, 4, 0.34, FM.office[0], sx * 0.33, y0, -0.2);
+    roofCap(bg, 0.3, 0.34, tw);
+    put(bg, boxGeo, M.concrete, sx * 0.33, y0 + 0.04, -0.2 + 0.18, 0.3, 0.02, 0.02);
+    block(bg, 0.28, 2, 0.2, FM.office[1], sx * 0.33, y0, 0.06);        // อาคารเรียนด้านหน้า
+  }
+  put(bg, boxGeo, M.glassShop, 0, y0 + 0.1, -0.2 + 0.2 + 0.004, 0.3, 0.18, 0.008);
+  put(bg, boxGeo, band(0xc62828), 0, topC - 0.02, -0.2, 0.38, 0.03, 0.42);          // แถบสีที่ยอดตึก
+  signAt(bg, t('sign.bu'), '#1b3d6e', '#ffffff', 0, y0 + 0.5, -0.2 + 0.2 + 0.014, 0.34, 0.05, 24);
+  put(bg, cylGeo, M.metal, 0, tC + 0.14, -0.2, 0.012, 0.28, 0.012);
+  put(bg, boxGeo, M.concrete, 0, y0 + 0.012, 0.3, 0.6, 0.024, 0.2);                // ลานบันได
+  put(bg, boxGeo, M.stopLine, 0, y0 + 0.026, 0.3, 0.5, 0.004, 0.12);
+  for (const sx of [-0.28, 0.28]) { put(bg, cylGeo, M.metal, sx, y0 + 0.16, 0.42, 0.008, 0.32, 0.008); put(bg, boxGeo, band(sx < 0 ? 0xc62828 : 0xffffff), sx + 0.04, y0 + 0.29, 0.42, 0.07, 0.04, 0.004); }
+  shrub(bg, -0.42, 0.42, 0.11, 0); shrub(bg, 0.42, 0.42, 0.11, 2); shrub(bg, -0.18, 0.44, 0.09, 1); shrub(bg, 0.18, 0.44, 0.09, 3);
+}
+
 function buildVariant(bg, type, v, r, r2) {
   if (type === 'res') {
     if (v === 'house') return buildZoneBuilding(bg, 'res', 1, r, r2);
@@ -1359,7 +1406,7 @@ function buildVariant(bg, type, v, r, r2) {
     if (v === 'lotus') return buildSupermarket(bg, r);
     return buildMall(bg, r);
   }
-  if (type === 'service') return v === 'hospital' ? buildHospital(bg, r) : buildSchool(bg, r);
+  if (type === 'service') return v === 'hospital' ? buildHospital(bg, r) : v === 'bu' ? buildUniversity(bg, r) : buildSchool(bg, r);
   if (type === 'power') return v === 'solar' ? buildSolar(bg) : v === 'thermal' ? buildBigPlant(bg) : buildGasPlant(bg);
   if (type === 'water') return v === 'pump' ? buildPump(bg) : v === 'big' ? buildBigWater(bg) : buildWaterPlant(bg);
 }
@@ -1643,22 +1690,24 @@ function applyTool(x, z) {
 
   if (currentTool === 'bulldoze') {
     if (!cur) return;
-    if (state.money < cost) return toast('เงินไม่พอ');
+    if (state.money < cost) { audio.sfx('error'); return toast(t('toast.nomoney')); }
     state.money -= cost;
     state.tiles[i] = null;
+    audio.sfx('bulldoze');
     refresh(x, z);
     updateHUD();
     return;
   }
   if (cur) return; // วางทับของเดิมไม่ได้ ต้องรื้อก่อน
   const cost2 = buildCost(currentTool, x, z);
-  if (isWaterTile(x, z) && currentTool !== 'road') return toast('สร้างบนน้ำไม่ได้ (ทำได้แค่สะพาน)');
+  if (isWaterTile(x, z) && currentTool !== 'road') { audio.sfx('error'); return toast(t('toast.water')); }
   const CV = VARIANTS[currentTool] && currentVar[currentTool];
-  if (CV && CV !== 'zone' && ['res', 'com', 'service'].includes(currentTool) && !adjRoad(x, z)) return toast('อาคารนี้ต้องตั้งติดถนน');
-  if (currentTool === 'water' && !nearWater(x, z, 3)) return toast('โรงประปาต้องอยู่ใกล้แม่น้ำหรือทะเล (ภายใน 3 ช่อง)');
-  if (state.money < cost2) return toast('เงินไม่พอ');
+  if (CV && CV !== 'zone' && ['res', 'com', 'service'].includes(currentTool) && !adjRoad(x, z)) { audio.sfx('error'); return toast(t('toast.road')); }
+  if (currentTool === 'water' && !nearWater(x, z, 3)) { audio.sfx('error'); return toast(t('toast.nearwater')); }
+  if (state.money < cost2) { audio.sfx('error'); return toast(t('toast.nomoney')); }
   state.money -= cost2;
   state.tiles[i] = VARIANTS[currentTool] ? { t: currentTool, lv: 0, v: currentVar[currentTool] } : { t: currentTool, lv: 0 };
+  audio.sfx(currentTool === 'road' ? 'road' : 'place');
   refresh(x, z);
   updateHUD();
 }
@@ -1741,8 +1790,7 @@ function tick() {
   }
 
   const s2 = computeStats();
-  state.money += s2.net;
-  state.day++;
+  state.money += s2.net * ECON / DAY_LENGTH_SEC; // รายได้ไหลเข้าต่อเนื่องตลอดวัน
   updateHUD(s2);
 }
 
@@ -1762,7 +1810,7 @@ function updateHUD(s = computeStats()) {
   wt.textContent = `${s.waterUse}/${s.waterCap}`;
   wt.classList.toggle('bad', s.waterUse >= s.waterCap && (s.waterUse > 0 || hasZone));
   const net = $('net');
-  net.textContent = (s.net >= 0 ? '+' : '') + s.net.toFixed(1);
+  net.textContent = (s.net >= 0 ? '+' : '') + Math.round(s.net * ECON).toLocaleString();
   net.classList.toggle('bad', s.net < 0);
   $('day').textContent = state.day;
   $('dR').style.height = s.demand.res * 100 + '%';
@@ -1779,15 +1827,15 @@ function refreshToolSmall(k) {
   const n = TOOL_KEYS.indexOf(k);
   const V = VARIANTS[k]?.find(v => v.k === currentVar[k]);
   const c = V ? V.cost : TOOLS[k].cost;
-  toolSmall[k].textContent = `${c ? '$' + c : 'ฟรี'} · ${keyLabel(n)}`;
+  toolSmall[k].textContent = `${c ? '$' + c : t('free')} · ${keyLabel(n)}`;
   const lbl = toolBtns[k].querySelector('.lbl');
-  lbl.textContent = V && V.k !== 'zone' && VARIANTS[k].length > 1 ? V.label.replace(/ \(.*\)/, '') : TOOLS[k].label;
+  lbl.textContent = V && V.k !== 'zone' && VARIANTS[k].length > 1 ? vLabel(k, V).replace(/ ?[（(].*[）)]/, '') : toolLabel(k);
 }
 TOOL_KEYS.forEach((k, n) => {
   const b = document.createElement('button');
   b.className = 'tool';
-  b.title = VARIANTS[k] ? '' : TOOLS[k].tip;
-  b.innerHTML = `<span class="ico">${ICON[k] || ICON.com}</span><span class="lbl">${TOOLS[k].label}</span><small></small>`;
+  b.title = VARIANTS[k] ? '' : toolTip(k);
+  b.innerHTML = `<span class="ico">${ICON[k] || ICON.com}</span><span class="lbl">${toolLabel(k)}</span><small></small>`;
   b.onclick = () => selectTool(k);
   toolbar.appendChild(b);
   toolBtns[k] = b;
@@ -1803,21 +1851,22 @@ const fly = document.createElement('div');
 fly.id = 'fly';
 document.body.appendChild(fly);
 let flyTool = null, flyTimer = 0;
-function variantStats(v) {
+function variantStats(tool, v) {
   const p = [];
-  if (v.pop) p.push(`อยู่ได้ ${v.pop} คน`);
-  if (v.jobs) p.push(`งาน ${v.jobs}`);
-  if (v.cap) p.push(`ผลิต ${v.cap}`);
-  if (v.power || v.water) p.push(`ใช้ไฟ ${v.power} · น้ำ ${v.water}`);
-  if (v.upkeep) p.push(`ดูแล $${v.upkeep}/วัน`);
-  return (p.join(' · ') || '') + (v.note ? (p.length ? ' — ' : '') + v.note : '');
+  if (v.pop) p.push(t('st.pop', { n: v.pop }));
+  if (v.jobs) p.push(t('st.jobs', { n: v.jobs }));
+  if (v.cap) p.push(t('st.cap', { n: v.cap }));
+  if (v.power || v.water) p.push(t('st.use', { p: v.power, w: v.water }));
+  if (v.upkeep) p.push(t('st.upkeep', { n: v.upkeep }));
+  const note = vNote(tool, v);
+  return (p.join(' · ') || '') + (note ? (p.length ? ' — ' : '') + note : '');
 }
 function showFly(k) {
   clearTimeout(flyTimer);
   if (flyTool !== k || !fly.classList.contains('show')) {
     flyTool = k;
-    fly.innerHTML = `<div class="ft">${TOOLS[k].label}</div>` + VARIANTS[k].map(v =>
-      `<button class="fi${currentVar[k] === v.k ? ' on' : ''}" data-k="${v.k}"><span class="fn">${v.label}</span><span class="fc">$${v.cost.toLocaleString()}</span><span class="fs">${variantStats(v)}</span></button>`
+    fly.innerHTML = `<div class="ft">${toolLabel(k)}</div>` + VARIANTS[k].map(v =>
+      `<button class="fi${currentVar[k] === v.k ? ' on' : ''}" data-k="${v.k}"><span class="fn">${vLabel(k, v)}</span><span class="fc">$${v.cost.toLocaleString()}</span><span class="fs">${variantStats(k, v)}</span></button>`
     ).join('');
   }
   const r = toolBtns[k].getBoundingClientRect();
@@ -1853,7 +1902,7 @@ document.querySelectorAll('#speed button').forEach(b => {
   };
 });
 $('reset').onclick = () => {
-  if (!confirm('เริ่มเมืองใหม่? ข้อมูลเมืองเดิมจะหายทั้งหมด')) return;
+  if (!confirm(t('confirm.reset'))) return;
   state = newState();
   seedStarterCity();
   for (let i = 0; i < N * N; i++) { if (meshes[i]) { tileGroup.remove(meshes[i]); meshes[i] = null; } }
@@ -1865,10 +1914,14 @@ $('reset').onclick = () => {
   updateHUD();
 };
 window.addEventListener('keydown', e => {
+  if (document.body.classList.contains('menu-open')) {
+    if (e.key === 'Escape' && menu.inGame) { menu.hide(); resumeFromMenu(); }
+    return;
+  }
   const n = parseInt(e.key, 10);
   if (n >= 1 && n <= 9 && n <= TOOL_KEYS.length) selectTool(TOOL_KEYS[n - 1]);
   if (e.key === '0') selectTool('bulldoze');
-  if (e.key === 'Escape') selectTool('select');
+  if (e.key === 'Escape') { if (currentTool === 'select') openMenu(); else selectTool('select'); }
   if (e.key === ' ') { e.preventDefault(); const b = document.querySelector(`#speed button[data-s="${speed === 0 ? 1 : 0}"]`); b.click(); }
 });
 
@@ -2021,6 +2074,7 @@ $('camHome').onclick = () => {
   controls.target.set(0, 0, 0);
 };
 window.addEventListener('keydown', e => {
+  if (document.body.classList.contains('menu-open')) return;
   if (e.key === 'q' || e.key === 'Q') orbitBy(Math.PI / 16);
   if (e.key === 'e' || e.key === 'E') orbitBy(-Math.PI / 16);
   if (e.key === '+' || e.key === '=') zoomBy(0.85);
@@ -2039,7 +2093,7 @@ function applyControlMode(m) {
   settings.mode = m;
   saveSettings();
   document.querySelectorAll('#mSeg button').forEach(b => b.classList.toggle('active', b.dataset.m === m));
-  $('helpText').innerHTML = HELP[m];
+  $('helpText').innerHTML = t('help.' + m);
 }
 
 function applyQuality(key) {
@@ -2064,7 +2118,7 @@ function applyQuality(key) {
   lastTargetsAt = 0; // คำนวณจำนวนรถ/คนใหม่ทันที
 
   document.querySelectorAll('#qSeg button').forEach(b => b.classList.toggle('active', b.dataset.q === key));
-  $('qDesc').textContent = q.desc;
+  $('qDesc').textContent = t('q.' + key + '.desc');
 
   // รายละเอียดอาคาร/ไฟถนนเปลี่ยนตามระดับ ต้องสร้างใหม่
   if (lastDetails !== q.details) {
@@ -2098,10 +2152,11 @@ function setUiHidden(h) {
   document.body.classList.toggle('ui-hidden', h);
   const b = $('uiToggle');
   b.innerHTML = h ? ICON.eye : ICON.eyeOff;
-  b.title = h ? 'แสดง UI (H)' : 'ซ่อน UI (H)';
+  b.title = h ? t('ui.show') : t('ui.hide');
 }
 $('uiToggle').onclick = () => setUiHidden(!uiHidden);
 window.addEventListener('keydown', e => {
+  if (document.body.classList.contains('menu-open')) return;
   if (e.key === 'h' || e.key === 'H') setUiHidden(!uiHidden);
 });
 setUiHidden(false);
@@ -2143,6 +2198,60 @@ function updateAgentTargets() {
   });
 }
 
+// ---------------------------------------------------------------
+// เมนู / ภาษา / เสียง
+// ---------------------------------------------------------------
+let pausedSpeed = null;
+function resumeFromMenu() { if (pausedSpeed !== null) { speed = pausedSpeed; pausedSpeed = null; } audio.sfx('menu'); }
+function openMenu() {
+  if (document.body.classList.contains('menu-open')) return;
+  save();
+  pausedSpeed = speed; speed = 0;
+  fly.classList.remove('show');
+  menu.show('main', true);
+}
+function startGame() { audio.init(); }
+function setSetting(k, v) {
+  switch (k) {
+    case 'lang': settings.lang = v; setLang(v); break;
+    case 'master': case 'sfx': case 'music': settings[k] = +v; audio.setVolume(k, +v); break;
+    case 'mute': settings.mute = !!v; audio.setMute(!!v); break;
+    case 'quality': applyQuality(v); break;
+    case 'mode': applyControlMode(v); break;
+  }
+  saveSettings();
+}
+const menu = createMenu({
+  getActive: () => (activeId ? Saves.getSlot(activeId) : null),
+  settings: { get: () => settings, set: setSetting },
+  sfx: n => audio.sfx(n),
+  onResume: resumeFromMenu,
+  onContinue: () => { if (pausedSpeed !== null) resumeFromMenu(); else startGame(); },
+  onNew: (name, map) => {
+    if (activeId) save();
+    const id = Saves.createSlot(name, map);
+    Saves.setActive(id); Saves.setAutoStart(); location.reload();
+  },
+  onLoad: id => { if (activeId) save(); Saves.setActive(id); Saves.setAutoStart(); location.reload(); },
+  onDeleted: id => { if (id === activeId) { activeId = null; location.reload(); } },
+});
+$('menuBtn').onclick = openMenu;
+
+onLang(() => {
+  TOOL_KEYS.forEach(k => { refreshToolSmall(k); if (!VARIANTS[k]) toolBtns[k].title = toolTip(k); });
+  fly.classList.remove('show'); flyTool = null;
+  $('qDesc').textContent = t('q.' + qualityKey + '.desc');
+  $('helpText').innerHTML = t('help.' + settings.mode);
+  setUiHidden(uiHidden);
+  rebuildAll(); // ป้ายบนอาคารเปลี่ยนภาษา
+  menu.refresh();
+});
+audio.setVolume('master', settings.master); audio.setVolume('sfx', settings.sfx); audio.setVolume('music', settings.music); audio.setMute(settings.mute);
+// เบราว์เซอร์อนุญาตให้เล่นเสียงหลังผู้ใช้กดอะไรสักอย่างเท่านั้น
+const unlockAudio = () => { audio.init(); if (audio.ready) { window.removeEventListener('pointerdown', unlockAudio); window.removeEventListener('keydown', unlockAudio); } };
+window.addEventListener('pointerdown', unlockAudio);
+window.addEventListener('keydown', unlockAudio);
+
 load();
 applyControlMode(settings.mode);
 applyQuality(settings.quality); // สร้างเมืองครั้งแรกตามระดับกราฟิก
@@ -2152,6 +2261,21 @@ loadModels().then(n => {
 selectTool('road');
 updateHUD();
 updateSky(0);
+setLang(settings.lang);
+if (!AUTOSTART) menu.show('main', false);
+
+let audioStatsT = 0, prevFlash = 0;
+const audioStats = { waterNear: 0, pop: 0, hospital: false, school: false };
+function refreshAudioStats() {
+  let hospital = false, school = false;
+  for (const tl of state.tiles) if (tl && tl.t === 'service') { if (tl.v === 'hospital') hospital = true; else school = true; }
+  const tx = Math.floor(controls.target.x + N / 2), tz = Math.floor(controls.target.z + N / 2);
+  let best = 99;
+  for (let dz = -12; dz <= 12; dz++) for (let dx = -12; dx <= 12; dx++) if (isWaterTile(tx + dx, tz + dz)) best = Math.min(best, Math.hypot(dx, dz));
+  audioStats.waterNear = clamp(1 - best / 12, 0, 1);
+  audioStats.pop = computeStats().pop;
+  audioStats.hospital = hospital; audioStats.school = school;
+}
 
 let fpsFrames = 0;
 let fpsTime = 0;
@@ -2164,15 +2288,15 @@ function loop(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
 
-  if (speed > 0) {
+  if (speed > 0 && !menu.isOpen) {
     acc += dt * speed;
     while (acc >= 1) { acc -= 1; tick(); }
   }
   saveAcc += dt;
-  if (saveAcc > 5) { saveAcc = 0; save(); }
+  if (saveAcc > 5) { saveAcc = 0; if (!menu.isOpen) save(); }
 
   weather.update(dt);
-  const night = updateSky(dt);
+  const night = updateSky(dt * speed);
 
   // ไฟจราจรเดินตามความเร็วเกม
   sigClock += dt * speed;
@@ -2195,6 +2319,22 @@ function loop(now) {
   }
   const wvec = weather.windVec();
   wildlife.update(dt, { night: nightLevel, rain: W.rain, wind: wvec, windMag: W.wind });
+  // เสียง: ยิ่งซูมเข้าใกล้ ยิ่งได้ยินรายละเอียดชัด
+  audioStatsT -= dt;
+  if (audioStatsT <= 0) { audioStatsT = 0.5; refreshAudioStats(); }
+  const camDist = camera.position.distanceTo(controls.target);
+  const lightning = W.flash > 0.85 && prevFlash <= 0.85;
+  prevFlash = W.flash;
+  {
+    const ac = agents.counts();
+    audio.update(dt, {
+      prox: 1 - THREE.MathUtils.smoothstep(camDist, 9, 52),
+      wind: W.wind, rain: W.rain, cars: ac.car, people: ac.person, dogs: ac.dog, cats: ac.cat,
+      night: nightLevel, waterNear: audioStats.waterNear, pop: audioStats.pop,
+      hospital: audioStats.hospital, school: audioStats.school, tod, day: state.day, lightning,
+    });
+  }
+  controls.autoRotate = menu.isOpen && !menu.inGame;
   waterTime.value += dt * (1 + W.wind * 1.5);
   waterTex.offset.x = (waterTex.offset.x + wvec.x * dt * 0.03 * (1 + W.wind * 3)) % 1;
   waterTex.offset.y = (waterTex.offset.y + wvec.z * dt * 0.03 * (1 + W.wind * 3)) % 1;
@@ -2218,13 +2358,13 @@ function loop(now) {
   if (fpsTime >= 0.5) {
     const c = agents.counts();
     $('fps').textContent = `FPS ${Math.round(fpsFrames / fpsTime)}` + (gpuName ? ` · ${gpuName}` : '');
-    $('live').textContent = `รถ ${c.car} · คน ${c.person} · หมา ${c.dog} · แมว ${c.cat}`;
+    $('live').textContent = t('live', c);
     // นาฬิกา สภาพอากาศ อุณหภูมิ ลม
     $('clock').textContent = clockText();
     $('wxIcon').innerHTML = ICON[weather.iconKey()];
-    $('wxText').textContent = weather.label();
+    $('wxText').textContent = t('wx.' + weather.label());
     $('temp').textContent = Math.round(tempC) + '°C';
-    $('windv').textContent = 'ลม ' + Math.round(8 + W.wind * 42) + ' กม./ชม.';
+    $('windv').textContent = t('wind', { n: Math.round(8 + W.wind * 42) });
     fpsFrames = 0; fpsTime = 0;
   }
   requestAnimationFrame(loop);

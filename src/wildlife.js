@@ -9,7 +9,7 @@ import { riverZ, SEA_Y } from './terrain.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 
-export function createWildlife({ scene, blocked = () => false }) {
+export function createWildlife({ scene, blocked = () => false, boats: withBoats = true }) {
   const root = new THREE.Group();
   root.name = 'wildlife';
   scene.add(root);
@@ -66,7 +66,7 @@ export function createWildlife({ scene, blocked = () => false }) {
   // ---------- เรือ ----------
   const boats = [];
   const X0 = -30, X1 = 36;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < (withBoats ? 3 : 0); i++) {
     const g = new THREE.Group();
     const inner = new THREE.Group();
     g.add(inner);

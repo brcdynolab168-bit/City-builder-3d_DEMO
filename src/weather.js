@@ -198,11 +198,12 @@ export function createWeather({ scene, getFocus, getCameraPos = () => ({ x: 0, y
     setRainCap(n) { rainCap = Math.min(MAXR, Math.max(0, n)); },
     windVec() { return { x: Math.cos(state.windAng), z: Math.sin(state.windAng) }; },
     // ชื่อสภาพอากาศตามค่าจริงขณะนั้น
+    // คืนค่าเป็นคีย์ (storm|rain|cloudy|clear) ให้ฝั่ง UI แปลภาษาเอง
     label() {
-      if (state.storm > 0.5) return WEATHER_LABEL.storm;
-      if (state.rain > 0.25) return WEATHER_LABEL.rain;
-      if (state.cloud > 0.5) return WEATHER_LABEL.cloudy;
-      return WEATHER_LABEL.clear;
+      if (state.storm > 0.5) return 'storm';
+      if (state.rain > 0.25) return 'rain';
+      if (state.cloud > 0.5) return 'cloudy';
+      return 'clear';
     },
     iconKey() {
       if (state.storm > 0.5) return 'storm';
