@@ -44,6 +44,11 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     haz: new THREE.MeshStandardMaterial({ color: 0xffb020, emissive: 0xff9a00, emissiveIntensity: 1, roughness: 0.3 }),
     vc: new THREE.MeshStandardMaterial({ roughness: 0.78, metalness: 0, vertexColors: true }),
     fur: new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0, vertexColors: true }),
+    lamp: new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x8c8c8c }),
+    taxi: [0xf06292, 0xfdd835, 0x43a047, 0xf06292].map(c => new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.32, metalness: 0.5, clearcoat: 0.8, clearcoatRoughness: 0.12, vertexColors: true })),
+    grab: new THREE.MeshPhysicalMaterial({ color: 0x00b14f, roughness: 0.32, metalness: 0.5, clearcoat: 0.8, clearcoatRoughness: 0.12, vertexColors: true }),
+    roofSign: new THREE.MeshBasicMaterial({ color: 0xffe066 }),
+    roofSignG: new THREE.MeshBasicMaterial({ color: 0xb9f6ca }),
     smoke: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(() => new THREE.MeshBasicMaterial({ color: 0x777777, transparent: true, opacity: 0.4, depthWrite: false })),
     cone: mat(0xff6a00, { roughness: 0.6 }),
     white: mat(0xf2f2f2, { roughness: 0.5 }),
@@ -112,7 +117,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       roof = [[-0.072, 0.124], [0.042, 0.124], [0.04, 0.133], [-0.07, 0.133]];
     }
     body.push(profile(low, W), profile(roof, cabW + 0.002));
-    glass.push(profile(cab, cabW, 0xffffff, 0.002));
+    glass.push(profile(cab, cabW, 0x1a2a38, 0.002));
     if (type === 'pickup') {
       for (const sx of [-0.071, 0.071]) body.push(part(boxGeo, 0xffffff, sx, 0.112, -0.105, 0.008, 0.035, 0.13));
       body.push(part(boxGeo, 0xffffff, 0, 0.112, -0.17, 0.15, 0.035, 0.008), part(boxGeo, 0xffffff, 0, 0.112, -0.04, 0.15, 0.035, 0.008));
@@ -129,12 +134,12 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     detail.push(part(boxGeo, 0x111111, 0, 0.064, fz + 0.002, 0.05, 0.016, 0.006));        // กระจังหน้า
     detail.push(part(boxGeo, 0xf2f2f2, 0, 0.056, -fz - 0.008, 0.04, 0.014, 0.004));       // ป้ายทะเบียน
     for (const sx of [-0.052, 0.052]) {
-      head.push(part(boxGeo, 0xffffff, sx, 0.066, fz + 0.001, 0.034, 0.014, 0.008));
-      tail.push(part(boxGeo, 0xffffff, sx, 0.066, -fz - 0.001, 0.034, 0.014, 0.008));
+      head.push(part(boxGeo, 0xfff6d8, sx, 0.066, fz + 0.001, 0.034, 0.014, 0.008));
+      tail.push(part(boxGeo, 0xdd2a1a, sx, 0.066, -fz - 0.001, 0.034, 0.014, 0.008));
     }
     // กระจกมองข้าง (สีเทาเข้ม)
     for (const sx of [-1, 1]) detail.push(part(boxGeo, 0x222222, sx * 0.083, 0.098, type === 'pickup' ? 0.07 : 0.05, 0.012, 0.012, 0.02));
-    const r = { body: merge(body), glass: merge(glass), detail: merge(detail), head: merge(head), tail: merge(tail) };
+    const r = { body: merge(body), detail: merge([...glass, ...detail]), lamps: merge([...head, ...tail]) };  // รวมกระจก+ชิ้นส่วนเป็นก้อนเดียว ลด draw call
     carCache[type] = r;
     return r;
   }
@@ -143,9 +148,80 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     const G = carGeos(type);
     const g = new THREE.Group();
     const bodyM = mesh(G.body, bodyMat);
-    const head = mesh(G.head, M.head, false), tail = mesh(G.tail, M.tail, false);
-    g.add(bodyM, mesh(G.glass, M.glass, false), mesh(G.detail, M.detail), head, tail);
-    return { obj: g, headMesh: head, tailMesh: tail };
+    const lamps = mesh(G.lamps, M.lamp, false);
+    g.add(bodyM, mesh(G.detail, M.detail), lamps);
+    return { obj: g, headMesh: lamps, tailMesh: lamps };
+  }
+
+
+  // ---------- มอเตอร์ไซค์ (คนขับสวมหมวกกันน็อก) ----------
+  const BIKE_COLS = [[0xd32f2f, 0x263238, 0xf5f5f5], [0x1565c0, 0x37474f, 0xffd54f], [0x212121, 0xc62828, 0x212121], [0xfdd835, 0x1b5e20, 0xffffff], [0xeeeeee, 0x6a1b9a, 0xfafafa], [0xef6c00, 0x263238, 0xf5f5f5]];
+  const bikeCache = {};
+  function bikeGeos(i, grab = false) {
+    const key = grab ? 'g' + (i % 3) : i % BIKE_COLS.length;
+    if (bikeCache[key]) return bikeCache[key];
+    const [paint, jacket, helmet] = grab ? [0x00b14f, 0x00b14f, 0x00b14f] : BIKE_COLS[i % BIKE_COLS.length];
+    const b = [], lamps = [];
+    for (const z of [-0.07, 0.07]) {
+      b.push(part(cylGeo, 0x161616, 0, 0.026, z, 0.052, 0.014, 0.052, 0, 0, Math.PI / 2));
+      b.push(part(cylGeo, 0xb8bec4, 0, 0.026, z, 0.026, 0.016, 0.026, 0, 0, Math.PI / 2));
+    }
+    b.push(part(boxGeo, paint, 0, 0.056, -0.005, 0.034, 0.05, 0.13));              // ตัวถัง/ถัง
+    b.push(part(boxGeo, 0x222222, 0, 0.088, -0.03, 0.034, 0.014, 0.075));          // เบาะ
+    b.push(part(boxGeo, paint, 0, 0.065, -0.085, 0.032, 0.03, 0.04));              // ท้าย
+    b.push(part(boxGeo, 0x888888, 0, 0.06, 0.06, 0.01, 0.075, 0.012, 0.35));       // โช้คหน้า
+    b.push(part(boxGeo, 0x222222, 0, 0.1, 0.07, 0.075, 0.009, 0.009));             // แฮนด์
+    // คนขับ
+    b.push(part(boxGeo, jacket, 0, 0.128, -0.025, 0.044, 0.06, 0.03, 0.35));       // ลำตัว
+    b.push(part(sphGeo, helmet, 0, 0.178, 0.0, 0.036, 0.038, 0.04));               // หมวกกันน็อก
+    b.push(part(boxGeo, 0x222222, 0, 0.176, 0.016, 0.03, 0.014, 0.01));            // กระจกหมวก
+    for (const sx of [-1, 1]) {
+      b.push(part(boxGeo, jacket, sx * 0.026, 0.12, 0.02, 0.012, 0.012, 0.075, 0.2));  // แขน
+      b.push(part(boxGeo, 0x2f3e4e, sx * 0.024, 0.088, -0.02, 0.014, 0.014, 0.07, -0.4)); // ขา
+    }
+    lamps.push(part(boxGeo, 0xfff6d8, 0, 0.09, 0.082, 0.026, 0.02, 0.01));
+    lamps.push(part(boxGeo, 0xdd2a1a, 0, 0.066, -0.108, 0.026, 0.014, 0.008));
+    return (bikeCache[key] = { body: merge(b), lamps: merge(lamps) });
+  }
+  function makeBike(grab = false) {
+    const G = bikeGeos((Math.random() * 12) | 0, grab);
+    const g = new THREE.Group();
+    const lamps = mesh(G.lamps, M.lamp, false);
+    g.add(mesh(G.body, M.vc, false), lamps);
+    return { obj: g, headMesh: lamps, tailMesh: lamps, isBike: true };
+  }
+
+  // ---------- รถเมล์ ----------
+  const BUS_COLS = [[0xd32f2f, 0xf5f5f5], [0xef6c00, 0xf5f5f5], [0x1e88e5, 0xf5f5f5]];
+  const busCache = [];
+  function busGeos(i) {
+    if (busCache[i]) return busCache[i];
+    const [c1, c2] = BUS_COLS[i % BUS_COLS.length];
+    const b = [], lamps = [];
+    b.push(part(boxGeo, c1, 0, 0.085, 0, 0.15, 0.1, 0.58));
+    b.push(part(boxGeo, c2, 0, 0.145, 0, 0.15, 0.036, 0.58));
+    b.push(part(boxGeo, 0x14202c, 0, 0.12, 0, 0.152, 0.04, 0.5));                   // แถบกระจก
+    b.push(part(boxGeo, 0x14202c, 0, 0.112, 0.292, 0.13, 0.05, 0.004));              // กระจกหน้า
+    b.push(part(boxGeo, 0x222222, 0, 0.14, 0.294, 0.1, 0.014, 0.004));              // ป้ายสาย
+    for (const sz of [-0.2, 0.2]) for (const sx of [-1, 1]) b.push(part(cylGeo, 0x161616, sx * 0.076, 0.03, sz, 0.06, 0.024, 0.06, 0, 0, Math.PI / 2));
+    lamps.push(part(boxGeo, 0xfff6d8, -0.05, 0.05, 0.292, 0.03, 0.016, 0.006), part(boxGeo, 0xfff6d8, 0.05, 0.05, 0.292, 0.03, 0.016, 0.006));
+    lamps.push(part(boxGeo, 0xdd2a1a, -0.05, 0.05, -0.292, 0.03, 0.016, 0.006), part(boxGeo, 0xdd2a1a, 0.05, 0.05, -0.292, 0.03, 0.016, 0.006));
+    return (busCache[i] = { body: merge(b), lamps: merge(lamps) });
+  }
+  function makeBus() {
+    const G = busGeos((Math.random() * 3) | 0);
+    const g = new THREE.Group();
+    const lamps = mesh(G.lamps, M.lamp, false);
+    g.add(mesh(G.body, M.vc), lamps);
+    return { obj: g, headMesh: lamps, tailMesh: lamps };
+  }
+  // แท็กซี่/แกร็บ: รถปกติ + ป้ายไฟบนหลังคา
+  function makeTaxiLike(grab) {
+    const made = grab ? makeCar(pick(CAR_TYPES), M.grab) : makeCar('sedan', pick(M.taxi));
+    const sign = new THREE.Mesh(boxGeo, grab ? M.roofSignG : M.roofSign);
+    sign.scale.set(0.05, 0.02, 0.03); sign.position.set(0, 0.168, -0.01);
+    made.obj.add(sign);
+    return made;
   }
 
   // รถพยาบาล (แวนสีขาว แถบแดง ไฟสัญญาณ)
@@ -169,6 +245,30 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     lb.scale.set(0.06, 0.02, 0.03); lb.position.set(0.04, 0.18, 0.05);
     g.add(lr, lb);
     return { obj: g, lr, lb };
+  }
+
+
+  // รถยกลากรถเสีย (รถบรรทุกพื้นเรียบ ห้องคนขับสีส้ม ไฟหมุนสีเหลือง)
+  let towGeo = null;
+  function makeTow() {
+    if (!towGeo) {
+      const body = [], glass = [], det = [];
+      body.push(part(boxGeo, 0xf28c1e, 0, 0.1, 0.2, 0.15, 0.1, 0.15));                 // ห้องคนขับ
+      body.push(part(boxGeo, 0x3a3f46, 0, 0.055, -0.02, 0.15, 0.03, 0.62));          // แชสซีส์
+      body.push(part(boxGeo, 0x6f7882, 0, 0.082, -0.1, 0.16, 0.022, 0.44));          // พื้นกระบะ
+      body.push(part(boxGeo, 0xf28c1e, 0, 0.1, 0.1, 0.16, 0.06, 0.02));              // กั้นหลังห้องคนขับ
+      glass.push(part(boxGeo, 0xffffff, 0, 0.125, 0.268, 0.13, 0.05, 0.012));
+      det.push(part(boxGeo, 0x222222, 0, 0.042, 0.292, 0.15, 0.02, 0.016));
+      det.push(part(boxGeo, 0xffd54a, 0.078, 0.07, -0.1, 0.004, 0.012, 0.44), part(boxGeo, 0xffd54a, -0.078, 0.07, -0.1, 0.004, 0.012, 0.44));
+      for (const z of [-0.24, -0.06, 0.22]) for (const sx of [-1, 1]) det.push(part(cylGeo, 0x161616, sx * 0.082, 0.032, z, 0.064, 0.026, 0.064, 0, 0, Math.PI / 2));
+      towGeo = { body: merge(body), glass: merge(glass), det: merge(det) };
+    }
+    const g = new THREE.Group();
+    g.add(mesh(towGeo.body, M.car[10]), mesh(towGeo.glass, M.glass, false), mesh(towGeo.det, M.detail));
+    const lr = mesh(boxGeo, M.strobeR, false), lb = mesh(boxGeo, M.strobeB, false);
+    lr.scale.set(0.04, 0.025, 0.03); lr.position.set(0, 0.19, 0.2); lb.visible = false;
+    g.add(lr);
+    return { obj: g, lr, lb: lr };
   }
 
   // ---------- คน: 28 แบบ (ทรงผม เสื้อผ้า กระเป๋า หมวก) ----------
@@ -213,26 +313,31 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       part(boxGeo, longSleeve ? shirt : skin, 0, -0.043, 0.004, 0.011, 0.026, 0.012, -0.15),
       part(sphGeo, skin, 0, -0.06, 0.008, 0.012, 0.012, 0.012),
     ]);
-    const r = { body: merge(body), leg, arm };
+    const at = (g, x, y, z) => { const c = g.clone(); c.translate(x, y, z); return c; };
+    const bodyG = merge(body);
+    const r = { body: bodyG, leg, arm, full: merge([bodyG, at(leg, -0.012, 0.074, 0), at(leg, 0.012, 0.074, 0), at(arm, -0.034, 0.131, 0), at(arm, 0.034, 0.131, 0)]) };
     personCache[i] = r;
     return r;
   }
   function makePerson() {
     const G = personGeos(Math.floor(Math.random() * 28));
     const g = new THREE.Group();
-    g.add(mesh(G.body, M.vc));
-    const legs = [], arms = [];
+    const bodyM = mesh(G.body, M.vc, false);
+    g.add(bodyM);
+    const legs = [], arms = [], lodParts = [bodyM];
     for (const sx of [-1, 1]) {
       const leg = new THREE.Group();
       leg.position.set(sx * 0.012, 0.074, 0);
-      leg.add(mesh(G.leg, M.vc));
-      g.add(leg); legs.push(leg);
+      leg.add(mesh(G.leg, M.vc, false));
+      g.add(leg); legs.push(leg); lodParts.push(leg);
       const arm = new THREE.Group();
       arm.position.set(sx * 0.034, 0.131, 0);
-      arm.add(mesh(G.arm, M.vc));
-      g.add(arm); arms.push(arm);
+      arm.add(mesh(G.arm, M.vc, false));
+      g.add(arm); arms.push(arm); lodParts.push(arm);
     }
-    return { obj: g, legs, arms };
+    // โมเดลไกล: รวมทั้งตัวเป็นชิ้นเดียว (ไม่แกว่งแขนขา) ใช้ draw call เดียว
+    const full = mesh(G.full, M.vc, false); full.visible = false; g.add(full);
+    return { obj: g, legs, arms, lodParts, full, near: true };
   }
 
   // ---------- หมา / แมว ----------
@@ -256,7 +361,9 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       if (floppy) b.push(part(boxGeo, c1 === 0x1d1d1d ? 0x111111 : c1, sx * 0.019, 0.088, 0.058 * k, 0.006, 0.026, 0.016, 0, 0, sx * 0.25));
       else b.push(part(coneGeo, c1, sx * 0.012, 0.11, 0.056 * k, 0.014, 0.024, 0.01));
     }
-    b.push(part(boxGeo, c2, 0, 0.083, -0.07 * k, 0.009, 0.009, 0.05 * k, -0.75));        // หาง
+    // หาง: ลูกกลมต่อกันเป็นเส้นโค้งชี้ขึ้น ติดกับก้นหมา
+    [[0.07, -0.046, 0.016], [0.078, -0.058, 0.015], [0.088, -0.068, 0.014], [0.099, -0.075, 0.013], [0.11, -0.078, 0.012]]
+      .forEach(([y, z, d], i, a) => b.push(part(sphGeo, i === a.length - 1 ? c2 : c1, 0, y, z * k, d * k, d * k, d * k * 1.2)));
     const leg = merge([
       part(boxGeo, c1, 0, -0.0125, 0, 0.012, 0.026, 0.014),
       part(boxGeo, c1, 0, -0.034, 0.001, 0.009, 0.022, 0.01),
@@ -277,7 +384,9 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       b.push(part(coneGeo, c1, sx * 0.011, 0.085, 0.043, 0.012, 0.018, 0.008));
       b.push(part(sphGeo, 0x9ad65a, sx * 0.008, 0.07, 0.057, 0.005, 0.006, 0.003));
     }
-    b.push(part(boxGeo, c1, 0, 0.07, -0.058, 0.007, 0.007, 0.07, -0.95));                  // หางตั้ง
+    // หาง: ลูกกลมต่อกันเป็นเส้นโค้งขึ้นแล้วม้วนปลาย ติดกับก้นแมว
+    [[0.052, -0.036, 0.014], [0.058, -0.047, 0.013], [0.066, -0.057, 0.0125], [0.077, -0.064, 0.012], [0.09, -0.067, 0.0115], [0.102, -0.064, 0.011], [0.11, -0.057, 0.0105]]
+      .forEach(([y, z, d], k, a) => b.push(part(sphGeo, k === a.length - 1 ? c2 : c1, 0, y, z, d, d, d * 1.25)));
     const leg = merge([
       part(boxGeo, c1, 0, -0.01, 0, 0.009, 0.02, 0.011),
       part(boxGeo, c1, 0, -0.027, 0.001, 0.007, 0.018, 0.008),
@@ -287,15 +396,19 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   }
   function makeQuad(G, hipY, hx, hz) {
     const g = new THREE.Group();
-    g.add(mesh(G.body, M.fur));
-    const legs = [];
-    for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
+    const bodyM = mesh(G.body, M.fur, false);
+    g.add(bodyM);
+    const legs = [], lodParts = [bodyM];
+    const spots = [[-1, 1], [1, 1], [-1, -1], [1, -1]];
+    for (const [sx, sz] of spots) {
       const leg = new THREE.Group();
       leg.position.set(sx * hx, hipY, sz * hz);
-      leg.add(mesh(G.leg, M.fur));
-      g.add(leg); legs.push(leg);
+      leg.add(mesh(G.leg, M.fur, false));
+      g.add(leg); legs.push(leg); lodParts.push(leg);
     }
-    return { obj: g, legs };
+    if (!G.full) G.full = merge([G.body, ...spots.map(([sx, sz]) => { const c = G.leg.clone(); c.translate(sx * hx, hipY, sz * hz); return c; })]);
+    const full = mesh(G.full, M.fur, false); full.visible = false; g.add(full);
+    return { obj: g, legs, lodParts, full, near: true };
   }
   const makeDog = () => makeQuad(dogGeos(Math.floor(Math.random() * 12)), 0.048, 0.014, 0.03);
   const makeCat = () => makeQuad(catGeos(Math.floor(Math.random() * 10)), 0.038, 0.01, 0.022);
@@ -337,11 +450,21 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
 
   // ---------- ตัวละคร ----------
   const agents = { car: [], person: [], dog: [], cat: [] };
-  let targets = { car: 0, person: 0, dog: 0, cat: 0 };
+  let targets = { car: 0, person: 0, dog: 0, cat: 0, bus: 0, taxi: 0, grab: 0 };
 
-  function createAgent(type, x, z, d) {
+  const SPECIAL = ['bus', 'taxi', 'grab', 'rbike', 'rcar'];
+  function createAgent(type, x, z, d, role = null) {
     let made, kind = 'walker', speed, lat;
-    if (type === 'car') { made = makeCar(); kind = 'car'; speed = 0.95 + Math.random() * 0.2; lat = 0.15; }
+    if (type === 'car') {
+      kind = 'car'; lat = 0.15; speed = 0.95 + Math.random() * 0.2;
+      if (role === 'bus') { made = makeBus(); speed = 0.7 + Math.random() * 0.1; }
+      else if (role === 'taxi') { made = makeTaxiLike(false); speed = 0.9 + Math.random() * 0.15; }
+      else if (role === 'grab') { const bk = Math.random() < 0.45; made = bk ? makeBike(true) : makeTaxiLike(true); speed = 1 + Math.random() * 0.2; if (bk) lat = 0.2; }
+      else if (role === 'rbike') { made = makeBike(); speed = 1.9 + Math.random() * 0.6; lat = 0.2; }
+      else if (role === 'rcar') { made = makeCar(pick(['sedan', 'hatch'])); speed = 1.7 + Math.random() * 0.5; }
+      else if (Math.random() < 0.22) { made = makeBike(); role = 'bike'; speed = 1.1 + Math.random() * 0.25; lat = 0.2; }
+      else made = makeCar();
+    }
     else if (type === 'person') { made = makePerson(); speed = 0.26 + Math.random() * 0.08; lat = 0.43; }
     else if (type === 'dog') { made = makeDog(); speed = 0.42 + Math.random() * 0.1; lat = 0.4; }
     else { made = makeCat(); speed = 0.36 + Math.random() * 0.1; lat = 0.41; }
@@ -350,13 +473,14 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       s: Math.random() * 0.9, speed, speedNow: speed, lat,
       side: type === 'car' ? 1 : (Math.random() < 0.5 ? -1 : 1), // รถชิดซ้าย
       phase: Math.random() * 10, bob: 0, dead: false, crash: null,
+      role, special: SPECIAL.includes(role), racer: role === 'rbike' || role === 'rcar', runRed: Math.random() < 0.75, ttl: 0,
     };
     a.n = pickNext(kind, x + d[0], z + d[1], d);
     root.add(a.obj);
     return a;
   }
 
-  function spawn(type) {
+  function spawn(type, role = null) {
     if (dirty) rebuildLists();
     const kind = type === 'car' ? 'car' : 'walker';
     const list = lists[kind];
@@ -365,7 +489,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       const [x, z] = list[(Math.random() * list.length) | 0];
       const opts = DIRS.filter(([dx, dz]) => walkable(kind, x + dx, z + dz));
       if (!opts.length) continue;
-      return createAgent(type, x, z, opts[(Math.random() * opts.length) | 0]);
+      return createAgent(type, x, z, opts[(Math.random() * opts.length) | 0], role);
     }
     return null;
   }
@@ -384,16 +508,24 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       const arr = agents[type];
       const cap = type === 'car' ? carCap : walkCap;
       const target = Math.min(targets[type], cap);
-      for (let k = 0; k < 4 && arr.length < target; k++) {
+      const cnt = () => (type === 'car' ? arr.filter(a => !a.special).length : arr.length);
+      for (let k = 0; k < 4 && cnt() < target; k++) {
         const a = spawn(type);
         if (a) arr.push(a);
       }
-      // ไม่ลบรถที่ประสบอุบัติเหตุอยู่ (ให้ระบบอุบัติเหตุจัดการเอง)
-      for (let k = 0; k < 4 && arr.length > target; k++) {
-        const idx = arr.findIndex(a => !a.crash);
+      // ไม่ลบรถที่ประสบอุบัติเหตุอยู่ (ให้ระบบอุบัติเหตุจัดการเอง) และไม่ลบรถประจำการ/กลุ่มรถซิ่ง
+      for (let k = 0; k < 4 && cnt() > target; k++) {
+        const idx = arr.findIndex(a => !a.crash && !a.special);
         if (idx < 0) break;
         removeAgent(arr.splice(idx, 1)[0]);
       }
+    }
+    // รถประจำการจากอู่: รถเมล์ แท็กซี่ แกร็บ
+    for (const role of ['bus', 'taxi', 'grab']) {
+      const tg = Math.min(targets[role] || 0, Math.floor(lists.car.length * 0.12));
+      const have = agents.car.filter(a => a.role === role);
+      if (have.length < tg) { const a = spawn('car', role); if (a) agents.car.push(a); }
+      else if (have.length > tg) { const v = have.find(a => !a.crash); if (v) { removeAgent(v); agents.car = agents.car.filter(a => !a.dead); } }
     }
   }
 
@@ -451,6 +583,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   // ---------- API ----------
   // ไฟจราจร: คืนตัวคูณความเร็ว (1 = ไปได้, 0 = หยุดรอที่เส้น)
   function signalFactor(a) {
+    if (a.racer && a.runRed) return 1;   // กลุ่มรถซิ่งฝ่าไฟแดง
     const bx = a.x + a.d[0], bz = a.z + a.d[1];
     const st = signal(bx, bz, a.d[0] !== 0 ? 'x' : 'z');
     if (!st || st === 'g') return 1;
@@ -466,6 +599,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   let accident = null;      // มีได้ครั้งละหนึ่งเหตุการณ์
   let accTimer = 50;        // วินาทีเกมถึงเหตุการณ์ถัดไป
   let accRate = 1;
+  let lastEnv = { rain: 0, night: 0, hospital: false, police: 0 };
   const puffGeo = new THREE.SphereGeometry(0.5, 8, 6);
   const dirTo = (a, b) => [Math.sign(b[0] - a[0]), Math.sign(b[1] - a[1])];
 
@@ -503,13 +637,25 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     if (dirty) rebuildLists();
     const cars = agents.car.filter(c => !c.crash && c.s > 0.42 && c.s < 0.78 && tileType(c.x, c.z) === 'road');
     if (cars.length < 1) return false;
-    const a = pick(cars);
+    const racerCars = cars.filter(c => c.racer);
+    const a = racerCars.length && Math.random() < 0.65 ? pick(racerCars) : pick(cars);
     // รถคันหลังที่ชนท้าย (ในช่องเดียวกัน เลนเดียวกัน)
     const b = agents.car.find(o => o !== a && !o.crash && o.d[0] === a.d[0] && o.d[1] === a.d[1] && o.x === a.x && o.z === a.z && o.s < a.s && o.s > a.s - 0.45);
     const victims = [a];
     a.crash = { yaw: (Math.random() < 0.5 ? -1 : 1) * (0.15 + Math.random() * 0.2), roll: 0.03, t: 0 };
     a.lat = 0.19;
     if (b) { b.s = Math.max(0, a.s - 0.33); b.crash = { yaw: (Math.random() < 0.5 ? -1 : 1) * (0.1 + Math.random() * 0.25), roll: -0.03, t: 0 }; victims.push(b); }
+    // สาเหตุและผู้ได้รับผลกระทบ
+    const rain = lastEnv.rain, night = lastEnv.night;
+    let cause;
+    if (b) { const p = Math.random(); cause = p < 0.12 + 0.28 * night ? 'race' : p < 0.5 ? 'cutoff' : 'rear'; }
+    else cause = rain > 0.3 ? 'slip' : 'solo';
+    if (!b && !a.racer && Math.random() < 0.3) cause = 'breakdown';
+    if (!a.racer && cause !== 'breakdown' && lastEnv.drunk > 0 && Math.random() < 0.5 * lastEnv.drunk) cause = 'drunk';
+    if (a.racer) cause = 'race';
+    const pDead = ({ race: 0.42, cutoff: 0.12, rear: 0.06, solo: 0.14, slip: 0.1, breakdown: 0, drunk: 0.3 })[cause] * (1 + 0.6 * rain) * (lastEnv.hospital ? 0.7 : 1.4) * (a.isBike ? 1.5 : 1);
+    const dead = Math.random() < pDead ? (cause === 'race' && b && Math.random() < 0.3 ? 2 : 1) : 0;
+    const injured = cause === 'breakdown' ? 0 : Math.floor(Math.random() * (cause === 'race' ? 4 : 3)) + (Math.random() < 0.4 ? 1 : 0);
     for (const v of victims) { v.speedNow = 0; v.headMesh.material = M.haz; v.tailMesh.material = M.haz; }
     place(a); if (b) place(b);
     // ควัน + กรวยจราจร + ป้ายสามเหลี่ยม
@@ -532,8 +678,9 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
         props.add(p); puffs.push(p);
       }
     });
-    accident = { victims, props, puffs, t: 0, state: 'crash', amb: null, ambTimer: 6 + Math.random() * 6, tx: a.x, tz: a.z, hold: 0 };
-    events.push('crash');
+    const brk = cause === 'breakdown';
+    accident = { victims, props, puffs, t: 0, state: 'crash', amb: null, ambTimer: 6 + Math.random() * 6, tx: a.x, tz: a.z, hold: 0, noAmb: brk, tow: null, towAt: brk ? 7 + Math.random() * 5 : 18 + Math.random() * 8, towDone: false, noTow: false };
+    events.push({ e: 'crash', cause, injured, dead, x: a.x, z: a.z, axis: a.d[0] !== 0 ? 'row' : 'col', clip: Math.random() < 0.5, bike: !!a.isBike, racer: !!a.racer });
     return true;
   }
 
@@ -566,6 +713,73 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     if (a.i === a.route.length - 2 && a.s >= 0.86) { a.arrived = true; a.s = 0.86; }
   }
 
+  function spawnTow(acc) {
+    let route = ambulanceRoute(acc.tx, acc.tz);
+    if (route && route.length > 4) route = route.slice(0, -1); // จอดห่างถอยหลังหนึ่งช่อง แล้วใช้สลิงลากรถเข้ากระบะ
+    if (!route || route.length < 3) { acc.noTow = true; return; }
+    const made = makeTow();
+    const a = {
+      type: 'tow', kind: 'car', ...made, x: route[0][0], z: route[0][1], i: 0, route, s: 0, speed: 1.2, speedNow: 1.2,
+      lat: 0, side: 1, phase: 0, bob: 0, dead: false, crash: null, arrived: false, hold: 0,
+    };
+    a.d = dirTo(route[0], route[1]);
+    a.n = route.length > 2 ? dirTo(route[1], route[2]) : a.d;
+    root.add(a.obj);
+    acc.tow = a;
+    events.push('tow');
+  }
+
+  // วางรถที่ถูกยกไว้บนกระบะ (u=0 อยู่ที่เดิม, u=1 อยู่บนกระบะ) ผู้ถูกลากคันที่สองห้อยท้าย
+  function placeWreck(v, tw, u, k) {
+    const yaw = tw.obj.rotation.y, sn = Math.sin(yaw), cs = Math.cos(yaw);
+    const lz = k === 0 ? -0.12 : -0.62, ly = k === 0 ? 0.1 : 0;
+    const tx = tw.obj.position.x + sn * lz, tz = tw.obj.position.z + cs * lz, ty = tw.obj.position.y + ly;
+    const o = v.obj;
+    if (v.from) { // ไล่จากตำแหน่งเดิมเข้าหากระบะ
+      o.position.set(v.from.x + (tx - v.from.x) * u, v.from.y + (ty - v.from.y) * u + Math.sin(u * Math.PI) * 0.05, v.from.z + (tz - v.from.z) * u);
+      let dy = yaw - v.from.ry; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      o.rotation.y = v.from.ry + dy * u;
+      o.rotation.z = v.from.rz * (1 - u);
+    } else { o.position.set(tx, ty, tz); o.rotation.y = yaw; o.rotation.z = 0; }
+  }
+
+  function updateTow(ac, sdt) {
+    if (ac.towDone) return;
+    if (!ac.tow && !ac.noTow && ac.t > ac.towAt && (ac.state === 'rescue' || ac.state === 'leave' || ac.noAmb)) spawnTow(ac);
+    const w = ac.tow;
+    if (!w) return;
+    if (!w.leaving) {
+      if (!w.arrived) { advanceAmbulance(w, sdt); w.speedNow = w.arrived ? 0 : w.speed; return; }
+      if (ac.amb && !ac.amb.leaving && ac.state !== 'leave') return; // รอให้รถพยาบาลช่วยผู้บาดเจ็บก่อน
+      w.hold += sdt;
+      if (w.hold >= 1 && !w.winched) {
+        w.winched = true;
+        ac.victims.forEach(v => { const o = v.obj; v.from = { x: o.position.x, y: o.position.y, z: o.position.z, ry: o.rotation.y, rz: o.rotation.z }; const k = agents.car.indexOf(v); if (k >= 0) agents.car.splice(k, 1); v.towed = true; });
+      }
+      if (w.winched) {
+        const u = Math.min(1, (w.hold - 1) / 3.5);
+        ac.victims.forEach((v, k) => placeWreck(v, w, u * u * (3 - 2 * u), k));
+        if (u >= 1) {
+          root.remove(ac.props);
+          for (const v of ac.victims) { v.headMesh.material = M.haz; v.from = null; }
+          w.leaving = true; w.arrived = false; w.route = null; w.speedNow = 1.1;
+          events.push('cleared');
+        }
+      }
+    } else {
+      w.speedNow = 1.1;
+      const ok = advance(w, sdt);
+      place(w);
+      ac.victims.forEach((v, k) => placeWreck(v, w, 1, k));
+      if (!ok) { ac.victims.forEach(removeAgent); removeAgent(w); ac.tow = null; ac.towDone = true; }
+    }
+    if (w && !w.dead) {
+      if (!w.leaving) place(w);
+      const ph = Math.sin(performance.now() / 1000 * 10) > 0;
+      w.lr.visible = ph;
+    }
+  }
+
   function updateAccident(dt, sdt, nowT) {
     const ac = accident;
     if (!ac) return;
@@ -580,7 +794,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       p.position.set(o.x + Math.sin(u * 6 + p.userData.ph * 9) * 0.02, o.y + 0.1 + u * 0.28, o.z + Math.cos(u * 5 + p.userData.ph * 7) * 0.02);
       const sc = 0.04 + u * 0.1;
       p.scale.set(sc, sc, sc);
-      p.material.opacity = 0.42 * (1 - u) * smooth(0, 0.12, u);
+      p.material.opacity = (v.towed ? 0.15 : 0.42) * (1 - u) * smooth(0, 0.12, u);
     }
     if (ac.state === 'crash') {
       ac.ambTimer -= sdt;
@@ -590,31 +804,37 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
         const a = ac.amb;
         a.speedNow = a.arrived ? 0 : a.speed;
         if (a.arrived) { ac.state = 'rescue'; ac.hold = 0; events.push('arrived'); }
-      } else if (ac.noAmb && ac.t > 40) ac.state = 'rescue';
+      } else if (ac.noAmb && ac.t > 4) ac.state = 'rescue';
+      else if (ac.noAmb === 'x') ac.state = 'rescue';
     } else if (ac.state === 'rescue') {
       ac.hold += sdt;
-      if (ac.hold > 14) {
-        // เคลียร์รถที่ชนออกจากถนน
-        for (const v of ac.victims) { const arr = agents.car; const k = arr.indexOf(v); if (k >= 0) arr.splice(k, 1); removeAgent(v); }
-        root.remove(ac.props);
-        ac.state = 'leave'; ac.hold = 0;
-        events.push('cleared');
-      }
+      if (ac.hold > 14) { ac.state = 'leave'; ac.hold = 0; }
     } else if (ac.state === 'leave') {
       ac.hold += sdt;
       if (ac.amb) {
-        // รถพยาบาลกลับออกไปโดยเดินหน้าต่อ ให้ค่อยๆจางหายหลังออกไปสักพัก
+        // รถพยาบาลออกไป (เดินหน้าต่อจนพ้นแผนที่/สุดถนน)
         const a = ac.amb;
         if (a.arrived) { a.arrived = false; a.route = null; a.leaving = true; a.speedNow = 1.3; }
         if (a.leaving) {
           if (!advance(a, sdt)) { removeAgent(a); ac.amb = null; }
         }
       }
-      if (!ac.amb || ac.hold > 25) {
-        if (ac.amb) removeAgent(ac.amb);
-        accident = null;
-        accTimer = 70 + Math.random() * 110;
-      }
+    }
+    updateTow(ac, sdt);
+    // จบเหตุการณ์: รถพยาบาลออกไปแล้ว และรถยกเอารถเสียไปแล้ว (หรือไม่มีรถยก ก็เคลียร์ทิ้งหลังรอสักพัก)
+    const ambGone = !ac.amb || ac.amb.dead;
+    const noTowFallback = ac.noTow && ac.state === 'leave' && ac.hold > 20;
+    if (ambGone && (ac.towDone || noTowFallback) && (ac.state === 'leave' || ac.noAmb)) {
+      if (noTowFallback) { for (const v of ac.victims) { const k = agents.car.indexOf(v); if (k >= 0) agents.car.splice(k, 1); removeAgent(v); } root.remove(ac.props); events.push('cleared'); }
+      accident = null;
+      accTimer = 70 + Math.random() * 110;
+      return;
+    }
+    if (ac.state === 'leave' && ac.hold > 120) { // กันค้าง
+      for (const v of ac.victims) { const k = agents.car.indexOf(v); if (k >= 0) agents.car.splice(k, 1); removeAgent(v); }
+      if (ac.amb) removeAgent(ac.amb); if (ac.tow) removeAgent(ac.tow);
+      root.remove(ac.props); accident = null; accTimer = 70;
+      return;
     }
     // แสงสัญญาณรถพยาบาล
     const amb = ac.amb;
@@ -625,12 +845,84 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     }
   }
 
+  const NEAR2 = 24 * 24, HIDE2 = 62 * 62; // เกณฑ์ระยะ LOD ของคน/สัตว์เลี้ยง (หน่วยช่อง ยกกำลังสอง)
+
+
+  // ---------- ด่านตรวจสุ่ม (ตำรวจตั้งด่านชั่วคราวบนถนนตรง รถผ่านช้าลง) ----------
+  let checkpoint = null;
+  function startCheckpoint() {
+    if (checkpoint) return null;
+    const cands = [];
+    for (let z = 1; z < N - 1; z++) for (let x = 1; x < N - 1; x++) {
+      if (tileType(x, z) !== 'road') continue;
+      const h = tileType(x - 1, z) === 'road' && tileType(x + 1, z) === 'road' && tileType(x, z - 1) !== 'road' && tileType(x, z + 1) !== 'road';
+      const v = tileType(x, z - 1) === 'road' && tileType(x, z + 1) === 'road' && tileType(x - 1, z) !== 'road' && tileType(x + 1, z) !== 'road';
+      if (h || v) cands.push([x, z, h ? 'row' : 'col']);
+    }
+    if (!cands.length) return null;
+    const [x, z, axis] = pick(cands);
+    const g = new THREE.Group();
+    const px = x - N / 2 + 0.5, pz = z - N / 2 + 0.5, py = groundY(x, z) + 0.06;
+    g.position.set(px, py, pz);
+    g.rotation.y = axis === 'row' ? Math.PI / 2 : 0;       // แกน local z = ทิศถนน
+    for (const zz of [-0.36, 0.36]) for (let k = 0; k < 5; k++) {
+      const c = mesh(coneGeo, M.cone); c.scale.set(0.03, 0.05, 0.03); c.position.set(-0.4 + k * 0.2, 0.025, zz); g.add(c);
+    }
+    const pc = makeCar('sedan', M.car[10]);
+    pc.obj.position.set(0.42, 0, 0.05); pc.obj.rotation.y = 0.1; g.add(pc.obj);
+    const lr = mesh(boxGeo, M.strobeR, false), lb = mesh(boxGeo, M.strobeB, false);
+    lr.scale.set(0.05, 0.02, 0.03); lr.position.set(0.39, 0.15, 0.05); lb.scale.set(0.05, 0.02, 0.03); lb.position.set(0.45, 0.15, 0.05);
+    g.add(lr, lb);
+    for (let k = 0; k < 2; k++) {
+      const o = new THREE.Group(); o.position.set(-0.05 + k * 0.12, 0, 0.32 - k * 0.05);
+      o.add(mesh(boxGeo, M.white, false)); o.children[0].scale.set(0.035, 0.07, 0.025); o.children[0].position.y = 0.035;
+      const hd = mesh(sphGeo, M.white, false); hd.scale.setScalar(0.03); hd.position.y = 0.085; o.add(hd);
+      const vest = mesh(boxGeo, M.cone, false); vest.scale.set(0.038, 0.03, 0.028); vest.position.y = 0.045; o.add(vest);
+      g.add(o);
+    }
+    const sign = mesh(boxGeo, M.strobeB, false); sign.scale.set(0.12, 0.05, 0.01); sign.position.set(0, 0.16, 0.36); g.add(sign);
+    root.add(g);
+    checkpoint = { x, z, axis, g, lr, lb, t: 0, stopped: 0 };
+    return { x, z, axis };
+  }
+  function endCheckpoint() {
+    if (!checkpoint) return null;
+    root.remove(checkpoint.g);
+    const r = { x: checkpoint.x, z: checkpoint.z, axis: checkpoint.axis, stopped: checkpoint.stopped };
+    checkpoint = null;
+    return r;
+  }
+
+  // กลุ่มรถซิ่ง: kind = 'bike' | 'car' วิ่งเร็วเป็นขบวนชั่วคราว ฝ่าไฟแดง
+  function startRacePack(kind = 'bike') {
+    if (dirty) rebuildLists();
+    const list = lists.car;
+    if (!list.length || agents.car.some(a => a.racer)) return false;
+    for (let tries = 0; tries < 12; tries++) {
+      const [x, z] = list[(Math.random() * list.length) | 0];
+      const opts = DIRS.filter(([dx, dz]) => walkable('car', x + dx, z + dz));
+      if (!opts.length) continue;
+      const d = opts[(Math.random() * opts.length) | 0];
+      const n = kind === 'bike' ? 4 + Math.floor(Math.random() * 4) : 3 + Math.floor(Math.random() * 3);
+      const ttl = 28 + Math.random() * 14;
+      for (let i = 0; i < n; i++) {
+        const a = createAgent('car', x, z, d, kind === 'bike' ? 'rbike' : 'rcar');
+        a.s = Math.min(0.92, i * 0.17); a.ttl = ttl;
+        agents.car.push(a);
+      }
+      events.push({ e: 'pack', kind, x, z, axis: d[0] !== 0 ? 'row' : 'col', n });
+      return true;
+    }
+    return false;
+  }
+
   function update(dt, night, gameSpeed, env = {}) {
+    const cam = env.cam || null;
     const rain = env.rain || 0;
     const lamp = Math.max(night, env.dark || 0);
-    M.head.emissiveIntensity = lamp * 3;
-    M.tail.emissiveIntensity = 0.15 + lamp * 1.6;
+    M.lamp.color.setScalar(0.5 + lamp * 1.8);
     accRate = env.accidentRate ?? 1;
+    lastEnv = { rain, night, hospital: !!env.hospital, police: env.police || 0, drunk: env.drunk || 0 };
     const nowT = performance.now() / 1000;
 
     adjustTimer += dt;
@@ -650,6 +942,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     for (const a of cars) {
       if (a.crash) { a.speedNow = 0; continue; }
       a.speedNow = a.speed * wetSlow * signalFactor(a);
+      if (checkpoint && a.x === checkpoint.x && a.z === checkpoint.z) { a.speedNow *= 0.3; if (a.s > 0.4 && a.s < 0.5 && !a.chk) { a.chk = true; checkpoint.stopped++; } }
       for (const o of cars) {
         if (o === a || o.d[0] !== a.d[0] || o.d[1] !== a.d[1]) continue;
         let gap = null;
@@ -663,27 +956,41 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       const arr = agents[type];
       let removed = false;
       for (const a of arr) {
+        if (a.racer && !a.crash) { a.ttl -= dt; if (a.ttl <= 0) { removeAgent(a); removed = true; continue; } }
         if (a.kind !== 'car') a.speedNow = a.speed * signalFactor(a);
         if (!a.crash && sdt > 0 && !advance(a, sdt)) { removeAgent(a); removed = true; continue; }
-        animate(a);
         place(a);
+        if (a.full && cam) {
+          // ระยะจากกล้อง: ไกลมาก = ซ่อน, ไกล = โมเดลรวมชิ้นเดียว ไม่แกว่งแขนขา, ใกล้ = เคลื่อนไหวเต็ม
+          const dx = a.obj.position.x - cam.x, dy = a.obj.position.y - cam.y, dz = a.obj.position.z - cam.z;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 > HIDE2) { a.obj.visible = false; continue; }
+          a.obj.visible = true;
+          const near = d2 < NEAR2;
+          if (a.near !== near) { a.near = near; for (const p of a.lodParts) p.visible = near; a.full.visible = !near; }
+          if (near) animate(a);
+        } else animate(a);
       }
       if (removed) agents[type] = arr.filter(a => !a.dead);
     }
 
     updateAccident(dt, sdt, nowT);
+    if (checkpoint) { checkpoint.t += sdt; const ph = Math.sin(nowT * 11) > 0; checkpoint.lr.visible = ph; checkpoint.lb.visible = !ph; }
     if (accident?.amb && !accident.amb.dead) place(accident.amb);
   }
 
   return {
     // จำนวนเป้าหมายแต่ละชนิด (ผู้เรียกคำนวณจากประชากร/เวลา/อากาศ)
-    setTargets({ car = 0, person = 0, dog = 0, cat = 0 }) {
-      targets = { car, person, dog, cat };
+    setTargets({ car = 0, person = 0, dog = 0, cat = 0, bus = 0, taxi = 0, grab = 0 }) {
+      targets = { car, person, dog, cat, bus, taxi, grab };
     },
     counts() {
-      return { car: agents.car.length, person: agents.person.length, dog: agents.dog.length, cat: agents.cat.length };
+      return { car: agents.car.length, bike: agents.car.filter(a => a.isBike).length, bus: agents.car.filter(a => a.role === 'bus').length, taxi: agents.car.filter(a => a.role === 'taxi').length, grab: agents.car.filter(a => a.role === 'grab').length, person: agents.person.length, dog: agents.dog.length, cat: agents.cat.length };
     },
     invalidate() { dirty = true; },
+    startRacePack,
+    startCheckpoint, endCheckpoint, checkpointActive: () => !!checkpoint, checkpointAge: () => (checkpoint ? checkpoint.t : 0),
+    racers() { let n = 0, b = 0; for (const a of agents.car) if (a.racer && !a.crash) { n++; if (a.isBike) b++; } return { n, bike: b }; },
     update,
     // ทดสอบ/สั่งให้เกิดอุบัติเหตุทันที
     triggerAccident() { return startAccident(); },
@@ -695,7 +1002,8 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
         for (const a of agents[type]) removeAgent(a);
         agents[type] = [];
       }
-      if (accident) { root.remove(accident.props); if (accident.amb) removeAgent(accident.amb); accident = null; }
+      if (checkpoint) endCheckpoint();
+      if (accident) { root.remove(accident.props); if (accident.amb) removeAgent(accident.amb); if (accident.tow) removeAgent(accident.tow); for (const v of accident.victims) removeAgent(v); accident = null; }
       accTimer = 50;
     },
   };

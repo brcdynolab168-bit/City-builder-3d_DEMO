@@ -63,7 +63,7 @@ export function needs(inp) {
     ['safety', !has ? 100 : clamp(15 + 100 * inp.police * 2500 / p)],
     ['fire', !has ? 100 : clamp(15 + 100 * inp.fire * 3000 / p)],
     ['leisure', !has ? 100 : clamp(10 + 100 * inp.parks * 150 / p)],
-    ['traffic', !inp.roads ? 100 : clamp(100 - 100 * Math.max(0, inp.liveCars / (inp.roads * 0.45) - 0.45) / 0.55)],
+    ['traffic', !inp.roads ? 100 : clamp(100 - 100 * Math.max(0, inp.liveCars / (inp.roads * 0.45) - 0.45) / 0.55 + 6 * (inp.transit || 0))],
   ].map(([k, v]) => ({ k, v: Math.round(v) }));
   const mood = has ? Math.round(list.reduce((a, n) => a + n.v, 0) / list.length) : 100;
   const asks = [...list].sort((a, b) => a.v - b.v).filter(n => n.v < 80).slice(0, 3).map(n => n.k);

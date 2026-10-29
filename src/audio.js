@@ -219,6 +219,95 @@ export function createAudio() {
       }
     }
   }
+
+  // ---------- เสียงประจำสถานที่ (ได้ยินเมื่อซูมเข้าใกล้) ----------
+  const ev = (freq, dur, type, v, when = 0, slideTo = 0, p = 0) => {
+    const t = ctx.currentTime + when;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(v, t + Math.min(0.02, dur * 0.2));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); pan(g, p).connect(ambLP);
+    o.start(t); o.stop(t + dur + 0.05);
+  };
+  const nz = (dur, f0, f1, v, when = 0, Q = 1.2, p = 0) => {
+    const t = ctx.currentTime + when;
+    const src = ctx.createBufferSource(); src.buffer = noiseBuffer('white');
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = Q;
+    f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); pan(g, p).connect(ambLP);
+    src.start(t, rnd()); src.stop(t + dur + 0.05);
+  };
+  // สถานีตำรวจ: วิทยุสื่อสาร + ไซเรนวี้หวอสั้นๆ
+  function policeStation(v) {
+    const p = rnd() * 0.6 - 0.3;
+    if (rnd() < 0.55) {
+      nz(0.12, 2600, 1800, v * 0.8, 0, 0.8, p);              // เสียงกดปุ่มวิทยุ
+      ev(1180, 0.09, 'square', v * 0.25, 0.14, 0, p);        // บี๊บ
+      const n = 3 + Math.floor(rnd() * 4);
+      for (let i = 0; i < n; i++) nz(0.08 + rnd() * 0.16, 700 + rnd() * 600, 1400 + rnd() * 1500, v * 0.7, 0.3 + i * 0.26, 2.2, p);  // เสียงพูดผ่านวิทยุ
+      nz(0.1, 2400, 1500, v * 0.7, 0.4 + n * 0.26, 0.8, p);
+    } else {
+      for (let i = 0; i < 3; i++) { ev(650, 0.45, 'sawtooth', v * 0.22, i * 0.9, 1250, p); ev(1250, 0.45, 'sawtooth', v * 0.22, i * 0.9 + 0.45, 650, p); }  // วี้หวอ
+    }
+  }
+  // สถานีดับเพลิง: กริ่งเตือน + เครื่องยนต์รถดับเพลิง + แตร
+  function fireStation(v) {
+    const p = rnd() * 0.6 - 0.3;
+    if (rnd() < 0.6) {
+      for (let i = 0; i < 14; i++) { ev(1580, 0.07, 'square', v * 0.18, i * 0.11, 0, p); ev(2110, 0.07, 'square', v * 0.12, i * 0.11, 0, p); }   // กริ่งรัว
+    } else {
+      ev(58, 2.6, 'sawtooth', v * 0.5, 0, 46, p); ev(87, 2.6, 'sawtooth', v * 0.3, 0, 70, p);                // ติดเครื่อง
+      nz(2.4, 160, 110, v * 0.9, 0, 0.7, p);
+      ev(360, 0.9, 'sawtooth', v * 0.3, 2.2, 0, p); ev(450, 0.9, 'sawtooth', v * 0.24, 2.2, 0, p);            // แตรลมสองระดับ
+    }
+  }
+  // วัด: ตีระฆัง/ฆ้องทุ้มลอยยาว
+  function templeGong(v) {
+    const p = rnd() * 0.4 - 0.2;
+    for (const [fr, k, d] of [[96, 1, 4.5], [143, 0.6, 3.6], [212, 0.45, 3], [318, 0.28, 2.2], [451, 0.16, 1.6]]) ev(fr, d, 'sine', v * k, 0, fr * 0.985, p);
+    nz(0.25, 900, 300, v * 0.25, 0, 0.7, p);
+  }
+  // โบสถ์: ระฆังสลับจังหวะ
+  function churchBell(v) {
+    const p = rnd() * 0.4 - 0.2, n = 3 + Math.floor(rnd() * 4);
+    for (let i = 0; i < n; i++) for (const [fr, k] of [[523, 1], [1046, 0.5], [1568, 0.25], [2093, 0.12]]) ev(fr, 2.2, 'sine', v * k * 0.5, i * 1.3, fr * 0.998, p);
+  }
+  // ตลาด/ห้าง: เสียงพ่อค้าแม่ค้า เสียงต่อรอง เครื่องคิดเงิน
+  function marketChatter(v) {
+    const p = rnd() * 1.2 - 0.6;
+    const n = 5 + Math.floor(rnd() * 6);
+    for (let i = 0; i < n; i++) { const t0 = i * (0.18 + rnd() * 0.2); nz(0.12 + rnd() * 0.22, 380 + rnd() * 400, 700 + rnd() * 900, v * (0.5 + rnd() * 0.5), t0, 1.8, p); }
+    if (rnd() < 0.5) { ev(2400, 0.08, 'sine', v * 0.35, n * 0.3, 0, p); ev(3200, 0.2, 'sine', v * 0.3, n * 0.3 + 0.08, 0, p); }
+  }
+
+  // เสียงกลุ่มรถซิ่ง: เร่งเครื่องกระชากเป็นช่วงๆ
+  function revBurst(v, bike) {
+    const p = rnd() * 1.4 - 0.7;
+    const f = bike ? 150 + rnd() * 60 : 85 + rnd() * 30;
+    ev(f, 0.7, 'sawtooth', v * 0.5, 0, f * (bike ? 3.2 : 2.6), p);
+    ev(f * 2.02, 0.7, 'square', v * 0.2, 0.02, f * (bike ? 6 : 5), p);
+    nz(0.5, 700, 2500, v * 0.25, 0.05, 0.9, p);
+  }
+  // งานแข่งแดร็ก: เสียงเร่งออกตัว / พลุ / ผู้ชมเชียร์
+  function dragLaunch(v) { if (!ctx || vol.mute) return; revBurst(v, false); revBurst(v * 0.8, false); }
+  function firework(v) {
+    if (!ctx || vol.mute) return;
+    const p = rnd() * 1.4 - 0.7;
+    nz(0.35, 2500, 5000, v * 0.12, 0, 0.5, p);                       // เสียงพุ่งขึ้น
+    nz(0.5, 900, 120, v * 0.5, 0.55, 0.2, p);                        // ระเบิด
+    for (let i = 0; i < 6; i++) nz(0.05, 3000, 6000, v * 0.1, 0.65 + i * 0.07 + rnd() * 0.05, 0.9, p);  // เปรี๊ยะ
+  }
+  function cheer(v) {
+    if (!ctx || vol.mute) return;
+    const p = rnd() * 1.2 - 0.6;
+    for (let i = 0; i < 5; i++) nz(0.9 + rnd() * 0.8, 600 + rnd() * 500, 1400 + rnd() * 900, v * (0.18 + rnd() * 0.15), i * 0.12, 1.2, p);
+  }
+  const SPOT_FN = { police: [policeStation, 11, 24, 0.22], fire: [fireStation, 14, 30, 0.2], temple: [templeGong, 16, 34, 0.2], church: [churchBell, 22, 45, 0.18], market: [marketChatter, 5, 11, 0.14] };
   function thunder(prox = 0.5) {
     if (!ctx) return;
     const delay = 0.25 + rnd() * 1.6;
@@ -380,6 +469,24 @@ export function createAudio() {
         lastBellDay = env.day; bell(0.03 + 0.08 * near);
       }
       // ฟ้าร้อง
+      // กลุ่มรถซิ่ง
+      if (env.racers && env.racers.n > 0 && prox > 0.2) {
+        timers.rev = (timers.rev ?? 0) - step;
+        if (timers.rev <= 0) { timers.rev = 0.9 + rnd() * 1.3; revBurst(0.05 + 0.2 * near, env.racers.bike >= env.racers.n / 2); }
+      }
+      // เสียงประจำสถานที่: ต้องซูมใกล้ + กล้องอยู่ใกล้สถานที่นั้น (env.spots = {ชนิด: 0..1})
+      if (env.spots && prox > 0.22) {
+        for (const k in SPOT_FN) {
+          const near_k = env.spots[k] || 0;
+          const [fn, lo, hi, vol0] = SPOT_FN[k];
+          const key = 'spot_' + k;
+          timers[key] = (timers[key] ?? (2 + rnd() * 6)) - step;
+          if (timers[key] <= 0) {
+            timers[key] = lo + rnd() * (hi - lo);
+            if (near_k > 0.05 && !(k === 'church' && env.night > 0.6)) fn(vol0 * near_k * (0.35 + 0.65 * near));
+          }
+        }
+      }
       if (env.lightning) thunder(prox);
     }
 
@@ -397,7 +504,7 @@ export function createAudio() {
   });
 
   return {
-    init, update, sfx, thunder,
+    init, update, sfx, thunder, dragLaunch, firework, cheer,
     setVolume(k, v) { vol[k] = v; applyVolumes(); },
     setMute(m) { vol.mute = m; applyVolumes(); },
     get vol() { return vol; },
