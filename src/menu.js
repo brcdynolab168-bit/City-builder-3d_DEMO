@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------
 // หน้า Intro / เมนูหลัก: เล่นต่อ, เกมใหม่ (เลือกแผนที่), โหลดเกม (จัดการเซฟ), ตั้งค่า
 // ---------------------------------------------------------------
-import { t, setLang, getLang, LANGS, onLang } from './i18n.js';
+import { t, getLang, LANGS, onLang } from './i18n.js';
 import * as Saves from './saves.js';
 import { MAP_IDS, previewMap } from './terrain.js';
 
@@ -144,7 +144,7 @@ export function createMenu(h) {
     const act = el.dataset.act, id = el.dataset.id;
     h.sfx?.('click');
     switch (act) {
-      case 'lang': setLang(el.dataset.v); h.settings.set('lang', el.dataset.v); break;   // onLang จะวาดใหม่
+      case 'lang': h.settings.set('lang', el.dataset.v); break;   // settings.set เรียก setLang ให้แล้ว (onLang จะวาดใหม่)
       case 'resume': hide(); h.onResume(); break;
       case 'continue': hide(); h.onContinue(); break;
       case 'new': screen = 'new'; render(); break;
@@ -179,7 +179,7 @@ export function createMenu(h) {
       }
       case 'set': {
         h.settings.set(el.dataset.k, el.dataset.v);
-        if (el.dataset.k === 'lang') setLang(el.dataset.v); else render();
+        if (el.dataset.k !== 'lang') render();   // ภาษา: settings.set เรียก setLang แล้ว onLang วาดใหม่เอง
         break;
       }
     }

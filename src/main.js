@@ -10,7 +10,7 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { createAgents } from './agents.js';
 import { createWeather } from './weather.js';
 import { createWildlife } from './wildlife.js';
-import { VEH_RE, STATION_RE, addVehicleModel, addStationModel, pickStation, vehicleCount } from './vehicles.js';
+import { VEH_RE, STATION_RE, addVehicleModel, addStationModel, pickStation } from './vehicles.js';
 import { ICON, mountIcons } from './icons.js';
 import { createMinimap } from './minimap.js';
 import { createDrag } from './dragrace.js';
@@ -23,6 +23,8 @@ import { createMenu } from './menu.js';
 import { createBig, FOOT } from './big.js';
 import { createSky, periodKey } from './sky.js';
 import { createNews, demographics, needs as calcNeeds, PAGES, pickOf } from './civic.js';
+import { LEVELS, MAX_LEVEL, levelChecks, reachableLevel, levelFromPop } from './levels.js';
+import { GOODS, trade } from './trade.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ---------------------------------------------------------------
@@ -91,6 +93,7 @@ const VARIANTS = {
     { k: 'fishing', label: 'ร้านอุปกรณ์ตกปลา', cost: 240,  jobs: 5, power: 2, water: 1 },
     { k: 'pub',     label: 'สถานบันเทิง',      cost: 1300, jobs: 28, power: 12, water: 5, tax: 20, note: '2×1 ช่อง กลางคืนคึกคัก ระวังเมาแล้วขับ' },
     { k: 'tuner',   label: 'ร้านแต่งรถ',       cost: 850,  jobs: 12, power: 6, water: 2, tax: 9, note: '2×1 ช่อง รถซิ่งมารวมตัว' },
+    { k: 'ev',      label: 'สถานีชาร์จ EV',     cost: 450,  jobs: 3,  power: 14, water: 0, tax: 5, note: 'คนหันมาใช้รถยนต์ไฟฟ้า' },
   ],
   park: [
     { k: 'park',   label: 'สวนเล็ก',          cost: 50,   upkeep: 1 },
@@ -125,7 +128,10 @@ const VARIANTS = {
     { k: 'barn',    label: 'ฟาร์มปศุสัตว์',     cost: 650, jobs: 16, power: 3, water: 10, upkeep: 5 },
   ],
   power: [
-    { k: 'solar',   label: 'โซลาร์ฟาร์ม (เล็ก)',  cost: 220,  cap: 150, upkeep: 4 },
+    { k: 'solar',   label: 'โซลาร์ฟาร์ม (เล็ก)',  cost: 220,  cap: 150, upkeep: 4, green: 1 },
+    { k: 'wind',    label: 'กังหันลม',            cost: 650,  cap: 260, upkeep: 3, green: 1 },   // ผลิตตามแรงลม ที่สูงได้มากขึ้น
+    { k: 'bio',     label: 'โรงไฟฟ้าชีวมวล/ก๊าซชีวภาพ', cost: 800, cap: 320, upkeep: 7, green: 1 },   // ใช้เศษพืช/มูลสัตว์จากฟาร์ม
+    { k: 'hydro',   label: 'เขื่อนพลังน้ำ',        cost: 1600, cap: 800, upkeep: 10, green: 1 },  // ต้องติดแม่น้ำ/ทะเล
     { k: 'gas',     label: 'โรงไฟฟ้าก๊าซ (กลาง)', cost: 500,  cap: 450, upkeep: 14 },
     { k: 'thermal', label: 'โรงไฟฟ้าใหญ่',        cost: 1150, cap: 1200, upkeep: 30 },
   ],
@@ -133,6 +139,7 @@ const VARIANTS = {
     { k: 'pump',  label: 'สถานีสูบน้ำ (เล็ก)',  cost: 200, cap: 200, upkeep: 5 },
     { k: 'plant', label: 'โรงประปา (กลาง)',     cost: 400, cap: 500, upkeep: 11 },
     { k: 'big',   label: 'โรงประปาใหญ่',         cost: 850, cap: 1300, upkeep: 24 },
+    { k: 'well',  label: 'บ่อน้ำบาดาล',         cost: 180, cap: 150, upkeep: 2 },   // ต้องมีชั้นน้ำใต้ดิน ผลิตตามความอุดมของชั้นน้ำ
   ],
   service: [
     { k: 'school',   label: 'โรงเรียนรัฐ',   cost: 1100, jobs: 26, power: 6,  water: 6,  upkeep: 12, note: 'บ้านรอบๆโตเร็วขึ้น' },
@@ -153,9 +160,32 @@ const VARIANTS = {
     { k: 'church',   label: 'โบสถ์คริสต์',     cost: 900,  jobs: 6, power: 3, water: 3, upkeep: 6, note: '2×3 ช่อง' },
     { k: 'drag',     label: 'สนามแข่งรถคลอง 5', cost: 3200, jobs: 30, power: 14, water: 6, upkeep: 22, tax: 30, note: '3×7 ช่อง สนามแข่งถูกกฎหมาย ลดรถซิ่งบนถนน' },
     { k: 'mosque',   label: 'มัสยิด',          cost: 1200, jobs: 6, power: 3, water: 4, upkeep: 8, note: '3×3 ช่อง' },
+    { k: 'freight',  label: 'สถานีขนส่งสินค้า', cost: 2600, jobs: 45, power: 8, water: 4, upkeep: 18, note: '3×2 ช่อง ส่งออก/นำเข้าสินค้า' },
+  ],
+  // ถนน: ซอยแคบ / ถนน 2 เลน / ถนนสายหลัก 4 เลน (แซงได้) / ทางหลวง 4 เลน มีแบริเออร์กลาง (คนเดินไม่ได้ อาคารใช้เป็นทางเข้าไม่ได้)
+  road: [
+    { k: 'soi',     label: 'ซอย',               cost: 6,  upkeep: 0.3 },
+    { k: 'street',  label: 'ถนน 2 เลน',         cost: 10, upkeep: 0.5 },
+    { k: 'avenue',  label: 'ถนนสายหลัก 4 เลน',   cost: 28, upkeep: 1 },
+    { k: 'highway', label: 'ทางหลวง',           cost: 50, upkeep: 1.6 },
   ],
 };
-const DEFAULT_V = { res: 'zone', com: 'zone', ind: 'zone', power: 'gas', water: 'plant', service: 'school', park: 'park', farm: 'rice' };
+const DEFAULT_V = { res: 'zone', com: 'zone', ind: 'zone', power: 'gas', water: 'plant', service: 'school', park: 'park', farm: 'rice', road: 'street' };
+// ปลดล็อกตามระดับเมือง (levels.js): ระดับ 1 สร้างได้เฉพาะของพื้นฐาน
+const UNLOCK_LV = {
+  'road:avenue': 2, 'road:highway': 3,
+  'res:twin': 2, 'res:apt': 2, 'res:condo': 3, 'res:tower': 4, 'res:sky': 5,
+  'com:lotus': 2, 'com:market': 2, 'com:dealer': 2, 'com:gold': 2, 'com:parking': 2, 'com:ev': 2,
+  'com:bank': 3, 'com:mall': 3, 'com:pub': 3, 'com:tuner': 3,
+  'ind:shindengen': 3, 'ind:keihin': 3, 'ind:honda': 3, 'ind:denso': 4, 'ind:toyota': 4, 'ind:bmw': 5,
+  'farm:barn': 2, 'park:plaza': 2, 'park:sports': 2, 'park:garden': 3,
+  'power:wind': 2, 'power:bio': 2, 'power:thermal': 3, 'power:hydro': 3, 'water:big': 3,
+  'service:hospital': 2, 'service:police': 2, 'service:fire': 2, 'service:taxi': 2, 'service:grab': 2, 'service:pea': 2, 'service:pwa': 2,
+  'service:temple': 2, 'service:mosque': 2, 'service:church': 2,
+  'service:dohw': 3, 'service:school_p': 3, 'service:hospital_p': 3, 'service:bus': 3, 'service:freight': 3,
+  'service:bu': 4, 'service:metro': 4, 'service:drag': 4,
+};
+for (const [key, lv] of Object.entries(UNLOCK_LV)) { const [tool, k] = key.split(':'); const V = VARIANTS[tool].find(v => v.k === k); V.req = { ...V.req, lv }; }
 const currentVar = { ...DEFAULT_V };
 const variantOf = t => VARIANTS[t.t]?.find(v => v.k === (t.v || DEFAULT_V[t.t]));
 const fixedVariant = t => { const v = variantOf(t); return v && v.k !== 'zone' ? v : null; };
@@ -168,6 +198,7 @@ const indReqFail = k => reqFailOf(VARIANTS.ind.find(v => v.k === k));
 function reqFailOf(V) {   // คืน [คีย์ข้อความ, พารามิเตอร์] ถ้ายังไม่ผ่านเงื่อนไข
   if (!V || !V.req) return null;
   const R = V.req, c = ccache, pop = audioStats.pop;
+  if (R.lv && cityLevel() < R.lv) return ['toast.lv', { n: R.lv, name: t('lv.' + LEVELS[R.lv - 1].key) }];
   if (R.pop && pop < R.pop) return ['toast.ind.pop', { n: R.pop }];
   if (R.edu && c.school + c.school_p + c.bu < R.edu) return ['toast.ind.edu', {}];
   if (R.bu && c.bu < R.bu) return ['toast.ind.bu', {}];
@@ -181,6 +212,7 @@ function reqFailOf(V) {   // คืน [คีย์ข้อความ, พ�
 }
 function indReqText(V) {
   const R = V.req || {}, a = [];
+  if (R.lv && cityLevel() < R.lv) a.push(t('req.lv', { n: R.lv }));
   if (R.pop) a.push(t('req.pop', { n: R.pop }));
   if (R.edu) a.push(t('req.edu'));
   if (R.bu) a.push(t('req.bu'));
@@ -258,6 +290,15 @@ function nearWater(x, z, r) {
   for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (isWaterTile(x + dx, z + dz)) return true;
   return false;
 }
+// ชั้นน้ำบาดาล (0..1 ความอุดม): คงที่ทุกครั้งที่เปิดแผนที่ ใกล้แม่น้ำ/ทะเลมีมากขึ้น บนเขาสูงไม่มี
+const aquifer = new Float32Array(N * N);
+for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
+  const i = z * N + x;
+  if (tileIsWater[i] || tileMaxH[i] > 4) continue;
+  const v = fbm((x - N / 2) * 0.11 + 31.7, (z - N / 2) * 0.11 - 12.3, 3) + (nearWater(x, z, 4) ? 0.08 : 0);
+  aquifer[i] = Math.min(1, Math.max(0, (v - 0.52) / 0.18));
+}
+const aquiferAt = (x, z) => (inBounds(x, z) ? aquifer[idx(x, z)] : 0);
 
 // ---------------------------------------------------------------
 // สถานะเกม
@@ -273,13 +314,65 @@ const idx = (x, z) => z * N + x;
 const inBounds = (x, z) => x >= 0 && z >= 0 && x < N && z < N;
 const tileAt = (x, z) => (inBounds(x, z) ? state.tiles[idx(x, z)] : null);
 const isType = (x, z, t) => tileAt(x, z)?.t === t;
+const cityLevel = () => state.level || 1;
 
+// ---------- ประเภทถนน / เขตจำกัดความเร็ว ----------
+const ROAD_W = { soi: 0.56, street: 0.74, avenue: 0.88, highway: 0.96 };   // ความกว้างผิวแอสฟัลต์ (หน่วยช่อง)
+const ROAD_UPKEEP = Object.fromEntries(VARIANTS.road.map(v => [v.k, v.upkeep]));
+const roadKind = (x, z) => { const tl = tileAt(x, z); return tl?.t === 'road' ? (ROAD_W[tl.v] ? tl.v : 'street') : null; };   // เซฟเก่าไม่มี v = ถนน 2 เลน
+const isAccessRoad = (x, z) => { const k = roadKind(x, z); return !!k && k !== 'highway'; };              // ทางหลวงไม่ใช่ทางเข้าอาคาร
+// ความเร็วสูงสุด (กม./ชม.) ตามประเภทถนนและสิ่งที่อยู่รอบๆ (รัศมี 2 ช่อง)
+//   [เขตโรงเรียน/โรงพยาบาล, ย่านที่อยู่อาศัย, ย่านพาณิชย์, ย่านอุตสาหกรรม, นอกเมือง]
+const LIMITS = {
+  soi:     [30, 30, 30, 30, 30],
+  street:  [30, 40, 50, 60, 60],
+  avenue:  [40, 60, 60, 70, 80],
+  highway: [80, 90, 90, 100, 110],
+};
+const SCHOOL_ZONE = new Set(['school', 'school_p', 'hospital', 'hospital_p', 'bu']);
+const speedLimits = new Uint8Array(N * N);
+let limitsDirty = true;
+function calcLimit(x, z) {
+  const k = roadKind(x, z);
+  if (!k) return 0;
+  let res = 0, com = 0, ind = 0, school = false;
+  for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+    let tl = tileAt(x + dx, z + dz);
+    if (tl?.t === 'part') tl = state.tiles[tl.m];
+    if (!tl) continue;
+    if (tl.t === 'service' && SCHOOL_ZONE.has(tl.v)) school = true;
+    else if (tl.t === 'res' || tl.t === 'park') res++;
+    else if (tl.t === 'com' || tl.t === 'service') com++;
+    else if (tl.t === 'ind' || tl.t === 'power' || tl.t === 'water') ind++;
+  }
+  const L = LIMITS[k];
+  if (school) return L[0];
+  if (res + com + ind < 3) return L[4];
+  return res >= com && res >= ind ? L[1] : com >= ind ? L[2] : L[3];
+}
+// คำนวณเขตความเร็วทั้งแผนที่ใหม่ คืนดัชนีช่องที่ค่าเปลี่ยน
+function recalcLimits() {
+  limitsDirty = false;
+  const changed = [];
+  for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
+    const i = z * N + x, v = calcLimit(x, z);
+    if (speedLimits[i] !== v) { speedLimits[i] = v; changed.push(i); }
+  }
+  return changed;
+}
+const speedLimitAt = (x, z) => { if (!inBounds(x, z)) return 0; if (limitsDirty) recalcLimits(); return speedLimits[idx(x, z)]; };
+
+let saveFailShown = false;
 function save() {
   if (!activeId) return;
   state.tod = tod;
-  Saves.saveData(activeId, state, { day: state.day, pop: computeStats().pop, money: Math.floor(state.money) });
+  const ok = Saves.saveData(activeId, state, { day: state.day, pop: computeStats().pop, money: Math.floor(state.money) });
+  // localStorage เต็ม/ถูกบล็อก: เตือนครั้งเดียวจนกว่าจะเซฟได้อีก
+  if (!ok && !saveFailShown) { saveFailShown = true; toast(t('toast.saveFail')); }
+  else if (ok) saveFailShown = false;
 }
 function load() {
+  limitsDirty = true;
   const data = activeId ? Saves.loadData(activeId) : null;
   if (data && Array.isArray(data.tiles) && data.tiles.length === N * N) {
     // ถ้ามีของที่ตกอยู่บนน้ำ (จากเซฟเก่า) ให้ลบทิ้ง ยกเว้นถนน (กลายเป็นสะพาน)
@@ -297,7 +390,7 @@ function load() {
 // เมืองตั้งต้น: ถนนตาราง ไฟจราจรตามทางแยก บ้าน ร้านค้า โรงงาน โรงไฟฟ้า โรงประปา สวน
 // ให้เปิดเกมมาแล้วมีรถ คน สัตว์ เดินจริง ไม่ใช่แผนที่ว่าง
 function seedStarterCity() {
-  state = newState();
+  state = newState(); limitsDirty = true;
   const C = N / 2;                                   // พิกัดโลก 0 = ช่อง C
   const T = (wx, wz) => ({ x: wx + C, z: wz + C });
   const flat = (x, z) => inBounds(x, z) && !tileIsWater[idx(x, z)] && tileMaxH[idx(x, z)] - tileMinH[idx(x, z)] < 0.45;
@@ -523,6 +616,8 @@ const agents = createAgents({
   tileType: (x, z) => { const tl = tileAt(x, z); if (tl?.t === 'part') return state.tiles[tl.m]?.t === 'park' ? 'park' : 'part'; return tl?.t ?? null; },
   groundY: tileY,
   signal: signalState,
+  roadKind,
+  speedLimit: speedLimitAt,
 });
 
 // ---------------------------------------------------------------
@@ -576,6 +671,9 @@ const M = {
   walk: std(0xb9b6ae, { roughness: 0.95 }),
   road: new THREE.MeshStandardMaterial({ map: asphaltTex, roughness: 0.95 }),
   line: std(0xeadd8c, { roughness: 0.6 }),
+  laneLine: std(0xf2f2ee, { roughness: 0.6 }),   // เส้นแบ่งช่องจราจรสีขาว (ถนน 4 เลน)
+  shoulder: std(0x8e8f8c, { roughness: 0.95 }),   // ไหล่ทางหลวง
+  barrier: std(0xc9c6bd, { roughness: 0.8 }),    // แบริเออร์กลางทางหลวง
   zone: { res: zoneMat(0x4caf50), com: zoneMat(0x2196f3), ind: zoneMat(0xffc107) },
   roofFlat: new THREE.MeshStandardMaterial({ map: gravelTex, roughness: 0.95 }),
   roofTile: std(0x9c4a3a, { roughness: 0.8 }),
@@ -1139,6 +1237,7 @@ function shrub(bg, x, z, s, i = 0) {
 }
 // ต้นไม้แกว่งตามลม: เก็บ pivot ไว้ต่อช่อง (ล้างทิ้งเมื่อช่องถูกสร้างใหม่)
 const swayTiles = new Map();
+const spinTiles = new Map();   // ช่อง -> ชิ้นที่หมุนได้ (ใบพัดกังหันลม)
 let swayList = null;
 const cityTrunkGeo = trunkGeo(0.66, 0.075, 0.045);   // ลำต้นสูงพอจะแทงเข้าไปในพุ่มใบ (เดิมสั้นเกินไป พุ่มดูลอยอยู่เหนือต้น)
 const cityBroad = broadleafCrown(11), cityConifer = coniferCrown(4);
@@ -1160,10 +1259,12 @@ function addTree(parent, px, pz, s, r) {
 //   src/models/com/lv1/*.glb   ร้านค้า/ตึก    src/models/ind/lv1/*.glb  โรงงาน
 //   src/models/power/*.glb     โรงไฟฟ้า        src/models/park/*.glb     ต้นไม้
 // ถ้ามีไฟล์ จะใช้แทนอาคารที่สร้างจากโค้ด
+// โหลดแบบ lazy: แต่ละหมวดโหลดครั้งแรกตอนเมืองต้องใช้ (เช่น รถตำรวจโหลดเมื่อมีสถานีตำรวจ) ระหว่างรอใช้โมเดลจากโค้ด
 // ---------------------------------------------------------------
 const MODEL_YAW_OFFSET = 0; // ถ้าอาคารหันหลังให้ถนน ลองเปลี่ยนเป็น Math.PI (หรือ ±Math.PI / 2)
 const MODEL_FOOT = { res: 0.8, com: 0.85, ind: 0.88, power: 0.9, park: 0.5 };
-const modelUrls = import.meta.glob('./models/**/*.glb', { query: '?url', import: 'default', eager: true });
+// เฉพาะโฟลเดอร์ที่มีโค้ดใช้งาน (people/trees/rocks ยังไม่มีระบบใช้ จึงไม่ใส่ในเว็บ)
+const modelUrls = import.meta.glob('./models/{res,com,ind,power,park,cars,bikes,buses,boats,dogs,cats,police,taxis,cops,sports,stations}/**/*.glb', { query: '?url', import: 'default', eager: true });
 const MODEL_RE = /^\.\/models\/(res|com|ind|power|park)\/(?:lv([1-3])\/)?[^/]+\.glb$/i;
 const MODELS = {
   res: { 1: [], 2: [], 3: [], any: [] },
@@ -1188,37 +1289,41 @@ function prepareModel(root, foot) {
   return wrap;
 }
 
-async function loadModels() {
-  const loader = new GLTFLoader();
-  const jobs = [];
-  let ok = 0;
-  for (const [path, url] of Object.entries(modelUrls)) {
-    const sm = path.match(STATION_RE);
-    if (sm) {
-      jobs.push(loader.loadAsync(url).then(gltf => { addStationModel(sm[1].toLowerCase(), gltf.scene); ok++; })
-        .catch(err => console.warn('โหลดโมเดลไม่สำเร็จ:', path, err)));
-      continue;
-    }
-    const vm = path.match(VEH_RE);
-    if (vm) {
-      jobs.push(loader.loadAsync(url).then(gltf => { addVehicleModel(vm[1].toLowerCase(), gltf.scene); ok++; })
-        .catch(err => console.warn('โหลดโมเดลไม่สำเร็จ:', path, err)));
-      continue;
-    }
-    const m = path.match(MODEL_RE);
-    if (!m) continue;
-    const type = m[1].toLowerCase();
-    const lv = m[2] ? +m[2] : 'any';
-    jobs.push(
-      loader.loadAsync(url).then(gltf => {
-        MODELS[type][lv].push({ name: path, obj: prepareModel(gltf.scene, MODEL_FOOT[type]) });
-        ok++;
-      }).catch(err => console.warn('โหลดโมเดลไม่สำเร็จ:', path, err))
-    );
-  }
-  await Promise.all(jobs);
-  for (const type in MODELS) for (const lv in MODELS[type]) MODELS[type][lv].sort((a, b) => a.name.localeCompare(b.name));
-  return ok;
+// กลุ่มโหลด: โฟลเดอร์แรกใต้ models/ ยกเว้นอาคารสถานีแยกเป็น station-police / station-fire
+const modelGroup = path => { const sm = path.match(STATION_RE); return sm ? 'station-' + sm[1].toLowerCase() : path.split('/')[2].toLowerCase(); };
+const gltfLoader = new GLTFLoader();
+const groupJobs = {};
+// โหลดกลุ่มครั้งเดียว คืน Promise<จำนวนไฟล์ที่โหลดสำเร็จ>; onLoaded ถูกเรียกเมื่อได้โมเดลอย่างน้อย 1 ไฟล์
+function loadModelGroup(group, onLoaded) {
+  if (groupJobs[group]) return groupJobs[group];
+  const entries = Object.entries(modelUrls).filter(([path]) => modelGroup(path) === group);
+  groupJobs[group] = Promise.all(entries.map(([path, url]) => gltfLoader.loadAsync(url).then(gltf => {
+    const sm = path.match(STATION_RE), vm = path.match(VEH_RE), m = path.match(MODEL_RE);
+    if (sm) addStationModel(sm[1].toLowerCase(), gltf.scene);
+    else if (vm) addVehicleModel(vm[1].toLowerCase(), gltf.scene);
+    else if (m) MODELS[m[1].toLowerCase()][m[2] ? +m[2] : 'any'].push({ name: path, obj: prepareModel(gltf.scene, MODEL_FOOT[m[1].toLowerCase()]) });
+    else return 0;
+    return 1;
+  }).catch(err => { console.warn('โหลดโมเดลไม่สำเร็จ:', path, err); return 0; }))).then(r => {
+    for (const type in MODELS) for (const lv in MODELS[type]) MODELS[type][lv].sort((a, b) => a.name.localeCompare(b.name));
+    const n = r.reduce((s, v) => s + v, 0);
+    if (n) { console.info(`โหลดโมเดล ${group} แล้ว ${n} ไฟล์`); onLoaded?.(n); }
+    return n;
+  });
+  return groupJobs[group];
+}
+// สร้างช่องอาคารบริการชนิดนั้นใหม่ (หลังโหลดโมเดลสถานีเสร็จ)
+function rebuildService(v) {
+  state.tiles.forEach((tl, i) => { if (tl && tl.t === 'service' && tl.v === v) buildTile(i % N, (i / N) | 0); });
+}
+const hasService = v => state.tiles.some(tl => tl && tl.t === 'service' && tl.v === v);   // รวมที่กำลังก่อสร้าง
+// เรียกเป็นระยะ: โหลดโมเดลหมวดที่เมืองเพิ่งเริ่มต้องใช้
+function ensureModels() {
+  if (ccache.taxi) loadModelGroup('taxis');
+  if (ccache.police) { loadModelGroup('police'); loadModelGroup('cops'); }   // ด่านตรวจ / รถสายตรวจ
+  if (ccache.tuner || ccache.drag || ccache.pub || audioStats.pop >= 300) loadModelGroup('sports');
+  if (hasService('police')) loadModelGroup('station-police', () => rebuildService('police'));
+  if (hasService('fire')) loadModelGroup('station-fire', () => rebuildService('fire'));
 }
 
 function getModel(type, lv, r) {
@@ -1856,21 +1961,24 @@ function addSignalHeads(g, x, z, details) {
 
 // ทางม้าลายพาดผ่านถนนทุกด้านของทางแยก
 function addCrosswalks(g, x, z) {
+  const k = roadKind(x, z);
   for (const [dx, dz] of DIRS4) {
-    if (!isType(x + dx, z + dz, 'road')) continue;
+    const nk = roadKind(x + dx, z + dz);
+    if (!nk || k === 'highway' || nk === 'highway') continue;   // ทางหลวงไม่มีคนข้าม
     const grp = new THREE.Group();
     if (dx !== 0) grp.rotation.y = Math.PI / 2;
-    flatMesh(grp, zebraMat, 0, ROAD_TOP + 0.004, (dx !== 0 ? dx : dz) * 0.435, 0.7, 0.12);
+    flatMesh(grp, zebraMat, 0, ROAD_TOP + 0.004, (dx !== 0 ? dx : dz) * 0.435, Math.min(ROAD_W[k], ROAD_W[nk]) - 0.04, 0.12);
     g.add(grp);
   }
 }
 
-// เส้นหยุดบนช่องถนนที่ติดทางแยก (เลนซ้ายของรถที่กำลังวิ่งเข้าทางแยก)
+// เส้นหยุดบนช่องถนนที่ติดทางแยก (ฝั่งซ้ายของรถที่กำลังวิ่งเข้าทางแยก กว้างเต็มทุกเลนของทิศนั้น)
 function addStopLines(g, x, z) {
+  const hw = ROAD_W[roadKind(x, z)] / 2, c = hw / 2 + 0.01, w = hw - 0.03;
   for (const [dx, dz] of DIRS4) {
     if (!isJunction(x + dx, z + dz)) continue;
-    if (dx !== 0) put(g, boxGeo, M.stopLine, dx * 0.465, ROAD_TOP + 0.003, -dx * 0.2, 0.03, 0.004, 0.34);
-    else put(g, boxGeo, M.stopLine, dz * 0.2, ROAD_TOP + 0.003, dz * 0.465, 0.34, 0.004, 0.03);
+    if (dx !== 0) put(g, boxGeo, M.stopLine, dx * 0.465, ROAD_TOP + 0.003, -dx * c, 0.03, 0.004, w);
+    else put(g, boxGeo, M.stopLine, dz * c, ROAD_TOP + 0.003, dz * 0.465, w, 0.004, 0.03);
   }
 }
 
@@ -1892,17 +2000,26 @@ function addRoadSigns(g, x, z, r, r2) {
   const h = isType(x + 1, z, 'road') && isType(x - 1, z, 'road');
   const v = isType(x, z + 1, 'road') && isType(x, z - 1, 'road');
   if (!h && !v) return; // ถนนเลี้ยว ไม่ตั้งป้าย
+  const kind = roadKind(x, z), off = Math.max(0.455, ROAD_W[kind] / 2 + 0.015), lim = speedLimitAt(x, z);
   // ติดทางแยก → ป้ายคนข้ามถนน สำหรับรถที่วิ่งเข้าหาทางแยก
   for (const [dx, dz] of DIRS4) {
-    if (!isJunction(x + dx, z + dz)) continue;
-    if (r < 0.7) addSignPost(g, trafficSign.ped(), dz * 0.455 - dx * 0.2, -dx * 0.455 - dz * 0.2, -dx, -dz);
+    if (!isJunction(x + dx, z + dz) || kind === 'highway') continue;
+    if (r < 0.7) addSignPost(g, trafficSign.ped(), dz * off - dx * 0.2, -dx * off - dz * 0.2, -dx, -dz);
   }
-  // กลางช่วงถนน: จำกัดความเร็ว / ที่จอดรถ
-  if (r2 < 0.14) {
+  // ป้ายจำกัดความเร็วตรงจุดที่เขตความเร็วเปลี่ยน: หันหารถที่วิ่ง (dx,dz) เข้ามาจากช่องก่อนหน้า
+  let posted = false;
+  for (const [dx, dz] of DIRS4) {
+    const prev = speedLimitAt(x - dx, z - dz);
+    if (!prev || prev === lim) continue;
+    addSignPost(g, trafficSign.speed(lim), dz * off, -dx * off, -dx, -dz);
+    posted = true;
+  }
+  // กลางช่วงถนน: ป้ายย้ำความเร็ว / ที่จอดรถ (ทางหลวงไม่มีที่จอด)
+  if (!posted && r2 < 0.14) {
     const dir = (r < 0.5 ? 1 : -1) * 1;
     const [dx, dz] = h ? [dir, 0] : [0, dir];
-    const mat = r2 < 0.09 ? trafficSign.speed(r < 0.5 ? 40 : 60) : trafficSign.park();
-    addSignPost(g, mat, dz * 0.455, -dx * 0.455, -dx, -dz);
+    const mat = r2 < 0.09 || kind === 'highway' ? trafficSign.speed(lim) : trafficSign.park();
+    addSignPost(g, mat, dz * off, -dx * off, -dx, -dz);
   }
 }
 
@@ -1952,7 +2069,7 @@ function mergeStatic(g, skip) {
   for (const o of dead) o.parent.remove(o);
 }
 function disposeTile(g) {
-  g.traverse(o => { if (o.userData.merged) o.geometry.dispose(); });
+  g.traverse(o => { if (o.userData.merged) o.geometry.dispose(); if (o.userData.ownMat) o.material.dispose(); });   // ownMat = วัสดุเฉพาะชิ้น (ตาข่ายนั่งร้าน)
 }
 
 
@@ -2024,7 +2141,7 @@ function setupSite(g, baseCount, t, i) {
   }
   const netMat = new THREE.MeshBasicMaterial({ color: 0x3f9d5a, transparent: true, opacity: 0.36, side: THREE.DoubleSide, depthWrite: false });
   const nets = [[0, sz, 0, sx * 2], [0, -sz, 0, sx * 2], [sx, 0, Math.PI / 2, sz * 2], [-sx, 0, Math.PI / 2, sz * 2]].map(([a, b, ry, w]) => {
-    const m = new THREE.Mesh(siteNetGeo, netMat); m.position.set(a, 0.5, b); m.rotation.y = ry; m.scale.set(w, 1, 1); sc.add(m); return m;
+    const m = new THREE.Mesh(siteNetGeo, netMat); m.userData.ownMat = true; m.position.set(a, 0.5, b); m.rotation.y = ry; m.scale.set(w, 1, 1); sc.add(m); return m;
   });
   // เครนหอคอย
   const crane = new THREE.Group(); crane.position.set(cx - hx * 0.98 - 0.02, 0, cz - hz * 0.98 - 0.02); site.add(crane);
@@ -2131,6 +2248,7 @@ function buildTile(x, z) {
   const i = idx(x, z);
   if (meshes[i]) { disposeTile(meshes[i]); tileGroup.remove(meshes[i]); meshes[i] = null; }
   swayTiles.delete(i);
+  spinTiles.delete(i);
   constructing.delete(i);
   const t = state.tiles[i];
   if (!t) return;
@@ -2167,23 +2285,38 @@ function buildTile(x, z) {
   } else if (t.fw && FOOT[t.t + ':' + t.v]) {
     buildBigTile(g, x, z, t, ty);
   } else if (t.t === 'road') {
-    // ทางเท้า + ผิวถนนแอสฟัลต์ + เส้นแบ่งเลน
-    put(g, boxGeo, M.walk, 0, 0.02, 0, 0.98, 0.04, 0.98);
-    put(g, boxGeo, M.road, 0, 0.05, 0, 0.74, 0.02, 0.74);
+    // ทางเท้า (ทางหลวง = ไหล่ทาง) + ผิวแอสฟัลต์กว้างตามประเภทถนน + เส้นจราจร
+    const kind = roadKind(x, z), W = ROAD_W[kind], hw = W / 2, junc = isJunction(x, z);
+    put(g, boxGeo, kind === 'highway' ? M.shoulder : M.walk, 0, 0.02, 0, 0.98, 0.04, 0.98);
+    put(g, boxGeo, M.road, 0, 0.05, 0, W, 0.02, W);
     const rd = (dx, dz) => isType(x + dx, z + dz, 'road');
+    // เส้นบนผิวถนนตามแนวแกน (hx = แนว x) ช่วง a0..a1 จากกลางช่อง ห่างจากกลางถนน lat
+    const mark = (mat, hx, a0, a1, lat, w) => {
+      const c = (a0 + a1) / 2, l = Math.abs(a1 - a0);
+      if (hx) put(g, boxGeo, mat, c, 0.0615, lat, l, 0.003, w); else put(g, boxGeo, mat, lat, 0.0615, c, w, 0.003, l);
+    };
+    const laneLat = kind === 'highway' ? 0.245 : 0.22;
     const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
     for (const [dx, dz] of dirs) {
       if (!rd(dx, dz)) continue;
-      if (dx !== 0) {
-        put(g, boxGeo, M.road, dx * 0.435, 0.05, 0, 0.13, 0.02, 0.74);
-        put(g, boxGeo, M.line, dx * 0.38, 0.0615, 0, 0.18, 0.003, 0.025);
-      } else {
-        put(g, boxGeo, M.road, 0, 0.05, dz * 0.435, 0.74, 0.02, 0.13);
-        put(g, boxGeo, M.line, 0, 0.0615, dz * 0.38, 0.025, 0.003, 0.18);
+      const hx = dx !== 0, sg = dx || dz;
+      const len = 0.5 - hw, nw = Math.min(W, ROAD_W[roadKind(x + dx, z + dz)]);   // ต่อกับถนนข้างเคียงด้วยความกว้างที่แคบกว่า
+      if (len > 0.004) { if (hx) put(g, boxGeo, M.road, dx * (hw + len / 2), 0.05, 0, len, 0.02, nw); else put(g, boxGeo, M.road, 0, 0.05, dz * (hw + len / 2), nw, 0.02, len); }
+      if (kind === 'street') mark(M.line, hx, sg * 0.29, sg * 0.47, 0, 0.025);                   // เส้นประเหลืองกลางถนน
+      else if (kind === 'avenue' && !junc) {
+        mark(M.line, hx, 0, sg * 0.5, -0.014, 0.01); mark(M.line, hx, 0, sg * 0.5, 0.014, 0.01);   // เส้นทึบคู่ห้ามแซงข้ามฝั่ง
+        mark(M.laneLine, hx, sg * 0.29, sg * 0.47, laneLat, 0.016); mark(M.laneLine, hx, sg * 0.29, sg * 0.47, -laneLat, 0.016);
+      } else if (kind === 'highway' && !junc) {
+        put(g, boxGeo, M.barrier, hx ? sg * 0.25 : 0, 0.082, hx ? 0 : sg * 0.25, hx ? 0.5 : 0.03, 0.045, hx ? 0.03 : 0.5);   // แบริเออร์กลาง
+        mark(M.laneLine, hx, sg * 0.29, sg * 0.47, laneLat, 0.016); mark(M.laneLine, hx, sg * 0.29, sg * 0.47, -laneLat, 0.016);
+        mark(M.laneLine, hx, 0, sg * 0.5, 0.455, 0.012); mark(M.laneLine, hx, 0, sg * 0.5, -0.455, 0.012);                    // เส้นขอบทาง
       }
     }
-    if (rd(1, 0) && rd(-1, 0) && !rd(0, 1) && !rd(0, -1)) put(g, boxGeo, M.line, 0, 0.0615, 0, 0.18, 0.003, 0.025);
-    if (rd(0, 1) && rd(0, -1) && !rd(1, 0) && !rd(-1, 0)) put(g, boxGeo, M.line, 0, 0.0615, 0, 0.025, 0.003, 0.18);
+    const strX = rd(1, 0) && rd(-1, 0) && !rd(0, 1) && !rd(0, -1), strZ = rd(0, 1) && rd(0, -1) && !rd(1, 0) && !rd(-1, 0);
+    if (strX || strZ) {
+      if (kind === 'street') mark(M.line, strX, -0.09, 0.09, 0, 0.025);
+      else if (kind === 'avenue' || kind === 'highway') { mark(M.laneLine, strX, -0.09, 0.09, laneLat, 0.016); mark(M.laneLine, strX, -0.09, 0.09, -laneLat, 0.016); }
+    }
     // เสาไฟถนน (ระดับกลางขึ้นไป)
     const details = QUALITY[qualityKey].details;
     if (details >= 1 && r < (details >= 2 ? 0.7 : 0.4)) {
@@ -2271,7 +2404,10 @@ function buildTile(x, z) {
   if (t.cs && t.t !== 'road') {
     try { setupSite(g, baseCount, t, i); } catch (err) { console.warn('site ข้าม:', err); delete t.cs; }
   } else {
-    try { mergeStatic(g, new Set(swayList.map(s => s.obj))); } catch (err) { console.warn('merge ข้าม:', err); }
+    const spins = [];
+    g.traverse(o => { if (o.userData.spin) spins.push(o); });
+    if (spins.length) spinTiles.set(i, spins);
+    try { mergeStatic(g, new Set([...swayList.map(s => s.obj), ...spins])); } catch (err) { console.warn('merge ข้าม:', err); }
   }
   meshes[i] = g;
   if (incidents.length) applyBlackoutTile(i);   // สร้างช่องใหม่กลางย่านไฟดับ ให้ดับด้วย
@@ -2333,8 +2469,8 @@ function rectFor(x, z, W, D, rot) {
 function edgeRoads(R, side) { // side 0:+z 1:+x 2:-z 3:-x (ด้านหน้า/ด้านอื่น)
   let n = 0;
   const { x0, z0, fw, fd } = R;
-  if (side === 0 || side === 2) for (let i = 0; i < fw; i++) { if (isType(x0 + i, side === 0 ? z0 + fd : z0 - 1, 'road')) n++; }
-  else for (let j = 0; j < fd; j++) { if (isType(side === 1 ? x0 + fw : x0 - 1, z0 + j, 'road')) n++; }
+  if (side === 0 || side === 2) for (let i = 0; i < fw; i++) { if (isAccessRoad(x0 + i, side === 0 ? z0 + fd : z0 - 1)) n++; }
+  else for (let j = 0; j < fd; j++) { if (isAccessRoad(side === 1 ? x0 + fw : x0 - 1, z0 + j)) n++; }
   return n;
 }
 const perimRoads = R => edgeRoads(R, 0) + edgeRoads(R, 1) + edgeRoads(R, 2) + edgeRoads(R, 3);
@@ -2363,7 +2499,15 @@ function evalBig(tool, x, z) {
   if (!reason && hi - lo > 1.3) reason = 'toast.slope';
   if (!reason && ['com', 'service', 'ind'].includes(tool) && !perimRoads(R)) reason = 'toast.road';
   let params;
-  if (!reason && tool === 'ind') { const rq = indReqFail(currentVar.ind); if (rq) { reason = rq[0]; params = rq[1]; } }
+  if (!reason) { const rq = reqFailOf(VARIANTS[tool]?.find(v => v.k === currentVar[tool])); if (rq) { reason = rq[0]; params = rq[1]; } }
+  if (!reason && tool === 'water' && currentVar.water === 'well') {
+    for (let dz = 0; dz < R.fd; dz++) for (let dx = 0; dx < R.fw; dx++) if (aquiferAt(R.x0 + dx, R.z0 + dz) < 0.05) reason = 'toast.aquifer';
+  }
+  if (!reason && tool === 'power' && currentVar.power === 'hydro') {
+    let wet = false;
+    for (let dz = 0; dz < R.fd; dz++) for (let dx = 0; dx < R.fw; dx++) if (nearWater(R.x0 + dx, R.z0 + dz, 1)) wet = true;
+    if (!wet) reason = 'toast.hydro';
+  }
   if (!reason && state.money < toolCost(tool)) reason = 'toast.nomoney';
   return { R, ok: !reason, reason, params };
 }
@@ -2386,6 +2530,7 @@ function footprintTiles(mi) {
 
 function refresh(x, z) {
   agents.invalidate();
+  const changed = recalcLimits();
   buildTile(x, z);
   // สร้างช่องรอบๆ ใหม่ด้วย: ถนนต่อกัน, อาคารหันหน้าเข้าหาถนน, ทางแยกเกิดใหม่ (ไฟ ทางม้าลาย เส้นหยุด)
   // ระยะ 2 ช่อง เพราะเส้นหยุด/ป้ายอยู่บนช่องที่ติดกับทางแยก
@@ -2395,6 +2540,17 @@ function refresh(x, z) {
       buildTile(x + dx, z + dz);
     }
   }
+  // เขตความเร็วเปลี่ยน: ตั้งป้ายใหม่บนถนนช่องนั้นและช่องติดกัน (ป้ายอยู่บนช่องที่รถเข้าเขต)
+  const near = (px, pz) => Math.abs(px - x) + Math.abs(pz - z) <= 2;
+  const redo = new Set();
+  for (const i of changed) {
+    const cx = i % N, cz = (i / N) | 0;
+    for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const px = cx + dx, pz = cz + dz;
+      if (inBounds(px, pz) && !near(px, pz) && isType(px, pz, 'road')) redo.add(idx(px, pz));
+    }
+  }
+  for (const i of redo) buildTile(i % N, (i / N) | 0);
 }
 function rebuildAll() {
   for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) buildTile(x, z);
@@ -2412,9 +2568,9 @@ function toast(msg) {
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1400);
 }
 
-// ราคาจริง: ถนนบนน้ำ = สะพานแพงกว่า
+// ราคาจริง: ถนนบนน้ำ = สะพานแพงกว่า (ถนนใหญ่ = สะพานใหญ่)
 function buildCost(tool, x, z) {
-  if (tool === 'road' && isWaterTile(x, z)) return 40;
+  if (tool === 'road' && isWaterTile(x, z)) return Math.max(40, Math.round(toolCost(tool) * 2.5));
   return toolCost(tool);
 }
 
@@ -2455,6 +2611,19 @@ function applyTool(x, z) {
     updateHUD();
     return;
   }
+  // วางถนนทับถนนต่างประเภท = เปลี่ยนประเภทถนน (จ่ายราคาถนนใหม่ ไม่ต้องรื้อก่อน)
+  if (cur && currentTool === 'road' && cur.t === 'road' && roadKind(x, z) !== currentVar.road) {
+    const rq = reqFailOf(VARIANTS.road.find(v => v.k === currentVar.road));
+    if (rq) { audio.sfx('error'); return toast(t(rq[0], rq[1])); }
+    const c = buildCost('road', x, z);
+    if (state.money < c) { audio.sfx('error'); return toast(t('toast.nomoney')); }
+    state.money -= c;
+    cur.v = currentVar.road;
+    audio.sfx('road');
+    refresh(x, z);
+    updateHUD();
+    return;
+  }
   if (cur) return; // วางทับของเดิมไม่ได้ ต้องรื้อก่อน
   const cost2 = buildCost(currentTool, x, z);
   if (isWaterTile(x, z) && currentTool !== 'road') { audio.sfx('error'); return toast(t('toast.water')); }
@@ -2476,15 +2645,31 @@ function applyTool(x, z) {
 // ระบบจำลองเมือง
 // ---------------------------------------------------------------
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const adjRoad = (x, z) => isType(x + 1, z, 'road') || isType(x - 1, z, 'road') || isType(x, z + 1, 'road') || isType(x, z - 1, 'road');
+const adjRoad = (x, z) => isAccessRoad(x + 1, z) || isAccessRoad(x - 1, z) || isAccessRoad(x, z + 1) || isAccessRoad(x, z - 1);   // ทางหลวงไม่นับเป็นทางเข้า
+
+// กำลังผลิตจริง: กังหันลมตามแรงลม (ที่สูงลมแรงกว่า), ชีวมวลตามจำนวนฟาร์มที่ส่งเศษพืช/มูลสัตว์,
+// บ่อบาดาลตามความอุดมของชั้นน้ำ และบ่อใกล้กันแย่งน้ำกัน
+function plantCap(t, i) {
+  const V = variantOf(t), x = i % N, z = (i / N) | 0;
+  if (V.k === 'wind') return V.cap * (0.3 + 0.9 * weather.state.wind) * (1 + Math.min(0.4, tileMaxH[i] * 0.06));
+  if (V.k === 'bio') return V.cap * (0.35 + 0.65 * Math.min(1, ccache.farm / 4));
+  if (V.k === 'well') {
+    let near = 0;
+    for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) { const o = tileAt(x + dx, z + dz); if ((dx || dz) && o?.t === 'water' && o.v === 'well') near++; }
+    return V.cap * aquifer[i] / (1 + 0.35 * near);
+  }
+  return V.cap;
+}
+let lastMood = 70;   // ความพอใจล่าสุด (อัปเดตตอนเช็กระดับเมือง) ใช้คิดความต้องการย้ายเข้า
 
 function computeStats() {
   const s = {
     pop: 0, jobsCom: 0, jobsInd: 0, powerCap: 0, powerUse: 0, waterCap: 0, waterUse: 0,
-    roads: 0, bridges: 0, parks: 0, plants: 0, wplants: 0, comLv: 0, indLv: 0, junctions: 0, upkeep: 0,
+    roads: 0, roadUp: 0, bridges: 0, parks: 0, plants: 0, wplants: 0, comLv: 0, indLv: 0, junctions: 0, upkeep: 0,
     extraTax: { finance: 0, health: 0, edu: 0, transit: 0, leisure: 0, industry: 0, parking: 0 }, skillSupply: 0, skillNeed: 0, skillFill: 1,
   };
-  const brands = [], resL = [], stL = [], pkL = [];
+  const brands = [], resL = [], stL = [], pkL = [], tradeP = [];
+  s.greenCap = 0;
   state.tiles.forEach((t, i) => {
     if (!t) return;
     const lv = t.lv || 0;
@@ -2492,6 +2677,7 @@ function computeStats() {
     const FV = (t.t === 'res' || t.t === 'com' || t.t === 'service' || t.t === 'farm' || t.t === 'ind') ? fixedVariant(t) : null;
     if (FV) {
       if (t.t === 'res') s.pop += FV.pop; else if (t.t === 'farm') s.jobsInd += FV.jobs; else if (t.t === 'ind') brands.push(FV.k); else s.jobsCom += FV.jobs;
+      if (t.t === 'farm') tradeP.push({ key: 'farm:' + FV.k });
       if (t.t === 'service') s.skillSupply += EDU_SKILL[t.v] || 0;
       if (t.t === 'res') resL.push([i % N, Math.floor(i / N), FV.pop]);
       if (t.t === 'service' && TRANSIT_ST[t.v]) stL.push([i % N, Math.floor(i / N), t.v, t.fw || 1, t.fd || 1]);
@@ -2502,11 +2688,11 @@ function computeStats() {
     }
     if (t.t === 'res') { resL.push([i % N, Math.floor(i / N), POP_PER[lv]]); s.pop += POP_PER[lv]; s.powerUse += POWER_USE.res[lv]; s.waterUse += WATER_USE.res[lv]; }
     else if (t.t === 'com') { s.jobsCom += JOBS_COM[lv]; s.powerUse += POWER_USE.com[lv]; s.waterUse += WATER_USE.com[lv]; s.comLv += lv; }
-    else if (t.t === 'ind') { s.jobsInd += JOBS_IND[lv]; s.powerUse += POWER_USE.ind[lv]; s.waterUse += WATER_USE.ind[lv]; s.indLv += lv; }
-    else if (t.t === 'road') { s.roads++; if (tileIsWater[i]) s.bridges++; if (isJunction(i % N, Math.floor(i / N))) s.junctions++; }
+    else if (t.t === 'ind') { if (lv) tradeP.push({ key: 'ind:lv' + lv }); s.jobsInd += JOBS_IND[lv]; s.powerUse += POWER_USE.ind[lv]; s.waterUse += WATER_USE.ind[lv]; s.indLv += lv; }
+    else if (t.t === 'road') { s.roads++; s.roadUp += ROAD_UPKEEP[t.v] ?? 0.5; if (tileIsWater[i]) s.bridges++; if (isJunction(i % N, Math.floor(i / N))) s.junctions++; }
     else if (t.t === 'park') { const PV = variantOf(t); s.parks += (t.fw || 1) * (t.fd || 1); s.waterUse += 1 + (t.fw ? t.fw * t.fd : 0); s.upkeep += PV?.upkeep ? PV.upkeep : 0; s.jobsCom += PV?.jobs || 0; }
-    else if (t.t === 'power') { const V = variantOf(t); s.plants++; s.powerCap += V.cap; s.upkeep += V.upkeep; }
-    else if (t.t === 'water') { const V = variantOf(t); s.wplants++; s.waterCap += V.cap * (1 + 0.15 * weather.state.rain); s.upkeep += V.upkeep; } // ฝนตก น้ำดิบมากขึ้น
+    else if (t.t === 'power') { const V = variantOf(t), c = plantCap(t, i); s.plants++; s.powerCap += c; if (V.green) s.greenCap += c; s.upkeep += V.upkeep; }
+    else if (t.t === 'water') { const V = variantOf(t); s.wplants++; s.waterCap += plantCap(t, i) * (V.k === 'well' ? 1 : 1 + 0.15 * weather.state.rain); s.upkeep += V.upkeep; } // ฝนตก น้ำดิบมากขึ้น (บ่อบาดาลไม่ขึ้นกับฝน)
   });
   // อากาศร้อนคนใช้น้ำมากขึ้น ฝนตกใช้น้อยลง
   s.waterUse = Math.round(s.waterUse * clamp(1 + (tempC - 30) * 0.02 - 0.15 * weather.state.rain, 0.7, 1.3));
@@ -2530,10 +2716,12 @@ function computeStats() {
       if (SUPPLIERS[k]) mul *= 1 + 0.12 * SUPPLIERS[k].filter(x => brands.includes(x)).length;
       if (MAKER_OF[k] && !MAKER_OF[k].some(m => brands.includes(m))) mul *= 0.5;
       s.extraTax.industry += V.tax * mul;
+      tradeP.push({ key: 'ind:' + k, mul: s.skillFill });
     }
   } else s.skillSupply += Math.round(s.pop * 0.03);
   // การเดินทาง: คนในรัศมีสถานี/อู่ใช้ขนส่งสาธารณะแทนรถส่วนตัว ค่าจอดแพง/ฝนตก/ค่าโดยสารถูก ทำให้คนใช้ขนส่งมากขึ้น
   const pol = (state.policy ||= { parkFee: 2, fare: 1 });
+  pol.evCut ??= 0; pol.greenCut ??= 0;
   let cov = 0;
   if (stL.length && s.pop > 0) {
     for (const st of stL) if (st[2] === 'metro') st.pr = pkL.some(p => Math.hypot(p[0] - st[0], p[1] - st[1]) <= 4);   // Park & Ride
@@ -2559,17 +2747,29 @@ function computeStats() {
   s.extraTax.transit += s.fareIncome;
   s.extraTax.parking = s.parkIncome;
   s.jobs = s.jobsCom + s.jobsInd;
+  // พลังงานสะอาด: นโยบายลดภาษีที่ดินให้บ้านติดโซลาร์บนหลังคา (ผลิตไฟเพิ่มตามจำนวนคน)
+  const pol2 = state.policy;
+  const roof = Math.round(s.pop * 0.03 * (pol2.greenCut || 0));
+  s.powerCap += roof; s.greenCap += roof; s.roofSolar = roof;
+  s.green = s.powerCap ? s.greenCap / s.powerCap : 0;
+  // รถยนต์ไฟฟ้า: มีสถานีชาร์จมากและลดภาษีรถ EV คนก็ซื้อมากขึ้น รถ EV ชาร์จไฟจากระบบของเมือง
+  s.evShare = Math.min(0.6, (0.02 + 0.05 * Math.min(ccache.ev, 8)) * (1 + 0.35 * (pol2.evCut || 0)));
+  s.evCharge = Math.round(carDemand * s.evShare * 0.5);
+  s.powerUse += s.evCharge;
+  // การค้า: ผลผลิตฟาร์ม/โรงงานใช้กันเองในเมืองก่อน ที่เหลือส่งออก ที่ขาดนำเข้า (ผ่านสถานีขนส่งสินค้า)
+  s.trade = trade(tradeP, ccache.freight);
+  s.extraTax.industry = Math.max(0, s.extraTax.industry - s.trade.extraCost * 0.1);   // ไม่มีสถานี: วัตถุดิบแพง กำไรโรงงานลด
   // ภาษีแยกประเภท (รวมกันเท่ากับสูตรเดิม + ภาษีพิเศษของธุรกิจใหม่)
   s.taxes = {
-    land: s.pop * 0.2, pit: s.pop * 0.25, vat: s.jobsCom * 0.5, corp: s.jobsCom * 0.4 + s.jobsInd * 0.5, ind: s.jobsInd * 0.3,
-    vehicle: s.pop * 0.025, finance: s.extraTax.finance, health: s.extraTax.health, edu: s.extraTax.edu, transit: s.extraTax.transit, leisure: s.extraTax.leisure, industry: s.extraTax.industry, parking: s.extraTax.parking,
+    land: s.pop * 0.2 * (1 - 0.05 * (pol2.greenCut || 0)), pit: s.pop * 0.25, vat: s.jobsCom * 0.5, corp: s.jobsCom * 0.4 + s.jobsInd * 0.5, ind: s.jobsInd * 0.3,
+    vehicle: s.pop * 0.025 * (1 - s.evShare * 0.25 * (pol2.evCut || 0)), export: s.trade.income, finance: s.extraTax.finance, health: s.extraTax.health, edu: s.extraTax.edu, transit: s.extraTax.transit, leisure: s.extraTax.leisure, industry: s.extraTax.industry, parking: s.extraTax.parking,
   };
   s.income = Object.values(s.taxes).reduce((a, b) => a + b, 0);
-  s.expense = s.roads * 0.5 + s.bridges * 1.5 + s.upkeep + s.parks * 2 + s.junctions * 0.5 + (s.incidentCost || 0);
+  s.expense = s.roadUp + s.bridges * 1.5 + s.upkeep + s.parks * 2 + s.junctions * 0.5 + (s.incidentCost || 0);
   s.net = s.income - s.expense;
   const workD = clamp((s.pop + 20 - s.jobs) / 90, 0, 1);
   s.demand = {
-    res: clamp((s.jobs + 25 - s.pop) / 90, 0, 1),
+    res: clamp((s.jobs + 25 - s.pop) / 90, 0, 1) * clamp(0.5 + lastMood / 100, 0.6, 1.3),   // คนอยากย้ายเข้าเมืองที่ประชาชนพอใจ
     com: workD,
     ind: workD * 0.8,
   };
@@ -2663,7 +2863,7 @@ const later = (sec, fn) => { const at = curAt; sched.push({ t: sec, fn: at ? () 
 const roadAt = (x, z) => (Math.random() < 0.5 ? rowName(z) : colName(x));
 
 function civicCounts() {
-  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, pea: 0, pwa: 0, dohw: 0, gold: [], flammable: [], parking: 0, metro: 0, honda: 0, toyota: 0, bmw: 0, shindengen: 0, keihin: 0, denso: 0, temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0 };
+  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, pea: 0, pwa: 0, dohw: 0, gold: [], flammable: [], parking: 0, metro: 0, honda: 0, toyota: 0, bmw: 0, shindengen: 0, keihin: 0, denso: 0, temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0, ev: 0, freight: 0 };
   state.tiles.forEach((tl, i) => {
     if (!tl || tl.t === 'part' || (tl.cs && !tl.cs.to)) return;
     if (tl.t === 'service') c[tl.v] = (c[tl.v] || 0) + 1;
@@ -2696,8 +2896,53 @@ function civicSnapshot() {
     pop: s.pop, powerUse: s.powerUse, powerCap: s.powerCap, waterUse: s.waterUse, waterCap: s.waterCap,
     jobs: s.jobs, workers: demo.workers, hospitals: cc.hospital + 0.6 * cc.hospital_p, schools: cc.school + 0.7 * cc.school_p, universities: cc.bu, transit: cc.bus * 2 + cc.taxi + cc.grab,
     police: cc.police, fire: cc.fire, parks: cc.parks, roads: s.roads, liveCars: ac.car, kids: demo.child + demo.youth,
+    green: s.green, chargers: cc.ev, evCars: ac.ev, shops: s.jobsCom,
   });
   return { s, demo, cc, ac, nd };
+}
+
+// ----- ระดับเมือง -----
+function levelCtx(P = civicSnapshot()) {
+  const { s, cc, nd } = P;
+  return {
+    pop: s.pop, day: state.day, mood: nd.mood,
+    has: {
+      util: s.powerCap > 0 && s.waterCap > 0 && s.powerCap >= s.powerUse && s.waterCap >= s.waterUse,
+      school: cc.school + cc.school_p > 0, hospital: cc.hospital + cc.hospital_p > 0, police: cc.police > 0, fire: cc.fire > 0,
+      transit: cc.bus + cc.metro > 0, bu: cc.bu > 0, metro: cc.metro > 0, freight: cc.freight > 0, green: s.green >= 0.3,
+    },
+  };
+}
+function refreshLevelBadge() {
+  let el = $('cityLv');
+  if (!el) {
+    el = document.createElement('span'); el.id = 'cityLv';
+    el.style.cssText = 'margin-left:6px;padding:1px 7px;border-radius:9px;background:#ffb300;color:#3a2600;font-size:11px;font-weight:700;white-space:nowrap';
+    $('cityName').after(el);
+  }
+  el.textContent = 'Lv.' + cityLevel() + ' ' + t('lv.' + LEVELS[cityLevel() - 1].key);
+}
+function checkLevelUp() {
+  const P = civicSnapshot(), ctx = levelCtx(P);
+  lastMood = P.nd.mood;
+  if (!state.level) state.level = levelFromPop(ctx.pop);   // เซฟเก่า/เกมใหม่
+  const lv = reachableLevel(cityLevel(), ctx);
+  if (lv > cityLevel()) {
+    state.level = lv;
+    const name = t('lv.' + LEVELS[lv - 1].key);
+    toast(t('lv.up', { n: lv, name }));
+    addNews('good', ['news.lvup', { n: lv, name }]);
+    audio.sfx('place');
+  }
+  refreshLevelBadge();
+}
+// ส่วนแสดงในแท็บภาพรวม: ระดับปัจจุบัน + เงื่อนไขของระดับถัดไป
+function levelSection(P) {
+  const lv = cityLevel(), next = LEVELS[lv];
+  const head = kv(t('lv.now'), 'Lv.' + lv + ' ' + t('lv.' + LEVELS[lv - 1].key));
+  if (!next) return sec(t('lv.title'), head + `<div class="dim">${escH(t('lv.max'))}</div>`);
+  const rows = levelChecks(next, levelCtx(P)).map(c => kv((c.ok ? '✅ ' : '⬜ ') + t('lvc.' + c.k), c.need !== undefined ? fmt(c.cur) + ' / ' + fmt(c.need) : (c.ok ? '✓' : '—'))).join('');
+  return sec(t('lv.title'), head + `<h5>${escH(t('lv.next', { n: next.n, name: t('lv.' + next.key) }))}</h5>` + rows);
 }
 
 // ----- ศาสนาของประชากร -----
@@ -3421,6 +3666,10 @@ function doUpgrade(i, o) {
   toast(t('upg.done', { name, n: o.gain }));
 }
 function showUpgrade(i, cx, cy) {
+  if (state.tiles[i]?.t === 'road') {   // ดับเบิลคลิกถนน: บอกประเภทและเขตความเร็ว
+    const x = i % N, z = (i / N) | 0;
+    return toast(`${t('v.road.' + roadKind(x, z))} · ${t('road.limit', { n: speedLimitAt(x, z) })}`);
+  }
   const info = upgradeOptions(i);
   if (!info) return hideUpg();
   const { tl, cur, opts } = info;
@@ -3511,7 +3760,7 @@ function tabOverview(P) {
     [t('hud.money'), money(state.money)], [t('pop.demo'), fmt(s.pop)], [t('ov.jobs'), fmt(s.jobs)],
     [t('fin.net'), (s.net >= 0 ? '+' : '') + fmt(s.net)], [t('ov.day'), state.day], [t('pop.mood'), moodLbl + ' ' + nd.mood + '%'],
   ].map(([k, v]) => `<div class="kc"><small>${escH(k)}</small><b>${escH(v)}</b></div>`).join('');
-  return `<div class="kcs">${cards}</div>`
+  return `<div class="kcs">${cards}</div>` + levelSection(P)
     + sec(t('ov.util'), bar(t('ut.power'), pU, pU > 100 ? '#ff5252' : pU > 85 ? '#ffb300' : '#66bb6a', fmt(s.powerUse) + ' / ' + fmt(s.powerCap))
       + bar(t('ut.water'), wU, wU > 100 ? '#ff5252' : wU > 85 ? '#ffb300' : '#4fc3f7', fmt(s.waterUse) + ' / ' + fmt(s.waterCap)))
     + sec(t('pop.needs'), nd.list.map(n => bar(t('need.' + n.k), n.v, moodCol(n.v))).join('')
@@ -3538,6 +3787,17 @@ function tabTransport(P) {
     + sec(t('tr.park'), kv(t('tr.lots'), c.parking) + bar(t('tr.occ'), s.parkCap ? 100 * s.parkOcc / s.parkCap : 0, '#ffb74d', fmt(s.parkOcc) + ' / ' + fmt(s.parkCap))
       + kv(t('tr.parkinc'), '+' + fmt(s.parkIncome)) + kv(t('tr.fareinc'), '+' + fmt(s.fareIncome)))
     + sec(t('tr.policy'), stepper('parkFee', t('tr.parkfee'), pol.parkFee) + stepper('fare', t('tr.fare'), pol.fare) + `<div class="dim">${escH(t('tr.tip'))}</div>`);
+}
+function tabTrade(P) {
+  const T = P.s.trade, st = ccache.freight, none = `<div class="dim">${escH(t('tr2.none'))}</div>`;
+  const qty = r => (r.exp > 0 ? `<span style="color:#66bb6a">↑ ${fmt(r.exp)}` : `<span style="color:#ff8a65">↓ ${fmt(r.imp)}`) + ` × $${r.v}</span>`;
+  return sec(t('tr2.station'), kv(t('v.service.freight'), st)
+      + bar(t('tr2.cap'), T.cap ? 100 * T.units / T.cap : 0, T.cov < 1 ? '#ffb300' : '#4db6ac', fmt(T.units) + ' / ' + fmt(T.cap))
+      + `<div class="dim">${escH(t(st ? 'tr2.tip' : 'tr2.nostation'))}</div>`)
+    + sec(t('tr2.sum'), kv(t('tr2.exp'), '+' + fmt(T.expValue)) + kv(t('tr2.imp'), '−' + fmt(T.impValue)) + kv(t('tr2.tax'), '+' + fmt(T.income)))
+    + sec(t('tr2.exports'), T.rows.filter(r => r.exp > 0).map(r => kv(t('g.' + r.g), qty(r))).join('') || none)
+    + sec(t('tr2.imports'), T.rows.filter(r => r.imp > 0).map(r => kv(t('g.' + r.g), qty(r))).join('') || none)
+    + sec(t('tr2.local'), T.rows.filter(r => r.made > 0 && r.used > 0).map(r => kv(t('g.' + r.g), fmt(Math.min(r.made, r.used)))).join('') || none);
 }
 function tabPlaces() {
   const list = buildVenueList(), sc = visScale();
@@ -3584,14 +3844,20 @@ function tabUtil(P, D) {
       + `<h5>${escH(t('ut.plants'))}</h5>` + (plants || `<div class="dim">${escH(t('ut.none'))}</div>`)
       + `<h5>${escH(t('ut.consumers'))}</h5>` + cats.map(k => bar(t('cat.' + k), 100 * D.use[kind][k] / tot, CAT_COL[k], fmt(D.use[kind][k]))).join(''));
   };
+  const pol = state.policy, pc = v => Math.round(100 * v) + '%';
+  const step = (k, label, txt) => `<div class="kv"><span>${escH(label)}</span><b><button class="rf" data-pol="${k}:-1">−</button> ${txt} <button class="rf" data-pol="${k}:1">+</button></b></div>`;
   return one('power', s.powerCap, s.powerUse, '#ffd54f') + one('water', s.waterCap, s.waterUse, '#4fc3f7')
+    + sec(t('pol.title'), bar(t('pol.green'), 100 * s.green, '#66bb6a', pc(s.green)) + kv(t('pol.roof'), fmt(s.roofSolar))
+      + bar(t('pol.evShare'), 100 * s.evShare / 0.6, '#26a69a', pc(s.evShare)) + kv(t('v.com.ev'), ccache.ev) + kv(t('pol.evCharge'), fmt(s.evCharge))
+      + step('evCut', t('pol.evCut'), '−' + (pol.evCut || 0) * 25 + '%') + step('greenCut', t('pol.greenCut'), '−' + (pol.greenCut || 0) * 5 + '%')
+      + `<div class="dim">${escH(t('pol.tip'))}</div>`)
     + `<div class="dim">${escH(t('ut.weather', { t: Math.round(tempC), r: Math.round(weather.state.rain * 100) }))}</div>`;
 }
 function tabFin(P, D) {
   const { s } = P;
   const inc = Object.entries(s.taxes).map(([k, v]) => ['tax.' + k, v, k]);
   const bUp = s.upkeep - 0; // รวมค่าดูแลอาคาร/โรงผลิต/สวนที่มีค่าดูแลเอง
-  const exp = [['fin.exp.road', s.roads * 0.5], ['fin.exp.bridge', s.bridges * 1.5], ['fin.exp.junc', s.junctions * 0.5], ['fin.exp.bld', bUp], ['fin.exp.park', s.parks * 2]];
+  const exp = [['fin.exp.road', s.roadUp], ['fin.exp.bridge', s.bridges * 1.5], ['fin.exp.junc', s.junctions * 0.5], ['fin.exp.bld', bUp], ['fin.exp.park', s.parks * 2]];
   const ti = Math.max(1, s.income), te = Math.max(1, s.expense);
   return `<div class="kcs"><div class="kc"><small>${escH(t('hud.money'))}</small><b>${escH(money(state.money))}</b></div>`
     + `<div class="kc"><small>${escH(t('fin.income'))}</small><b style="color:#66bb6a">+${fmt(s.income)}</b></div>`
@@ -3637,19 +3903,19 @@ function tabReg() {
     + (causes.length ? sec(t('reg.byCause'), causes.map(k => bar(t('reg.cause.' + k), 100 * sh(k) / tot, k === 'old' || k === 'illness' ? '#90a4ae' : '#e57373', fmt(sh(k)))).join('')) : '')
     + `<div class="ptabs sub">${['all', 'birth', 'death'].map(k => `<button data-reg="${k}" class="rf ${k === regFilter ? 'on' : ''}">${escH(t('reg.filter.' + k))}</button>`).join('')}</div>${rows}`;
 }
-const TABS = ['overview', 'pop', 'places', 'transport', 'reg', 'util', 'fin', 'bld', 'news'];
+const TABS = ['overview', 'pop', 'places', 'transport', 'trade', 'reg', 'util', 'fin', 'bld', 'news'];
 function renderPop() {
   if (!popPanel || !popOpen) return;
   const keep = popPanel.querySelector('.pbody')?.scrollTop || 0;
   const P = civicSnapshot(), D = cityDetail();
-  const body = { overview: tabOverview, pop: tabPop, places: tabPlaces, transport: tabTransport, reg: tabReg, util: tabUtil, fin: tabFin, bld: tabBld, news: tabNews }[popTab](P, D);
+  const body = { overview: tabOverview, pop: tabPop, places: tabPlaces, transport: tabTransport, trade: tabTrade, reg: tabReg, util: tabUtil, fin: tabFin, bld: tabBld, news: tabNews }[popTab](P, D);
   popPanel.innerHTML = `
     <div class="dh"><b>${escH(t('city.title'))}</b><small>${escH(t('side.drag'))}</small><button class="x" id="popClose">${ICON.close}</button></div>
     <div class="ptabs">${TABS.map(k => `<button data-tab="${k}" class="${k === popTab ? 'on' : ''}">${escH(t('tab.' + k))}</button>`).join('')}</div>
     <div class="pbody">${body}</div>`;
   popPanel.querySelector('#popClose').onclick = () => setPopOpen(false);
   popPanel.querySelectorAll('.ptabs button[data-tab]').forEach(b => { b.onclick = () => { popTab = b.dataset.tab; renderPop(); }; });
-  popPanel.querySelectorAll('button[data-pol]').forEach(b => { b.onclick = () => { const [k, d] = b.dataset.pol.split(':'), p = (state.policy ||= { parkFee: 2, fare: 1 }); p[k] = clamp(p[k] + +d, 0, k === 'parkFee' ? 6 : 4); audio.sfx('select'); renderPop(); }; });
+  popPanel.querySelectorAll('button[data-pol]').forEach(b => { b.onclick = () => { const [k, d] = b.dataset.pol.split(':'), p = (state.policy ||= { parkFee: 2, fare: 1 }); p[k] = clamp((p[k] || 0) + +d, 0, { parkFee: 6, fare: 4, evCut: 3, greenCut: 3 }[k]); audio.sfx('select'); renderPop(); }; });
   popPanel.querySelectorAll('button[data-reg]').forEach(b => { b.onclick = () => { regFilter = b.dataset.reg; renderPop(); }; });
   popPanel.querySelector('.pbody').scrollTop = keep;
 }
@@ -3824,12 +4090,12 @@ document.querySelectorAll('#speed button').forEach(b => {
 });
 $('reset').onclick = () => {
   if (!confirm(t('confirm.reset'))) return;
-  state = newState();
+  state = newState(); limitsDirty = true;
   for (const f of [...fires]) removeFire(f);
   clearIncidents();
   news.clear(); renderNews();
   for (let i = 0; i < N * N; i++) { if (meshes[i]) { disposeTile(meshes[i]); tileGroup.remove(meshes[i]); meshes[i] = null; } }
-  swayTiles.clear();
+  swayTiles.clear(); spinTiles.clear();
   agents.clear();
   agents.invalidate();
   rebuildAll();
@@ -3854,6 +4120,24 @@ window.addEventListener('keydown', e => {
 // ---------------------------------------------------------------
 // เมาส์: ไฮไลต์ช่อง + ลากสร้าง
 // ---------------------------------------------------------------
+// แผนที่ชั้นน้ำบาดาล (ฟ้าเข้ม = น้ำมาก) โปร่งแสงทับพื้น แสดงตอนเลือกบ่อบาดาล
+const aqOverlay = (() => {
+  const geos = [];
+  for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
+    const a = aquifer[z * N + x];
+    if (a < 0.05) continue;
+    const g = new THREE.PlaneGeometry(0.9, 0.9);
+    g.rotateX(-Math.PI / 2); g.translate(x - N / 2 + 0.5, tileMaxH[z * N + x] + 0.09, z - N / 2 + 0.5);
+    const c = new THREE.Color().setHSL(0.56, 0.8, 0.75 - 0.35 * a), col = new Float32Array(12);
+    for (let k = 0; k < 4; k++) c.toArray(col, k * 3);
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geos.push(g);
+  }
+  const m = new THREE.Mesh(geos.length ? mergeGeometries(geos) : new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.5, depthWrite: false }));
+  m.visible = false; m.renderOrder = 2;
+  scene.add(m);
+  return m;
+})();
 const hoverMesh = new THREE.Mesh(
   boxGeo,
   new THREE.MeshBasicMaterial({ color: 0x66ff88, transparent: true, opacity: 0.45, depthWrite: false, toneMapped: false })
@@ -4189,6 +4473,7 @@ function updateAgentTargets() {
   carDemand = cars * transitCut;
   agents.setTargets({
     bus: Math.min(ccache.bus * 3, 9), taxi: Math.min(ccache.taxi * 4, 12), grab: Math.min(ccache.grab * 5, 12),
+    cargo: ccache.freight ? Math.min(8, 2 + Math.round(s.trade.units * s.trade.cov / 150)) : 0, ev: s.evShare,
     car: Math.min(Math.round(cars * transitCut), q.cars),
     person: Math.min(Math.round(people), q.people),
     dog: Math.min(Math.round(dogs), Math.ceil(q.pets * 0.55)),
@@ -4253,13 +4538,12 @@ window.addEventListener('keydown', unlockAudio);
 load();
 applyControlMode(settings.mode);
 applyQuality(settings.quality); // สร้างเมืองครั้งแรกตามระดับกราฟิก
-loadModels().then(n => {
-  if (n > 0) {
-    console.info(`โหลดโมเดล .glb แล้ว ${n} ไฟล์`);
-    if (vehicleCount() > 0) { try { wildlife.useModels(); agents.clear(); } catch (e) { console.warn('ใช้โมเดลยานพาหนะไม่สำเร็จ', e); } }
-    rebuildAll();
-  }
+// ตอนเปิดเกม: อาคาร + รถทั่วไป/สัตว์เลี้ยง (ใช้ทันที) ส่วนเรือรอหลังเกมขึ้นจอแล้ว หมวดอื่นโหลดตามที่เมืองต้องใช้ (ensureModels)
+Promise.all(['res', 'com', 'ind', 'power', 'park'].map(g => loadModelGroup(g))).then(r => { if (r.some(n => n > 0)) rebuildAll(); });
+Promise.all(['cars', 'bikes', 'buses', 'dogs', 'cats'].map(g => loadModelGroup(g))).then(r => {
+  if (r.some(n => n > 0)) { try { agents.clear(); } catch (e) { console.warn('ใช้โมเดลยานพาหนะไม่สำเร็จ', e); } }
 });
+setTimeout(() => loadModelGroup('boats', () => { try { wildlife.useModels(); } catch (e) { console.warn('ใช้โมเดลเรือไม่สำเร็จ', e); } }), 4000);
 selectTool('road');
 updateHUD();
 updateSky(0);
@@ -4278,6 +4562,7 @@ function refreshAudioStats() {
   audioStats.pop = computeStats().pop;
   audioStats.hospital = hospital; audioStats.school = school;
   ccache = civicCounts();
+  ensureModels();
   // ความใกล้ของกล้องกับสถานที่ที่มีเสียงประจำตัว (ตำรวจ ดับเพลิง วัด โบสถ์ ตลาด/ห้าง)
   const sp = {};
   const fx = controls.target.x, fz = controls.target.z;
@@ -4367,7 +4652,7 @@ function boatClick(e) {
 }
 
 const _pv = new THREE.Matrix4(), _fr = new THREE.Frustum(), _sp = new THREE.Sphere();
-let swayFrame = 0;
+let swayFrame = 0, levelT = 0.5;
 let fpsAvg = 60;
 let cntCache = null, cntT = 0;
 const agentCounts = dt => { cntT -= dt; if (!cntCache || cntT <= 0) { cntT = 0.25; cntCache = agents.counts(); } return cntCache; };
@@ -4431,6 +4716,11 @@ function loop(now) {
   // เสียง: ยิ่งซูมเข้าใกล้ ยิ่งได้ยินรายละเอียดชัด
   audioStatsT -= dt;
   if (audioStatsT <= 0) { audioStatsT = 0.5; refreshAudioStats(); }
+  levelT -= dt;
+  if (levelT <= 0) { levelT = 3; checkLevelUp(); }
+  const spin = dt * Math.min(speed, 1) * (0.4 + 2.2 * W.wind);   // กังหันลมหมุนตามแรงลม หยุดเมื่อพักเกม
+  for (const arr of spinTiles.values()) for (const o of arr) o.rotation.z -= spin;
+  aqOverlay.visible = currentTool === 'water' && currentVar.water === 'well';
   const camDist = camera.position.distanceTo(controls.target);
   // ระนาบใกล้ขยับตามระยะกล้อง: ลดการสั่นของพื้นผิวที่ซ้อนกัน (z-fighting) เช่น เส้นถนน/พื้นไกลๆ
   { const nn = Math.min(2.5, Math.max(0.25, camDist * 0.04)); if (Math.abs(nn - camera.near) > 0.05) { camera.near = nn; camera.updateProjectionMatrix(); } }
@@ -4502,3 +4792,6 @@ function loop(now) {
 }
 requestAnimationFrame(loop);
 window.addEventListener('beforeunload', save);
+// มือถือมักไม่ส่ง beforeunload ตอนปัดแอปทิ้ง: เซฟตอนหน้าถูกซ่อนด้วย
+window.addEventListener('pagehide', save);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });

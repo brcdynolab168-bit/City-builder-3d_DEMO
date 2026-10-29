@@ -13,6 +13,7 @@ export const FOOT = {
   'service:temple': [3, 3], 'service:church': [2, 3], 'service:mosque': [3, 3],
   'com:mall': [3, 2], 'com:market': [2, 2], 'com:dealer': [2, 1], 'com:fishing': [1, 1],
   'com:parking': [2, 1], 'service:metro': [2, 1], 'ind:honda': [3, 3], 'ind:toyota': [4, 3], 'ind:bmw': [3, 3], 'ind:shindengen': [2, 2], 'ind:keihin': [2, 2], 'ind:denso': [3, 2],
+  'power:wind': [1, 1], 'power:hydro': [2, 1], 'power:bio': [2, 1], 'water:well': [1, 1], 'com:ev': [1, 1], 'service:freight': [3, 2],
   'farm:rice': [3, 2], 'farm:crop': [2, 2], 'farm:barn': [3, 2], 'farm:orchard': [2, 2],
   'park:plaza': [2, 2], 'park:play': [1, 1], 'park:sports': [2, 2], 'park:garden': [3, 3],
   'park:fountain': [1, 1], 'park:flowers': [1, 1], 'park:pond': [1, 1], 'park:pavilion': [1, 1], 'park:picnic': [1, 1],
@@ -1131,7 +1132,99 @@ export function createBig(c) {
     put(bg, boxGeo, band(0x2e9c4d), 0.45, y0 + 0.36, 0.41, 0.84, 0.15, 0.03);
   }
 
+  // ----- พลังงานสะอาด / น้ำบาดาล / EV / ขนส่งสินค้า -----
+  // ใบพัดที่หมุนได้ติด userData.spin (main หมุนตามแรงลม/การผลิต)
+  function wind(bg) {
+    ground(bg, 1, 1, M.park);
+    put(bg, cylGeo, M.concrete, 0, y0 + 0.02, 0, 0.16, 0.04, 0.16);
+    put(bg, cylGeo, M.white, 0, y0 + 0.62, 0, 0.045, 1.2, 0.045);                        // เสากังหัน
+    put(bg, boxGeo, M.white, 0, y0 + 1.24, -0.02, 0.06, 0.06, 0.16);                    // ห้องเครื่อง (nacelle)
+    const rotor = new THREE.Group();
+    rotor.position.set(0, y0 + 1.24, 0.07);
+    rotor.userData.spin = 1;
+    put(rotor, sphereGeo, M.white, 0, 0, 0, 0.05, 0.05, 0.06);
+    for (let k = 0; k < 3; k++) {
+      const arm = new THREE.Group(); arm.rotation.z = k * Math.PI * 2 / 3; rotor.add(arm);
+      put(arm, boxGeo, M.white, 0, 0.26, 0, 0.04, 0.5, 0.008);
+      put(arm, boxGeo, band(0xd32f2f), 0, 0.49, 0, 0.03, 0.04, 0.009);                   // ปลายใบสีแดง (เตือนอากาศยาน)
+    }
+    bg.add(rotor);
+    put(bg, boxGeo, M.white, 0.3, y0 + 0.05, 0.3, 0.14, 0.1, 0.1);                      // หม้อแปลง
+  }
+  function hydro(bg) {
+    ground(bg, 2, 1, M.concrete);
+    put(bg, boxGeo, M.concrete, 0, y0 + 0.2, -0.3, 1.92, 0.4, 0.14);                     // สันเขื่อน
+    put(bg, boxGeo, MT.water, 0, y0 + 0.36, -0.42, 1.9, 0.02, 0.1);                      // อ่างเก็บน้ำด้านบน
+    for (const x of [-0.5, 0, 0.5]) {
+      put(bg, boxGeo, MT.water, x, y0 + 0.16, -0.17, 0.16, 0.3, 0.02).rotation.x = -0.5;  // ทางน้ำล้น
+      put(bg, boxGeo, M.metal, x, y0 + 0.42, -0.3, 0.2, 0.06, 0.16);                     // ประตูน้ำ
+    }
+    put(bg, boxGeo, MT.water, 0, y0 + 0.01, 0.05, 1.8, 0.02, 0.36);                      // น้ำท้ายเขื่อน
+    put(bg, boxGeo, MT.wall, 0.72, y0 + 0.12, 0.28, 0.4, 0.24, 0.3);                     // โรงไฟฟ้า
+    put(bg, boxGeo, MT.slate, 0.72, y0 + 0.25, 0.28, 0.42, 0.02, 0.32);
+    signAt(bg, t('sign.hydro'), '#1565c0', '#ffffff', 0.72, y0 + 0.17, 0.435, 0.36, 0.06, 22);
+    for (const x of [-0.85, -0.55]) put(bg, cylGeo, M.metal, x, y0 + 0.3, 0.32, 0.015, 0.6, 0.015);   // เสาส่งไฟ
+  }
+  function bio(bg) {
+    ground(bg, 2, 1, M.asphalt);
+    const tank = std(0x6d8a4f, { roughness: 0.7 });
+    for (const x of [-0.65, -0.2]) {
+      put(bg, cylGeo, MT.wall, x, y0 + 0.08, -0.1, 0.36, 0.16, 0.36);
+      put(bg, domeGeo, tank, x, y0 + 0.16, -0.1, 0.36, 0.22, 0.36);                     // บ่อหมักก๊าซชีวภาพ
+    }
+    put(bg, cylGeo, M.white, 0.35, y0 + 0.25, -0.15, 0.16, 0.5, 0.16);                  // ถังเก็บก๊าซ
+    put(bg, boxGeo, MT.wall, 0.7, y0 + 0.1, 0.2, 0.36, 0.2, 0.3);                        // โรงปั่นไฟ
+    put(bg, cylGeo, M.metal, 0.82, y0 + 0.35, 0.12, 0.04, 0.5, 0.04);                    // ปล่องไอเสีย
+    for (let k = 0; k < 4; k++) put(bg, boxGeo, MT.hay, -0.75 + k * 0.17, y0 + 0.05, 0.32, 0.14, 0.09, 0.12);   // ฟาง/เศษพืชจากฟาร์ม
+    signAt(bg, t('sign.bio'), '#558b2f', '#ffffff', 0.7, y0 + 0.16, 0.355, 0.34, 0.06, 22);
+  }
+  function well(bg) {
+    ground(bg, 1, 1, M.concrete);
+    put(bg, boxGeo, MT.wall, -0.2, y0 + 0.09, -0.15, 0.32, 0.18, 0.28);                  // ห้องปั๊ม
+    put(bg, boxGeo, band(0x1565c0), -0.2, y0 + 0.19, -0.15, 0.34, 0.02, 0.3);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) put(bg, cylGeo, M.metal, 0.22 + sx * 0.1, y0 + 0.2, 0.15 + sz * 0.1, 0.014, 0.4, 0.014);
+    put(bg, cylGeo, band(0x1e88e5), 0.22, y0 + 0.5, 0.15, 0.3, 0.22, 0.3);              // แท็งก์สูง
+    put(bg, cylGeo, M.metal, 0.02, y0 + 0.03, 0.15, 0.02, 0.4, 0.02).rotation.z = Math.PI / 2;   // ท่อ
+    put(bg, cylGeo, M.metal, -0.2, y0 + 0.05, 0.22, 0.06, 0.1, 0.06);                    // หัวบ่อบาดาล
+  }
+  function evStation(bg) {
+    ground(bg, 1, 1, M.asphalt);
+    put(bg, boxGeo, M.white, 0, y0 + 0.3, -0.05, 0.86, 0.025, 0.6);                      // หลังคาโซลาร์
+    put(bg, boxGeo, M.solar, 0, y0 + 0.318, -0.05, 0.82, 0.008, 0.56);
+    for (const x of [-0.38, 0.38]) put(bg, cylGeo, M.metal, x, y0 + 0.15, -0.05, 0.02, 0.3, 0.02);
+    const glow = band(0x1fa5a0);
+    for (const x of [-0.27, 0, 0.27]) {
+      put(bg, boxGeo, M.white, x, y0 + 0.08, -0.3, 0.07, 0.16, 0.05);                    // ตู้ชาร์จ
+      put(bg, boxGeo, glow, x, y0 + 0.12, -0.274, 0.05, 0.04, 0.004);
+      put(bg, boxGeo, M.stopLine, x + 0.135, y0 + 0.012, 0.05, 0.01, 0.002, 0.38);
+    }
+    miniCar(bg, -0.135, 0.02, 0, band(0x1fa5a0)); miniCar(bg, 0.135, 0.06, 0, M.white);
+    signAt(bg, t('sign.ev'), '#00897b', '#ffffff', 0, y0 + 0.36, 0.25, 0.5, 0.08, 26);
+  }
+  function freight(bg) {
+    ground(bg, 3, 2, M.asphalt);
+    put(bg, boxGeo, MT.wall, -0.9, y0 + 0.22, -0.4, 1.1, 0.44, 1.0);                     // โกดังสินค้า
+    put(bg, boxGeo, MT.slate, -0.9, y0 + 0.45, -0.4, 1.14, 0.03, 1.04);
+    for (let k = 0; k < 4; k++) put(bg, boxGeo, M.metal, -1.3 + k * 0.27, y0 + 0.12, 0.105, 0.2, 0.22, 0.01);   // ประตูท่าขนถ่าย
+    signAt(bg, t('sign.freight'), '#37474f', '#ffd54f', -0.9, y0 + 0.36, 0.105, 0.9, 0.1, 30);
+    // ลานตู้คอนเทนเนอร์ซ้อนกัน
+    const COLS = [0x1e5aa8, 0xc62828, 0x2e7d32, 0xef6c00, 0x6a1b9a, 0x00838f, 0x8d6e63];
+    let c = 0;
+    for (let row = 0; row < 3; row++) for (let col = 0; col < 3; col++) {
+      const h = 1 + ((row * 3 + col * 7) % 3);
+      for (let k = 0; k < h; k++) put(bg, boxGeo, band(COLS[c++ % COLS.length]), 0.35 + col * 0.36, y0 + 0.055 + k * 0.105, -0.7 + row * 0.2, 0.33, 0.1, 0.16);
+    }
+    // ปั้นจั่นยกตู้ (gantry crane)
+    for (const x of [0.15, 1.35]) for (const z of [-0.85, -0.2]) put(bg, boxGeo, band(0xfbc02d), x, y0 + 0.3, z, 0.04, 0.6, 0.04);
+    for (const z of [-0.85, -0.2]) put(bg, boxGeo, band(0xfbc02d), 0.75, y0 + 0.6, z, 1.24, 0.05, 0.05);
+    put(bg, boxGeo, band(0xfbc02d), 0.75, y0 + 0.62, -0.52, 0.12, 0.07, 0.7);
+    // รถหัวลากจอดรอ
+    for (const x of [0.3, 0.7, 1.1]) { put(bg, boxGeo, M.white, x, y0 + 0.05, 0.5, 0.15, 0.08, 0.12); put(bg, boxGeo, band(0x1e5aa8), x, y0 + 0.08, 0.27, 0.15, 0.13, 0.32); }
+    lamp(bg, -0.2, 0.75, 0.4); lamp(bg, 1.4, 0.75, 0.4);
+  }
+
   const MAP = {
+    'power:wind': wind, 'power:hydro': hydro, 'power:bio': bio, 'water:well': well, 'com:ev': evStation, 'service:freight': freight,
     'com:parking': parking, 'service:metro': metro,
     'ind:honda': honda, 'ind:toyota': toyota, 'ind:bmw': bmw, 'ind:shindengen': shindengen, 'ind:keihin': keihin, 'ind:denso': denso,
     'service:hospital_p': bg => hospital(bg, true), 'service:school_p': bg => school(bg, true), 'com:bank': bank,
