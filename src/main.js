@@ -194,7 +194,6 @@ const OEMS = ['honda', 'toyota', 'bmw'];
 const SUPPLIERS = { honda: ['keihin', 'shindengen'], toyota: ['denso', 'shindengen'], bmw: ['denso', 'shindengen'] };   // ซัพพลายเออร์ที่ช่วยให้ค่ายรถได้ผลผลิตเพิ่ม
 const MAKER_OF = { shindengen: OEMS, keihin: ['honda'], denso: ['toyota', 'bmw'] };                                     // ซัพพลายเออร์ต้องมีค่ายรถคู่ค้า
 const EDU_SKILL = { school: 120, school_p: 180, bu: 700 };                                                               // แรงงานมีความรู้ที่โรงเรียน/มหาวิทยาลัยผลิตได้
-const indReqFail = k => reqFailOf(VARIANTS.ind.find(v => v.k === k));
 function reqFailOf(V) {   // คืน [คีย์ข้อความ, พารามิเตอร์] ถ้ายังไม่ผ่านเงื่อนไข
   if (!V || !V.req) return null;
   const R = V.req, c = ccache, pop = audioStats.pop;
