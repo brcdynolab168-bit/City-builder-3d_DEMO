@@ -82,6 +82,18 @@
     #toolTab.closed { transform: translateY(80px); }
     body.ui-hidden .tab { display: none; }
 
+    /* เมนูตัวเลือกย่อยที่เด้งขึ้นเหนือปุ่มเครื่องมือ */
+    #fly { position: fixed; z-index: 8; width: 300px; max-height: 70vh; overflow-y: auto; background: rgba(20, 28, 40, .94); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,.18); border-radius: 12px; padding: 6px; opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .15s, transform .15s; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+    #fly.show { opacity: 1; transform: none; pointer-events: auto; }
+    #fly .ft { font-size: 11px; opacity: .6; padding: 4px 8px 6px; }
+    #fly .fi { display: grid; grid-template-columns: 1fr auto; gap: 1px 10px; width: 100%; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 8px; color: #fff; padding: 7px 9px; cursor: pointer; }
+    #fly .fi:hover { background: rgba(255,255,255,.12); }
+    #fly .fi.on { border-color: #4fc3f7; background: rgba(79,195,247,.18); }
+    #fly .fn { font-size: 14px; font-weight: 600; }
+    #fly .fc { font-size: 13px; color: #ffd27a; font-weight: 600; }
+    #fly .fs { grid-column: 1 / -1; font-size: 11px; opacity: .65; line-height: 1.35; }
+    body.ui-hidden #fly { display: none; }
+
     @media (max-width: 760px) {
       #side { top: auto; bottom: 92px; width: 230px; }
       #hud .stat { min-width: 64px; }

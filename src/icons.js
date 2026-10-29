@@ -16,6 +16,7 @@ export const ICON = {
   power: svg('<path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/>'),
   water: svg('<path d="M12 3s6.5 6.6 6.5 11.2a6.5 6.5 0 0 1-13 0C5.5 9.6 12 3 12 3z"/><path d="M9 14.5a3 3 0 0 0 3 3"/>'),
   park: svg('<path d="M12 21v-6"/><path d="M12 3.5c-3.5 0-6 2.6-6 5.8 0 2.8 2.2 5 6 5s6-2.2 6-5c0-3.2-2.5-5.8-6-5.8z"/><path d="M12 11.5 9.5 9.5M12 13.5l2.5-2"/>'),
+  service: svg('<path d="M12 3v18M3 12h18"/><rect x="4" y="4" width="16" height="16" rx="3"/>'),
   bulldoze: svg('<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v6M14 11v6"/>'),
 
   // สถิติ

@@ -31,9 +31,50 @@ const TOOLS = {
   power:    { label: 'โรงไฟฟ้า',        cost: 500, tip: 'ผลิตไฟ 120 หน่วย' },
   water:    { label: 'โรงประปา',        cost: 400, tip: 'ผลิตน้ำ 120 หน่วย ต้องตั้งใกล้แม่น้ำ/ทะเล (ภายใน 3 ช่อง)' },
   park:     { label: 'สวน',            cost: 50,  tip: 'สวนสาธารณะ ผู้คนมาเดินเล่น ที่อยู่อาศัยรอบๆโตเร็วขึ้น' },
+  service:  { label: 'บริการ',          cost: 800, tip: 'โรงเรียน / โรงพยาบาล: จ้างงาน และทำให้บ้านรอบๆโตเร็วขึ้น' },
   bulldoze: { label: 'รื้อ',            cost: 5,   tip: 'รื้อถอน' },
 };
 const TOOL_KEYS = Object.keys(TOOLS);
+
+// ตัวเลือกย่อยของแต่ละเครื่องมือ (เอาเมาส์ชี้ปุ่มบนแถบเครื่องมือเพื่อเลือก)
+// pop=คนอยู่ jobs=งาน power/water=ใช้ไฟ/น้ำ cap=ผลิตได้ upkeep=ค่าดูแล/วัน
+const VARIANTS = {
+  res: [
+    { k: 'zone',  label: 'โซนบ้าน (โตเอง)', cost: 20,   note: 'บ้านเล็กโตเป็นคอนโดเองตามความต้องการ' },
+    { k: 'house', label: 'บ้านเดี่ยว',      cost: 150,  pop: 6,  power: 2,  water: 3 },
+    { k: 'twin',  label: 'ทาวน์เฮาส์',      cost: 260,  pop: 15, power: 4,  water: 6 },
+    { k: 'apt',   label: 'อพาร์ตเมนต์',     cost: 480,  pop: 36, power: 8,  water: 11 },
+    { k: 'condo', label: 'คอนโด',           cost: 1000, pop: 90, power: 16, water: 25 },
+  ],
+  com: [
+    { k: 'zone',  label: 'โซนพาณิชย์ (โตเอง)', cost: 30, note: 'ร้านค้า/สำนักงาน โตเองตามความต้องการ' },
+    { k: 'seven', label: '7-Eleven',        cost: 160,  jobs: 6,   power: 3,  water: 2,  note: 'ร้านสะดวกซื้อ' },
+    { k: 'cj',    label: 'CJ',              cost: 160,  jobs: 6,   power: 3,  water: 2,  note: 'ร้านสะดวกซื้อ' },
+    { k: 'kfc',   label: 'KFC',             cost: 320,  jobs: 12,  power: 5,  water: 5,  note: 'ร้านอาหารจานด่วน' },
+    { k: 'gas',   label: 'ปั๊มน้ำมัน',       cost: 450,  jobs: 9,   power: 4,  water: 3 },
+    { k: 'lotus', label: 'โลตัส',           cost: 700,  jobs: 32,  power: 10, water: 8,  note: 'ซูเปอร์มาร์เก็ต' },
+    { k: 'mall',  label: 'ห้างสรรพสินค้า',   cost: 1800, jobs: 100, power: 30, water: 22 },
+  ],
+  power: [
+    { k: 'solar',   label: 'โซลาร์ฟาร์ม (เล็ก)',  cost: 220,  cap: 40,  upkeep: 6 },
+    { k: 'gas',     label: 'โรงไฟฟ้าก๊าซ (กลาง)', cost: 500,  cap: 120, upkeep: 20 },
+    { k: 'thermal', label: 'โรงไฟฟ้าใหญ่',        cost: 1150, cap: 300, upkeep: 45 },
+  ],
+  water: [
+    { k: 'pump',  label: 'สถานีสูบน้ำ (เล็ก)',  cost: 200, cap: 50,  upkeep: 7 },
+    { k: 'plant', label: 'โรงประปา (กลาง)',     cost: 400, cap: 120, upkeep: 15 },
+    { k: 'big',   label: 'โรงประปาใหญ่',         cost: 850, cap: 270, upkeep: 32 },
+  ],
+  service: [
+    { k: 'school',   label: 'โรงเรียน',      cost: 800,  jobs: 26, power: 6,  water: 6,  upkeep: 12, note: 'บ้านรอบๆโตเร็วขึ้น' },
+    { k: 'hospital', label: 'โรงพยาบาล',     cost: 1500, jobs: 60, power: 18, water: 15, upkeep: 26, note: 'บ้านรอบๆโตเร็วขึ้น' },
+  ],
+};
+const DEFAULT_V = { res: 'zone', com: 'zone', ind: 'zone', power: 'gas', water: 'plant', service: 'school' };
+const currentVar = { ...DEFAULT_V };
+const variantOf = t => VARIANTS[t.t]?.find(v => v.k === (t.v || DEFAULT_V[t.t]));
+const fixedVariant = t => { const v = variantOf(t); return v && v.k !== 'zone' ? v : null; };
+const toolCost = tool => VARIANTS[tool]?.find(v => v.k === currentVar[tool])?.cost ?? TOOLS[tool].cost;
 const ZONES = ['res', 'com', 'ind'];
 
 // ตารางตามระดับตึก (ดัชนี = เลเวล 0..3): คน / งาน / ไฟ / น้ำ ต่อช่อง
@@ -152,21 +193,21 @@ function seedStarterCity() {
   }
 
   // โรงไฟฟ้า/โรงประปา: หาช่องว่างติดถนนที่เหมาะ (ประปาต้องอยู่ใกล้น้ำ)
-  const place = (type, ok, near) => {
+  const place = (type, ok, near, v) => {
     let best = null, bd = 1e9;
     for (let z = C - 14; z <= C + 16; z++) for (let x = C - 12; x <= C + 20; x++) {
       if (!flat(x, z) || state.tiles[idx(x, z)] || !adjRoad(x, z) || !ok(x, z)) continue;
       const d = Math.hypot(x - near.x, z - near.z);
       if (d < bd) { bd = d; best = { x, z }; }
     }
-    if (best) put(best.x, best.z, type);
+    if (best) { put(best.x, best.z, type); state.tiles[idx(best.x, best.z)].v = v; }
     return !!best;
   };
   const wp = T(-3, -6), pp = T(14, 4);
-  place('water', (x, z) => nearWater(x, z, 3), wp);
-  place('water', (x, z) => nearWater(x, z, 3), T(5, -6));
-  place('power', () => true, pp);
-  place('power', () => true, T(14, 8));
+  place('water', (x, z) => nearWater(x, z, 3), wp, 'plant');
+  place('water', (x, z) => nearWater(x, z, 3), T(5, -6), 'plant');
+  place('power', () => true, pp, 'gas');
+  place('power', () => true, T(14, 8), 'gas');
   // สวนตรงกลาง
   const pk = T(1, 6); if (flat(pk.x, pk.z)) { state.tiles[idx(pk.x, pk.z)] = null; put(pk.x, pk.z, 'park'); }
 }
@@ -1108,6 +1149,222 @@ function buildWaterPlant(bg) {
 }
 
 // ---------------------------------------------------------------
+// อาคารแบบเลือกเอง (ร้านค้า ปั๊ม โรงเรียน โรงพยาบาล โรงไฟฟ้า/ประปาหลายขนาด ฯลฯ)
+// ---------------------------------------------------------------
+Object.assign(M, {
+  asphalt: std(0x3a3e44, { roughness: 0.95 }),
+  white: std(0xf1efe8),
+  red: std(0xc62828),
+  solar: std(0x1b2a55, { metalness: 0.55, roughness: 0.22 }),
+  schoolWall: std(0xecd9a6),
+  carCols: [0xd33a2c, 0x2f6fb0, 0xe9e3d1, 0x333840, 0xd8a31a].map(c => std(c, { metalness: 0.4, roughness: 0.35 })),
+});
+const bandMats = {};
+const band = c => (bandMats[c] ||= std(c, { roughness: 0.6 }));
+
+// ป้ายตัวอักษร (วาดด้วย canvas เป็นข้อความธรรมดา)
+const textMatCache = new Map();
+function textMat(text, bgc, fg = '#ffffff', fs = 36) {
+  const key = text + bgc + fg + fs;
+  let m = textMatCache.get(key);
+  if (m) return m;
+  const tex = canvasTex(256, 64, (g, w, h) => {
+    g.fillStyle = bgc; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 3; g.strokeRect(3, 3, w - 6, h - 6);
+    g.fillStyle = fg;
+    g.font = `bold ${fs}px "Segoe UI","Leelawadee UI","Noto Sans Thai",sans-serif`;
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, w / 2, h / 2 + 2);
+  });
+  m = new THREE.MeshBasicMaterial({ map: tex });
+  textMatCache.set(key, m);
+  return m;
+}
+const signAt = (bg, text, bgc, fg, px, py, pz, w, h, fs, ry = 0) => put(bg, planeGeo, textMat(text, bgc, fg, fs), px, py, pz, w, h, 1, ry);
+
+// ลานจอดรถ + รถจอด
+function lot(bg, x, z, w, d, cars = 0, seed = 0) {
+  put(bg, boxGeo, M.asphalt, x, 0.035, z, w, 0.01, d);
+  const n = Math.max(2, Math.floor(w / 0.2));
+  for (let k = 0; k <= n; k++) put(bg, boxGeo, M.stopLine, x - w / 2 + (k / n) * w, 0.042, z, 0.008, 0.002, d * 0.7);
+  for (let k = 0; k < cars; k++) {
+    const slot = (k * 2 + seed) % n;
+    const cx = x - w / 2 + ((slot + 0.5) / n) * w;
+    const cm = M.carCols[(k + seed) % M.carCols.length];
+    put(bg, boxGeo, cm, cx, 0.065, z, 0.1, 0.04, 0.19);
+    put(bg, boxGeo, M.glassShop, cx, 0.09, z - 0.01, 0.085, 0.03, 0.1);
+  }
+}
+
+function buildConvenience(bg, name, col, r) {
+  const y0 = 0.03, w = 0.66, d = 0.4, z0 = -0.2;
+  put(bg, boxGeo, M.white, 0, y0 + 0.11, z0, w, 0.22, d);
+  put(bg, boxGeo, M.glassShop, 0, y0 + 0.09, z0 + d / 2 + 0.004, w * 0.82, 0.13, 0.008);
+  put(bg, boxGeo, band(col), 0, y0 + 0.24, z0, w + 0.02, 0.05, d + 0.02);
+  signAt(bg, name, '#' + col.toString(16).padStart(6, '0'), '#ffffff', 0, y0 + 0.24, z0 + d / 2 + 0.016, w * 0.78, 0.042, 34);
+  put(bg, boxGeo, M.concrete, 0, y0 + 0.275, z0, w + 0.02, 0.012, d + 0.02);
+  put(bg, boxGeo, M.metal, 0.2, y0 + 0.31, z0 - 0.05, 0.12, 0.05, 0.1);
+  lot(bg, 0, 0.28, 0.92, 0.4, 2, Math.floor(r * 4));
+}
+function buildKfc(bg, r) {
+  const y0 = 0.03, w = 0.52, d = 0.36, z0 = -0.24;
+  put(bg, boxGeo, M.white, 0, y0 + 0.1, z0, w, 0.2, d);
+  put(bg, boxGeo, M.glassShop, 0, y0 + 0.085, z0 + d / 2 + 0.004, w * 0.8, 0.11, 0.008);
+  put(bg, boxGeo, M.red, 0, y0 + 0.225, z0, w + 0.03, 0.05, d + 0.03);
+  signAt(bg, 'KFC', '#c62828', '#ffffff', 0, y0 + 0.225, z0 + d / 2 + 0.02, 0.3, 0.042, 40);
+  put(bg, boxGeo, M.red, 0, y0 + 0.26, z0, w + 0.03, 0.018, d + 0.03);
+  put(bg, cylGeo, M.pole, 0.4, y0 + 0.2, 0.0, 0.015, 0.4, 0.015);                 // เสาป้ายหน้าร้าน
+  signAt(bg, 'KFC', '#c62828', '#ffffff', 0.4, y0 + 0.4, 0.012, 0.2, 0.05, 40);
+  put(bg, boxGeo, M.stopLine, -0.38, 0.042, 0.2, 0.01, 0.002, 0.55);            // ช่องไดรฟ์ทรู
+  lot(bg, 0, 0.3, 0.9, 0.36, 2, Math.floor(r * 3));
+}
+function buildGasStation(bg, r) {
+  const y0 = 0.03;
+  put(bg, boxGeo, M.asphalt, 0, 0.035, 0.1, 0.94, 0.01, 0.76);
+  put(bg, boxGeo, M.white, 0, y0 + 0.08, -0.36, 0.52, 0.16, 0.2);                 // ร้านสะดวกซื้อ
+  put(bg, boxGeo, M.glassShop, 0, y0 + 0.07, -0.255, 0.4, 0.1, 0.008);
+  put(bg, boxGeo, M.red, 0, y0 + 0.17, -0.36, 0.55, 0.025, 0.23);
+  // หลังคาคลุมหัวจ่าย
+  for (const sx of [-1, 1]) for (const sz of [0, 0.22]) put(bg, cylGeo, M.concrete, sx * 0.32, y0 + 0.1, sz, 0.025, 0.2, 0.025);
+  put(bg, boxGeo, M.white, 0, y0 + 0.215, 0.11, 0.84, 0.03, 0.42);
+  put(bg, boxGeo, M.red, 0, y0 + 0.2, 0.11 + 0.211, 0.84, 0.045, 0.008);
+  put(bg, boxGeo, M.concrete, -0.17, y0 + 0.012, 0.11, 0.09, 0.024, 0.36);        // เกาะหัวจ่าย
+  put(bg, boxGeo, M.concrete, 0.17, y0 + 0.012, 0.11, 0.09, 0.024, 0.36);
+  for (const sx of [-0.17, 0.17]) for (const sz of [0.0, 0.22]) put(bg, boxGeo, band(0x2f6fb0), sx, y0 + 0.07, sz, 0.05, 0.09, 0.05);
+  put(bg, cylGeo, M.pole, 0.42, y0 + 0.25, 0.4, 0.015, 0.5, 0.015);               // เสาป้ายราคา
+  signAt(bg, 'น้ำมัน', '#1b3d6e', '#ffd54a', 0.42, y0 + 0.5, 0.4, 0.22, 0.06, 34);
+  if (r > 0.4) put(bg, boxGeo, M.carCols[1], -0.17, 0.065, 0.3, 0.1, 0.04, 0.19);
+}
+function buildSupermarket(bg, r) {
+  const y0 = 0.03;
+  const top = block(bg, 0.88, 2, 0.5, FM.office[0], 0, y0, -0.22);
+  roofCap(bg, 0.88, 0.5, top);
+  put(bg, boxGeo, band(0x1e7b4a), 0, y0 + 0.285, -0.22 + 0.25 + 0.01, 0.9, 0.07, 0.025);
+  signAt(bg, 'โลตัส', '#1e7b4a', '#ffffff', 0, y0 + 0.285, -0.22 + 0.25 + 0.024, 0.5, 0.058, 40);
+  put(bg, boxGeo, M.glassShop, 0.0, y0 + 0.08, -0.22 + 0.25 + 0.004, 0.32, 0.14, 0.008);   // ทางเข้า
+  put(bg, boxGeo, M.white, 0, y0 + 0.17, -0.22 + 0.25 + 0.05, 0.4, 0.014, 0.1);
+  lot(bg, 0, 0.3, 0.92, 0.36, 3, Math.floor(r * 4));
+}
+function buildMall(bg, r) {
+  const y0 = 0.03;
+  const top = block(bg, 0.92, 4, 0.62, FM.office[1], 0, y0, -0.17);
+  const t2 = roofCap(bg, 0.92, 0.62, top);
+  put(bg, boxGeo, M.glassShop, 0, y0 + 0.17, -0.17 + 0.31 + 0.07, 0.36, 0.32, 0.14);        // อะเทรียมกระจกหน้าห้าง
+  put(bg, boxGeo, M.white, 0, y0 + 0.34, -0.17 + 0.31 + 0.07, 0.4, 0.02, 0.18);
+  signAt(bg, 'ห้างสรรพสินค้า', '#7a2f8f', '#ffffff', 0, y0 + 0.5, -0.17 + 0.31 + 0.012, 0.66, 0.08, 30);
+  put(bg, boxGeo, band(0x7a2f8f), 0, top - 0.04, -0.17, 0.95, 0.03, 0.65);
+  put(bg, cylGeo, M.metal, 0.3, t2 + 0.1, -0.2, 0.012, 0.2, 0.012);
+  lot(bg, 0, 0.36, 0.92, 0.26, 3, Math.floor(r * 4));
+}
+function buildTownhouse(bg, r) {
+  const y0 = 0.03, w = 0.25, d = 0.5;
+  for (let k = -1; k <= 1; k++) {
+    const mats = FM.res[(k + 1 + Math.floor(r * 4)) % FM.res.length];
+    const x = k * w;
+    block(bg, w - 0.006, 3, d, mats, x, y0, 0);
+    put(bg, gableGeo(d + 0.04, w + 0.004, 0.14), M.roofTile, x, y0 + 3 * FLOOR, 0, 1, 1, 1, 0);
+    put(bg, boxGeo, M.door, x + 0.05, y0 + 0.07, d / 2 + 0.003, 0.06, 0.13, 0.01);
+    put(bg, boxGeo, M.concrete, x + 0.05, y0 + 0.012, d / 2 + 0.04, 0.1, 0.024, 0.06);
+  }
+  shrub(bg, -0.25, 0.56 - 0.04, 0.1, 0); shrub(bg, 0.25, 0.54 - 0.04, 0.1, 2);
+}
+function buildSchool(bg, r) {
+  const y0 = 0.03;
+  const wall = [M.schoolWall, M.schoolWall, M.roofFlat, M.roofFlat, M.schoolWall, M.schoolWall];
+  const top = block(bg, 0.84, 2, 0.26, FM.res[0], 0, y0, -0.32);
+  put(bg, gableGeo(0.3, 0.88, 0.1), M.roofTile, 0, top, -0.32, 1, 1, 1, Math.PI / 2);
+  const top2 = block(bg, 0.26, 2, 0.36, FM.res[0], -0.29, y0, -0.01);
+  put(bg, gableGeo(0.3, 0.4, 0.1), M.roofTile, -0.29, top2, -0.01, 1, 1, 1, 0);
+  put(bg, boxGeo, M.door, 0.0, y0 + 0.07, -0.32 + 0.133, 0.1, 0.14, 0.01);
+  signAt(bg, 'โรงเรียน', '#2f6fb0', '#ffffff', 0.0, y0 + 0.27, -0.32 + 0.14, 0.4, 0.05, 30);
+  // สนามกีฬาลู่วิ่ง
+  put(bg, cylGeo, M.path, 0.17, 0.036, 0.22, 0.6, 0.006, 0.4);
+  put(bg, cylGeo, M.park, 0.17, 0.04, 0.22, 0.5, 0.006, 0.3);
+  put(bg, boxGeo, M.stopLine, 0.17, 0.045, 0.22, 0.01, 0.002, 0.3);
+  // เสาธง
+  put(bg, cylGeo, M.metal, -0.1, y0 + 0.2, -0.1, 0.008, 0.4, 0.008);
+  put(bg, boxGeo, M.red, -0.07, y0 + 0.36, -0.1, 0.06, 0.04, 0.004);
+  shrub(bg, -0.38, 0.3, 0.1, 1); shrub(bg, -0.1, 0.4, 0.09, 3);
+}
+function buildHospital(bg, r) {
+  const y0 = 0.03;
+  const top = block(bg, 0.8, 5, 0.46, FM.res[2], 0, y0, -0.2);
+  const t2 = roofCap(bg, 0.8, 0.46, top);
+  const fz = -0.2 + 0.23;
+  put(bg, boxGeo, M.white, 0.0, y0 + 0.68, fz + 0.005, 0.2, 0.2, 0.008);                    // ป้ายกากบาทแดง
+  put(bg, boxGeo, M.red, 0.0, y0 + 0.68, fz + 0.011, 0.04, 0.15, 0.006);
+  put(bg, boxGeo, M.red, 0.0, y0 + 0.68, fz + 0.011, 0.15, 0.04, 0.006);
+  signAt(bg, 'โรงพยาบาล', '#c62828', '#ffffff', 0, y0 + 0.5, fz + 0.012, 0.5, 0.06, 30);
+  put(bg, boxGeo, M.glassShop, 0, y0 + 0.08, fz + 0.004, 0.3, 0.14, 0.008);
+  put(bg, boxGeo, M.white, 0, y0 + 0.17, fz + 0.09, 0.42, 0.018, 0.2);                      // หลังคาทางเข้า/รถพยาบาล
+  for (const sx of [-0.18, 0.18]) put(bg, cylGeo, M.concrete, sx, y0 + 0.085, fz + 0.17, 0.02, 0.17, 0.02);
+  put(bg, cylGeo, M.concrete, -0.2, t2 + 0.012, -0.2, 0.26, 0.02, 0.26);                     // ลานจอดเฮลิคอปเตอร์
+  put(bg, boxGeo, M.stopLine, -0.2, t2 + 0.025, -0.2, 0.12, 0.004, 0.025);
+  put(bg, boxGeo, M.white, 0.3, 0.07, 0.36, 0.11, 0.07, 0.22);                              // รถพยาบาล
+  put(bg, boxGeo, M.red, 0.3, 0.075, 0.36, 0.115, 0.012, 0.22);
+}
+function buildSolar(bg) {
+  const y0 = 0.03;
+  put(bg, boxGeo, M.park, 0, 0.035, 0, 0.94, 0.01, 0.94);
+  for (let row = 0; row < 3; row++) {
+    const z = -0.3 + row * 0.27;
+    for (let c = 0; c < 4; c++) {
+      const x = -0.34 + c * 0.23;
+      const p = put(bg, boxGeo, M.solar, x, y0 + 0.07, z, 0.2, 0.014, 0.14);
+      p.rotation.x = -0.45;
+      put(bg, boxGeo, M.metal, x, y0 + 0.032, z + 0.02, 0.012, 0.06, 0.012);
+    }
+  }
+  put(bg, boxGeo, M.white, 0.38, y0 + 0.05, 0.42, 0.14, 0.1, 0.1);                           // ตู้อินเวอร์เตอร์
+}
+function buildBigPlant(bg) {
+  const y0 = 0.03;
+  const top = block(bg, 0.92, 3, 0.4, FM.ind[0], 0, y0, 0.28);
+  roofCap(bg, 0.92, 0.4, top);
+  for (const x of [-0.3, 0, 0.3]) put(bg, coolGeo, M.concrete, x, y0 + 0.4, -0.22, 0.4, 0.8, 0.4);
+  put(bg, cylGeo, M.stack, -0.38, y0 + 0.75, 0.28, 0.07, 1.4, 0.07);
+  put(bg, cylGeo, M.stack, 0.38, y0 + 0.75, 0.28, 0.07, 1.4, 0.07);
+  put(bg, boxGeo, M.metal, 0.0, y0 + 0.05, 0.5 - 0.02, 0.5, 0.08, 0.04);
+}
+function buildGasPlant(bg) { buildPowerPlant(bg); }
+function buildPump(bg) {
+  const y0 = 0.03;
+  const top = block(bg, 0.44, 2, 0.34, FM.office[1], 0.2, y0, 0.28);
+  roofCap(bg, 0.44, 0.34, top);
+  put(bg, cylGeo, M.tank, -0.25, y0 + 0.15, -0.1, 0.3, 0.3, 0.3);
+  put(bg, coneGeo, M.tank, -0.25, y0 + 0.34, -0.1, 0.31, 0.1, 0.31);
+  put(bg, cylGeo, M.metal, -0.06, y0 + 0.03, 0.2, 0.03, 0.06, 0.03);
+  put(bg, boxGeo, M.water, 0.15, 0.036, -0.28, 0.6, 0.008, 0.26);
+}
+function buildBigWater(bg) {
+  buildWaterPlant(bg);
+  const y0 = 0.03;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) put(bg, cylGeo, M.metal, 0.02 + sx * 0.07, y0 + 0.28, -0.26 + sz * 0.07, 0.016, 0.56, 0.016);
+  put(bg, cylGeo, M.tank, 0.02, y0 + 0.66, -0.26, 0.3, 0.2, 0.3);
+  put(bg, coneGeo, M.tank, 0.02, y0 + 0.82, -0.26, 0.31, 0.12, 0.31);
+}
+
+function buildVariant(bg, type, v, r, r2) {
+  if (type === 'res') {
+    if (v === 'house') return buildZoneBuilding(bg, 'res', 1, r, r2);
+    if (v === 'twin') return buildTownhouse(bg, r);
+    if (v === 'apt') return buildZoneBuilding(bg, 'res', 2, r, r2);
+    return buildZoneBuilding(bg, 'res', 3, r, r2);
+  }
+  if (type === 'com') {
+    if (v === 'seven') return buildConvenience(bg, '7-ELEVEN', 0x1f7a4d, r);
+    if (v === 'cj') return buildConvenience(bg, 'CJ', 0x2a62b0, r);
+    if (v === 'kfc') return buildKfc(bg, r);
+    if (v === 'gas') return buildGasStation(bg, r);
+    if (v === 'lotus') return buildSupermarket(bg, r);
+    return buildMall(bg, r);
+  }
+  if (type === 'service') return v === 'hospital' ? buildHospital(bg, r) : buildSchool(bg, r);
+  if (type === 'power') return v === 'solar' ? buildSolar(bg) : v === 'thermal' ? buildBigPlant(bg) : buildGasPlant(bg);
+  if (type === 'water') return v === 'pump' ? buildPump(bg) : v === 'big' ? buildBigWater(bg) : buildWaterPlant(bg);
+}
+
+// ---------------------------------------------------------------
 // สร้าง mesh ของแต่ละช่อง
 // ---------------------------------------------------------------
 const tileGroup = new THREE.Group();
@@ -1274,7 +1531,19 @@ function buildTile(x, z) {
     const bg = new THREE.Group();
     bg.rotation.y = facing(x, z, r);
     g.add(bg);
-    buildWaterPlant(bg);
+    buildVariant(bg, 'water', t.v || DEFAULT_V.water, r, r2);
+  } else if (t.t === 'service') {
+    put(g, boxGeo, M.walk, 0, 0.015, 0, 0.96, 0.03, 0.96);
+    const bg = new THREE.Group();
+    bg.rotation.y = facing(x, z, r);
+    g.add(bg);
+    buildVariant(bg, 'service', t.v || DEFAULT_V.service, r, r2);
+  } else if (ZONES.includes(t.t) && fixedVariant(t)) {
+    put(g, boxGeo, M.walk, 0, 0.015, 0, 0.96, 0.03, 0.96);
+    const bg = new THREE.Group();
+    bg.rotation.y = facing(x, z, r);
+    g.add(bg);
+    buildVariant(bg, t.t, t.v, r, r2);
   } else if (ZONES.includes(t.t)) {
     put(g, boxGeo, M.zone[t.t], 0, 0.015, 0, 0.94, 0.03, 0.94);
     const lv = t.lv;
@@ -1294,7 +1563,7 @@ function buildTile(x, z) {
     }
   } else if (t.t === 'power') {
     put(g, boxGeo, M.walk, 0, 0.015, 0, 0.96, 0.03, 0.96);
-    const pm = getModel('power', 0, r);
+    const pm = (t.v && t.v !== 'gas') ? null : getModel('power', 0, r);
     if (pm) {
       const c = pm.clone(true);
       c.position.set(0, 0.03, 0);
@@ -1304,7 +1573,7 @@ function buildTile(x, z) {
       const bg = new THREE.Group();
       bg.rotation.y = rot();
       g.add(bg);
-      buildPowerPlant(bg);
+      buildVariant(bg, 'power', t.v || DEFAULT_V.power, r, r2);
     }
   } else if (t.t === 'park') {
     put(g, boxGeo, M.park, 0, 0.02, 0, 0.96, 0.04, 0.96);
@@ -1363,7 +1632,7 @@ function toast(msg) {
 // ราคาจริง: ถนนบนน้ำ = สะพานแพงกว่า
 function buildCost(tool, x, z) {
   if (tool === 'road' && isWaterTile(x, z)) return 40;
-  return TOOLS[tool].cost;
+  return toolCost(tool);
 }
 
 function applyTool(x, z) {
@@ -1384,10 +1653,12 @@ function applyTool(x, z) {
   if (cur) return; // วางทับของเดิมไม่ได้ ต้องรื้อก่อน
   const cost2 = buildCost(currentTool, x, z);
   if (isWaterTile(x, z) && currentTool !== 'road') return toast('สร้างบนน้ำไม่ได้ (ทำได้แค่สะพาน)');
+  const CV = VARIANTS[currentTool] && currentVar[currentTool];
+  if (CV && CV !== 'zone' && ['res', 'com', 'service'].includes(currentTool) && !adjRoad(x, z)) return toast('อาคารนี้ต้องตั้งติดถนน');
   if (currentTool === 'water' && !nearWater(x, z, 3)) return toast('โรงประปาต้องอยู่ใกล้แม่น้ำหรือทะเล (ภายใน 3 ช่อง)');
   if (state.money < cost2) return toast('เงินไม่พอ');
   state.money -= cost2;
-  state.tiles[i] = { t: currentTool, lv: 0 };
+  state.tiles[i] = VARIANTS[currentTool] ? { t: currentTool, lv: 0, v: currentVar[currentTool] } : { t: currentTool, lv: 0 };
   refresh(x, z);
   updateHUD();
 }
@@ -1401,25 +1672,31 @@ const adjRoad = (x, z) => isType(x + 1, z, 'road') || isType(x - 1, z, 'road') |
 function computeStats() {
   const s = {
     pop: 0, jobsCom: 0, jobsInd: 0, powerCap: 0, powerUse: 0, waterCap: 0, waterUse: 0,
-    roads: 0, bridges: 0, parks: 0, plants: 0, wplants: 0, comLv: 0, indLv: 0, junctions: 0,
+    roads: 0, bridges: 0, parks: 0, plants: 0, wplants: 0, comLv: 0, indLv: 0, junctions: 0, upkeep: 0,
   };
   state.tiles.forEach((t, i) => {
     if (!t) return;
     const lv = t.lv || 0;
+    const FV = (t.t === 'res' || t.t === 'com' || t.t === 'service') ? fixedVariant(t) : null;
+    if (FV) {
+      if (t.t === 'res') s.pop += FV.pop; else s.jobsCom += FV.jobs;
+      s.powerUse += FV.power; s.waterUse += FV.water; s.upkeep += FV.upkeep || 0;
+      return;
+    }
     if (t.t === 'res') { s.pop += POP_PER[lv]; s.powerUse += POWER_USE.res[lv]; s.waterUse += WATER_USE.res[lv]; }
     else if (t.t === 'com') { s.jobsCom += JOBS_COM[lv]; s.powerUse += POWER_USE.com[lv]; s.waterUse += WATER_USE.com[lv]; s.comLv += lv; }
     else if (t.t === 'ind') { s.jobsInd += JOBS_IND[lv]; s.powerUse += POWER_USE.ind[lv]; s.waterUse += WATER_USE.ind[lv]; s.indLv += lv; }
     else if (t.t === 'road') { s.roads++; if (tileIsWater[i]) s.bridges++; if (isJunction(i % N, Math.floor(i / N))) s.junctions++; }
     else if (t.t === 'park') { s.parks++; s.waterUse += 1; }
-    else if (t.t === 'power') { s.plants++; s.powerCap += POWER_CAP; }
-    else if (t.t === 'water') { s.wplants++; s.waterCap += WATER_CAP * (1 + 0.15 * weather.state.rain); } // ฝนตก น้ำดิบมากขึ้น
+    else if (t.t === 'power') { const V = variantOf(t); s.plants++; s.powerCap += V.cap; s.upkeep += V.upkeep; }
+    else if (t.t === 'water') { const V = variantOf(t); s.wplants++; s.waterCap += V.cap * (1 + 0.15 * weather.state.rain); s.upkeep += V.upkeep; } // ฝนตก น้ำดิบมากขึ้น
   });
   // อากาศร้อนคนใช้น้ำมากขึ้น ฝนตกใช้น้อยลง
   s.waterUse = Math.round(s.waterUse * clamp(1 + (tempC - 30) * 0.02 - 0.15 * weather.state.rain, 0.7, 1.3));
   s.waterCap = Math.round(s.waterCap);
   s.jobs = s.jobsCom + s.jobsInd;
   s.income = s.pop * 0.45 + s.jobsCom * 0.9 + s.jobsInd * 0.8;
-  s.expense = s.roads * 0.5 + s.bridges * 1.5 + s.plants * 20 + s.wplants * 15 + s.parks * 2 + s.junctions * 0.5;
+  s.expense = s.roads * 0.5 + s.bridges * 1.5 + s.upkeep + s.parks * 2 + s.junctions * 0.5;
   s.net = s.income - s.expense;
   const workD = clamp((s.pop + 20 - s.jobs) / 90, 0, 1);
   s.demand = {
@@ -1438,7 +1715,7 @@ function tick() {
   // ช่องที่อยู่ใกล้สวน (รัศมี 3) โตเร็วขึ้น
   const nearPark = new Set();
   state.tiles.forEach((t, i) => {
-    if (t?.t !== 'park') return;
+    if (t?.t !== 'park' && t?.t !== 'service') return;
     const px = i % N, pz = Math.floor(i / N);
     for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
       if (inBounds(px + dx, pz + dz)) nearPark.add(idx(px + dx, pz + dz));
@@ -1449,7 +1726,7 @@ function tick() {
     for (let x = 0; x < N; x++) {
       const i = idx(x, z);
       const t = state.tiles[i];
-      if (!t || !ZONES.includes(t.t)) continue;
+      if (!t || !ZONES.includes(t.t) || fixedVariant(t)) continue;
 
       if (!adjRoad(x, z)) {
         if (t.lv > 0) { t.lv = 0; buildTile(x, z); }
@@ -1493,18 +1770,76 @@ function updateHUD(s = computeStats()) {
   $('dI').style.height = s.demand.ind * 100 + '%';
 }
 
-// แถบเครื่องมือ
+// แถบเครื่องมือ (เอาเมาส์ชี้ปุ่มที่มีตัวเลือกย่อยจะมีเมนูเด้งขึ้นมา)
 const toolbar = $('toolbar');
 const toolBtns = {};
+const toolSmall = {};
+const keyLabel = n => (n + 1) % 10;
+function refreshToolSmall(k) {
+  const n = TOOL_KEYS.indexOf(k);
+  const V = VARIANTS[k]?.find(v => v.k === currentVar[k]);
+  const c = V ? V.cost : TOOLS[k].cost;
+  toolSmall[k].textContent = `${c ? '$' + c : 'ฟรี'} · ${keyLabel(n)}`;
+  const lbl = toolBtns[k].querySelector('.lbl');
+  lbl.textContent = V && V.k !== 'zone' && VARIANTS[k].length > 1 ? V.label.replace(/ \(.*\)/, '') : TOOLS[k].label;
+}
 TOOL_KEYS.forEach((k, n) => {
   const b = document.createElement('button');
   b.className = 'tool';
-  b.title = TOOLS[k].tip;
-  b.innerHTML = `<span class="ico">${ICON[k]}</span><span class="lbl">${TOOLS[k].label}</span><small>${TOOLS[k].cost ? '$' + TOOLS[k].cost : 'ฟรี'} · ${n + 1}</small>`;
+  b.title = VARIANTS[k] ? '' : TOOLS[k].tip;
+  b.innerHTML = `<span class="ico">${ICON[k] || ICON.com}</span><span class="lbl">${TOOLS[k].label}</span><small></small>`;
   b.onclick = () => selectTool(k);
   toolbar.appendChild(b);
   toolBtns[k] = b;
+  toolSmall[k] = b.querySelector('small');
+  refreshToolSmall(k);
+  if (VARIANTS[k]) {
+    b.addEventListener('mouseenter', () => showFly(k));
+    b.addEventListener('mouseleave', () => hideFly());
+  }
 });
+
+const fly = document.createElement('div');
+fly.id = 'fly';
+document.body.appendChild(fly);
+let flyTool = null, flyTimer = 0;
+function variantStats(v) {
+  const p = [];
+  if (v.pop) p.push(`อยู่ได้ ${v.pop} คน`);
+  if (v.jobs) p.push(`งาน ${v.jobs}`);
+  if (v.cap) p.push(`ผลิต ${v.cap}`);
+  if (v.power || v.water) p.push(`ใช้ไฟ ${v.power} · น้ำ ${v.water}`);
+  if (v.upkeep) p.push(`ดูแล $${v.upkeep}/วัน`);
+  return (p.join(' · ') || '') + (v.note ? (p.length ? ' — ' : '') + v.note : '');
+}
+function showFly(k) {
+  clearTimeout(flyTimer);
+  if (flyTool !== k || !fly.classList.contains('show')) {
+    flyTool = k;
+    fly.innerHTML = `<div class="ft">${TOOLS[k].label}</div>` + VARIANTS[k].map(v =>
+      `<button class="fi${currentVar[k] === v.k ? ' on' : ''}" data-k="${v.k}"><span class="fn">${v.label}</span><span class="fc">$${v.cost.toLocaleString()}</span><span class="fs">${variantStats(v)}</span></button>`
+    ).join('');
+  }
+  const r = toolBtns[k].getBoundingClientRect();
+  fly.style.left = Math.max(8, Math.min(window.innerWidth - 308, r.left + r.width / 2 - 150)) + 'px';
+  fly.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  fly.classList.add('show');
+}
+function hideFly(delay = 180) {
+  clearTimeout(flyTimer);
+  flyTimer = setTimeout(() => fly.classList.remove('show'), delay);
+}
+fly.addEventListener('mouseenter', () => clearTimeout(flyTimer));
+fly.addEventListener('mouseleave', () => hideFly());
+fly.addEventListener('click', e => {
+  const it = e.target.closest('.fi');
+  if (!it || !flyTool) return;
+  currentVar[flyTool] = it.dataset.k;
+  refreshToolSmall(flyTool);
+  selectTool(flyTool);
+  fly.classList.remove('show');
+});
+document.addEventListener('pointerdown', e => { if (!fly.contains(e.target) && !toolbar.contains(e.target)) fly.classList.remove('show'); });
 function selectTool(k) {
   currentTool = k;
   for (const key in toolBtns) toolBtns[key].classList.toggle('active', key === k);
@@ -1531,7 +1866,8 @@ $('reset').onclick = () => {
 };
 window.addEventListener('keydown', e => {
   const n = parseInt(e.key, 10);
-  if (n >= 1 && n <= TOOL_KEYS.length) selectTool(TOOL_KEYS[n - 1]);
+  if (n >= 1 && n <= 9 && n <= TOOL_KEYS.length) selectTool(TOOL_KEYS[n - 1]);
+  if (e.key === '0') selectTool('bulldoze');
   if (e.key === 'Escape') selectTool('select');
   if (e.key === ' ') { e.preventDefault(); const b = document.querySelector(`#speed button[data-s="${speed === 0 ? 1 : 0}"]`); b.click(); }
 });
