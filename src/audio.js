@@ -411,7 +411,10 @@ export function createAudio() {
     if (acc >= 0.1) {
       const step = acc; acc = 0;
       const day = 1 - env.night;
-      smooth(L.wind.g.gain, (0.03 + 0.38 * env.wind + 0.12 * env.rain) * (0.55 + 0.45 * (1 - prox * 0.5)));
+      
+      // ลดเสียงลมลง 30% ด้วยการคูณ * 0.7 ท้ายบรรทัดนี้
+      smooth(L.wind.g.gain, (0.03 + 0.38 * env.wind + 0.12 * env.rain) * (0.55 + 0.45 * (1 - prox * 0.5)) * 0.7);
+
       smooth(L.wind.filters[0].frequency, 300 + 700 * env.wind);
       smooth(L.rain.g.gain, env.rain * (0.18 + 0.5 * prox));
       smooth(L.water.g.gain, env.waterNear * (0.04 + 0.4 * near) * (1 - 0.3 * env.rain));
