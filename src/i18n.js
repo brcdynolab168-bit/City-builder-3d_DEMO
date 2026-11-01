@@ -11,6 +11,7 @@ export const LANGS = [
 
 const D = {
   th: {
+    "dow.0": "จันทร์", "dow.1": "อังคาร", "dow.2": "พุธ", "dow.3": "พฤหัสบดี", "dow.4": "ศุกร์", "dow.5": "เสาร์", "dow.6": "อาทิตย์",
     "fr.online": "ออนไลน์", "fr.onlineNow": "ตอนนี้มีผู้เล่นออนไลน์ {n} คน",
     "pl.tab.info": "ข้อมูล",
     "pl.tab.rev": "รีวิว",
@@ -517,6 +518,7 @@ const D = {
     'daylen': '1 วันในเกม = 5 นาที',
   },
   en: {
+    "dow.0": "Mon", "dow.1": "Tue", "dow.2": "Wed", "dow.3": "Thu", "dow.4": "Fri", "dow.5": "Sat", "dow.6": "Sun",
     "fr.online": "Online", "fr.onlineNow": "{n} player(s) online now",
     "pl.tab.info": "Info",
     "pl.tab.rev": "Reviews",
@@ -1016,6 +1018,7 @@ const D = {
     'daylen': '1 in-game day = 5 minutes',
   },
   zh: {
+    "dow.0": "周一", "dow.1": "周二", "dow.2": "周三", "dow.3": "周四", "dow.4": "周五", "dow.5": "周六", "dow.6": "周日",
     "fr.online": "在线", "fr.onlineNow": "当前有 {n} 位玩家在线",
     "pl.tab.info": "信息",
     "pl.tab.rev": "评价",

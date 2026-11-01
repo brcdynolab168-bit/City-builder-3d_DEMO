@@ -3034,8 +3034,8 @@ function refreshLevelBadge() {
   let el = $('cityLv');
   if (!el) {
     el = document.createElement('span'); el.id = 'cityLv';
-    el.style.cssText = 'margin-left:6px;padding:1px 7px;border-radius:9px;background:#ffb300;color:#3a2600;font-size:11px;font-weight:700;white-space:nowrap';
-    $('cityName').after(el);
+    el.style.cssText = 'display:block;width:fit-content;margin:3px 0 0;padding:1px 7px;border-radius:9px;background:#ffb300;color:#3a2600;font-size:11px;font-weight:700;white-space:nowrap';
+    $('cityName').parentElement.appendChild(el);
   }
   const next = LEVELS[cityLevel()];
   el.textContent = 'Lv.' + cityLevel() + ' ' + t('lv.' + LEVELS[cityLevel() - 1].key) + ' · XP ' + fmt(state.xp || 0) + (next ? ' / ' + fmt(next.xp) : '');
@@ -4182,6 +4182,7 @@ function updateHUD(s = computeStats()) {
   net.textContent = (s.net >= 0 ? '+' : '') + Math.round(s.net * ECON).toLocaleString();
   net.classList.toggle('bad', s.net < 0);
   $('day').textContent = state.day;
+  { const dw = state.day % 7, el = $('dow'); el.textContent = t('dow.' + dw); el.classList.toggle('we', dw >= 5); }   // วันแรกของเกม = วันจันทร์
   $('powerBar').style.width = clamp(s.powerCap ? 100 * s.powerUse / s.powerCap : 0, 0, 100) + '%';
   $('powerBar').style.background = s.powerUse >= s.powerCap && s.powerUse > 0 ? 'var(--bad)' : s.powerUse > s.powerCap * 0.85 ? 'var(--warn)' : 'var(--good)';
   $('waterBar').style.width = clamp(s.waterCap ? 100 * s.waterUse / s.waterCap : 0, 0, 100) + '%';
