@@ -27,6 +27,7 @@ import { createNews, demographics, needs as calcNeeds, PAGES, pickOf } from './c
 import { LEVELS, MAX_LEVEL, levelChecks, reachableLevel, levelFromPop, dailyXp, buildXp } from './levels.js';
 import { GOODS, trade } from './trade.js';
 import { createPlacePanel } from './place.js';
+import { QUESTS } from './quests.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ---------------------------------------------------------------
@@ -457,6 +458,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = false; // อัปเดตเงาเป็นช่วงๆ (ดูใน loop) ลดภาระ GPU
+let fastCount = 0, fastNeed = 8, lastRaiseAt = 0;
 let slowCount = 0, shadowTick = 0, baseRatio = 1, dynScale = 1, dynCool = 0;
 let gpuName = '';
 try {
@@ -2335,6 +2337,31 @@ function addPuffs(wx, wy, wz, n = 9) {
   }
 }
 
+// ป้ายเวลาที่เหลือเหนือไซต์ก่อสร้าง (แสดงเมื่อเหลือเกิน 1 นาที) อัปเดตเมื่อตัวเลขนาทีเปลี่ยน
+const siteLabelMats = new Map();
+function updateSiteLabel(e, sg) {
+  if (!sg) return;
+  const left = Math.max(0, (1 - e.t.cs.p) * buildSecs(e.t) / Math.max(1, speed));
+  const txt = left < 60 ? '' : t('pl.r.left', { n: left >= 3600 ? (left / 3600).toFixed(1) + ' ' + t('pl.r.hr') : Math.round(left / 60) + ' ' + t('pl.r.min') });
+  if (e.labelTxt === txt) return;
+  e.labelTxt = txt;
+  if (!txt) { if (e.label) e.label.visible = false; return; }
+  let mat = siteLabelMats.get(txt);
+  if (!mat) {
+    const tex = canvasTex(256, 64, (g, w, h) => {
+      g.fillStyle = 'rgba(15,20,30,.82)'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#ffb300'; g.lineWidth = 4; g.strokeRect(2, 2, w - 4, h - 4);
+      g.fillStyle = '#ffd36a'; g.font = 'bold 34px "Segoe UI","Leelawadee UI","Noto Sans Thai","Microsoft YaHei",sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, w / 2, h / 2 + 2);
+    });
+    mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+    siteLabelMats.set(txt, mat);
+    if (siteLabelMats.size > 400) siteLabelMats.clear();
+  }
+  if (!e.label) { e.label = new THREE.Sprite(mat); e.label.renderOrder = 10; e.label.scale.set(1.3, 0.325, 1); e.label.userData.ownMat = false; sg.add(e.label); }
+  e.label.material = mat; e.label.visible = true;
+  e.label.position.set(e.cx, e.H + 0.5, e.cz);
+}
 function animateConstruction(dt, time) {
   if (constructing.size) {
     const done = [];
@@ -2346,6 +2373,7 @@ function animateConstruction(dt, time) {
       const sg = meshes[e.i];
       if (sg) { _sp.center.copy(sg.position); _sp.radius = 3; if (!_fr.intersectsSphere(_sp)) continue; }
       updateSite(e, time);
+      updateSiteLabel(e, sg);
     }
     for (const e of done) {
       const t = e.t;
@@ -2894,7 +2922,7 @@ function computeStats() {
   s.extraTax.industry = Math.max(0, s.extraTax.industry - s.trade.extraCost * 0.1);   // ไม่มีสถานี: วัตถุดิบแพง กำไรโรงงานลด
   // ภาษีแยกประเภท (รวมกันเท่ากับสูตรเดิม + ภาษีพิเศษของธุรกิจใหม่)
   s.taxes = {
-    land: s.pop * 0.2 * (1 - 0.05 * (pol2.greenCut || 0)), pit: s.pop * 0.25, vat: s.jobsCom * 0.5, corp: s.jobsCom * 0.4 + s.jobsInd * 0.5, ind: s.jobsInd * 0.3,
+    land: s.pop * 0.2 * (1 - 0.05 * (pol2.greenCut || 0)), pit: s.pop * 0.25, vat: s.jobsCom * 0.5 * (state.day % 7 >= 5 ? 1.15 : 1), corp: s.jobsCom * 0.4 + s.jobsInd * 0.5, ind: s.jobsInd * 0.3 * (state.day % 7 >= 5 ? 0.8 : 1),
     vehicle: s.pop * 0.025 * (1 - s.evShare * 0.25 * (pol2.evCut || 0)), export: s.trade.income, finance: s.extraTax.finance, health: s.extraTax.health, edu: s.extraTax.edu, transit: s.extraTax.transit, leisure: s.extraTax.leisure, industry: s.extraTax.industry, parking: s.extraTax.parking,
   };
   s.income = Object.values(s.taxes).reduce((a, b) => a + b, 0);
@@ -3079,6 +3107,7 @@ function checkLevelUp() {
     toast(t('lv.up', { n: lv, name }));
     addNews('good', ['news.lvup', { n: lv, name }]);
     audio.sfx('place');
+    if (lv >= 3 && lv > (state.slowWarned || 0)) { state.slowWarned = lv; setTimeout(() => { toast(t('lv.slow')); addNews('warn', ['lv.slow', {}]); }, 3500); }   // เตือนครั้งเดียวต่อระดับ
   }
   refreshLevelBadge();
 }
@@ -3911,18 +3940,78 @@ function placeDescribe(i) {
   const residents = pop ? Array.from({ length: Math.min(5, pop) }, (_, k) => seededName(mi * 29 + k * 11 + 3)) : null;
   return { name, sub: t('tool.' + tl.t) + (tl.fw ? '' : ''), desc, rows, factors, score: sc / ws, residents, canUpgrade: tl.t === 'res' && !!upgradeOptions(mi)?.opts.length && !(tl.cs && !tl.cs.to) };
 }
+// ---------- ภารกิจ ----------
+const questPanel = document.createElement('div');
+questPanel.id = 'questPanel';
+document.body.appendChild(questPanel);
+{
+  const st = document.createElement('style');
+  st.textContent = `#questPanel{position:fixed;z-index:9;right:64px;top:70px;width:min(340px,calc(100vw - 80px));max-height:calc(100vh - 240px);overflow:auto;background:rgba(10,15,24,.96);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.18);border-radius:12px;color:#fff;box-shadow:0 14px 36px rgba(0,0,0,.55);opacity:0;pointer-events:none;transform:translateX(12px);transition:opacity .15s,transform .15s;font-size:13px;padding:10px 12px}
+#questPanel.show{opacity:1;pointer-events:auto;transform:none}#questPanel h3{margin:0 0 8px;font-size:15px;display:flex;justify-content:space-between;align-items:center}#questPanel h3 span{font-size:11px;color:#9aa6b2;font-weight:400}
+#questPanel .q{padding:8px 0;border-top:1px solid rgba(255,255,255,.08)}#questPanel .q b{display:block;font-size:13.5px}#questPanel .q i{display:block;font-style:normal;color:#9aa6b2;font-size:11.5px;margin:1px 0 5px}
+#questPanel .qb{height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}#questPanel .qb u{display:block;height:100%;background:#4fc3f7}#questPanel .qr{display:flex;justify-content:space-between;font-size:11.5px;margin-top:4px;color:#ffd36a}#questPanel .q.done{opacity:.5}#questPanel .q.done .qb u{background:#66bb6a}`;
+  document.head.appendChild(st);
+  const btn = document.createElement('button');
+  btn.id = 'questBtn'; btn.className = 'rbtn closed'; btn.textContent = '🎯'; btn.style.fontSize = '20px';
+  btn.onclick = () => { questOpen = !questOpen; renderQuests(); btn.classList.toggle('closed', !questOpen); audio.sfx('click'); };
+  document.getElementById('rail')?.appendChild(btn);
+}
+let questOpen = false;
+function questCtx() {
+  const vc = {};
+  state.tiles.forEach(tl => { if (tl && tl.t !== 'part' && !(tl.cs && !tl.cs.to) && tl.v) vc[tl.t + ':' + tl.v] = (vc[tl.t + ':' + tl.v] || 0) + 1; });
+  const s = computeStats();
+  return { pop: s.pop, level: cityLevel(), money: state.money, day: state.day, vc, cc: ccache, s };
+}
+function renderQuests() {
+  questPanel.classList.toggle('show', questOpen);
+  if (!questOpen) return;
+  const C = questCtx(), done = (state.quests ||= { done: {} }).done;
+  const rows = QUESTS.map(q => ({ q, p: q.prog(C), d: !!done[q.id] }));
+  const nDone = rows.filter(r => r.d).length;
+  questPanel.innerHTML = `<h3>🎯 ${escH(t('mq.title'))}<span>${nDone}/${QUESTS.length}</span></h3>`
+    + rows.sort((a, b) => a.d - b.d).map(({ q, p, d }) => `<div class="q${d ? ' done' : ''}"><b>${d ? '✓ ' : ''}${escH(t('mq.' + q.id))}</b><i>${escH(t('mq.' + q.id + '.d'))}</i><div class="qb"><u style="width:${100 * p[0] / p[1]}%"></u></div><div class="qr"><span>${fmt(p[0])} / ${fmt(p[1])}</span><span>${d ? escH(t('mq.done')) : '+' + money(q.reward.money) + ' · +' + q.reward.xp + ' XP'}</span></div></div>`).join('');
+}
+let questT = 0;
+function checkQuests() {
+  if (VISIT) return;
+  const C = questCtx(), done = (state.quests ||= { done: {} }).done;
+  for (const q of QUESTS) {
+    if (done[q.id]) continue;
+    const [cur, goal] = q.prog(C);
+    if (cur < goal) continue;
+    done[q.id] = state.day + 1;
+    state.money += q.reward.money; gainXp(q.reward.xp);
+    toast(t('mq.complete', { name: t('mq.' + q.id), money: money(q.reward.money) }));
+    addNews('good', ['mq.complete', { name: t('mq.' + q.id), money: money(q.reward.money) }]);
+    audio.sfx('place');
+  }
+  if (questOpen) renderQuests();
+}
 const placePanel = createPlacePanel({
+  remote: Online.onlineEnabled() ? {
+    ownerId: () => (VISIT ? VISIT.ownerId : Online.myProfile()?.id) || null,
+    list: (mi, kind) => Online.listPlaceComments(VISIT ? VISIT.ownerId : null, mi, kind),
+    post: (mi, kind, stars, body) => Online.postPlaceComment(VISIT ? VISIT.ownerId : null, mi, kind, stars, body, settings.playerName),
+    del: id => Online.deletePlaceComment(id),
+    me: () => Online.myProfile()?.id,
+  } : null,
   state: () => state, describe: placeDescribe, villagerName: seededName, readOnly: () => !!VISIT, playerName: () => settings.playerName,
   sfx: n => audio.sfx(n), changed: () => { if (!VISIT) save(); }, upgrade: (i, x, y) => showUpgrade(i, x - 330, y),
 });
 window.addEventListener('keydown', e => { if (e.key === 'Escape') placePanel.hide(); });
+function openPlaceAt(e) {
+  const i = pickBuilding(e);
+  if (i < 0) return false;
+  if (state.tiles[i]?.t === 'road') { showUpgrade(i, e.clientX, e.clientY); return true; }
+  if (placeDescribe(i)) { audio.sfx('click'); placePanel.show(masterOf(i)); return true; }
+  return false;
+}
 renderer.domElement.addEventListener('dblclick', e => {
   if (currentTool === 'bulldoze') return;
-  const i = pickBuilding(e);
-  if (i < 0) return;
-  if (state.tiles[i]?.t === 'road') return showUpgrade(i, e.clientX, e.clientY);
-  if (placeDescribe(i)) { audio.sfx('click'); placePanel.show(masterOf(i)); }
+  openPlaceAt(e);
 });
+let lastTap = null;   // แตะสองครั้งติดกัน (จอสัมผัสไม่ส่ง dblclick ให้เสมอไป)
 document.addEventListener('dblclick', e => {
   const row = e.target.closest?.('.ni.go');
   if (!row) return;
@@ -4486,8 +4575,13 @@ const endPointer = e => {
     touchPts.delete(e.pointerId); twistAng = null;
     touchIds.delete(e.pointerId);
     if (touchTap && touchTap.ok && e.type === 'pointerup' && touchIds.size === 0 && performance.now() - touchTap.t < 500) {
-      const tile = pickTile(e);
-      if (tile) applyTool(tile.x, tile.z);
+      const now = performance.now();
+      if (lastTap && now - lastTap.t < 380 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 28 && currentTool !== 'bulldoze' && openPlaceAt(e)) { lastTap = null; }
+      else {
+        lastTap = { x: e.clientX, y: e.clientY, t: now };
+        const tile = pickTile(e);
+        if (tile) applyTool(tile.x, tile.z);
+      }
     }
     if (touchIds.size === 0) touchTap = null;
     return;
@@ -4700,13 +4794,14 @@ function updateAgentTargets() {
   const h = tod * 24;
   const bump = (c, w) => Math.exp(-(((h - c) / w) ** 2));
   const sm = THREE.MathUtils.smoothstep;
-  const rush = 1 + 0.9 * bump(8, 1.3) + 0.9 * bump(17.5, 1.6);
+  const weekend = state.day % 7 >= 5;   // เสาร์-อาทิตย์: คนไม่ไปทำงาน รถน้อยลง แต่ออกไปเที่ยวสวน/ห้างมากขึ้น ชั่วโมงเร่งด่วนหายไป
+  const rush = weekend ? 1 + 0.35 * bump(11, 2.5) + 0.45 * bump(16.5, 2.2) : 1 + 0.9 * bump(8, 1.3) + 0.9 * bump(17.5, 1.6);
   const awake = 0.12 + 0.88 * (sm(h, 5, 8) - sm(h, 21.5, 24));
   const rainy = 1 - 0.7 * W.rain;
 
   // รถส่วนตัวเพิ่มตามประชากรและงาน (เมืองใหญ่รถติด) ส่วนขนส่งสาธารณะ (carCut) หักออกตามสัดส่วนเสมอ แม้ถึงเพดานกราฟิกแล้วก็ยังเห็นผล
-  const cars = (s.pop * 0.16 + s.jobsCom * 0.08 + s.jobsInd * 0.12 + Math.min(6, s.roads * 0.12)) * rush * (0.25 + 0.75 * awake);
-  const people = (s.pop * 0.16 + s.jobs * 0.04 + s.parks * 1.5 + Math.min(4, s.roads * 0.08)) * awake * rainy;
+  const cars = (s.pop * 0.16 + (s.jobsCom * 0.08 + s.jobsInd * 0.12) * (weekend ? 0.45 : 1) + Math.min(6, s.roads * 0.12)) * rush * (0.25 + 0.75 * awake);
+  const people = (s.pop * 0.16 + s.jobs * 0.04 + s.parks * 1.5 * (weekend ? 1.8 : 1) + Math.min(4, s.roads * 0.08)) * (weekend ? 1.2 : 1) * awake * rainy;
   const petMul = 1 + 0.2 * Math.min(3, ccache.pet);   // มีร้านอุปกรณ์สัตว์เลี้ยง คนเลี้ยงหมาแมวมากขึ้น
   const dogs = s.pop * 0.02 * (0.4 + 0.6 * awake) * rainy * petMul;
   const cats = petMul * s.pop * 0.015 * (0.4 + 0.6 * awake) * (1 - 0.5 * W.rain);
@@ -4978,6 +5073,8 @@ function loop(now) {
   if (audioStatsT <= 0) { audioStatsT = 0.5; refreshAudioStats(); }
   levelT -= dt;
   if (levelT <= 0) { levelT = 3; checkLevelUp(); }
+  questT -= dt;
+  if (questT <= 0) { questT = 4; checkQuests(); }
   publishT -= dt;
   if (publishT <= 0) { publishT = 120; publishCity(); }
   const spin = dt * Math.min(speed, 1) * (0.4 + 2.2 * W.wind);   // กังหันลมหมุนตามแรงลม หยุดเมื่อพักเกม
@@ -5042,9 +5139,17 @@ function loop(now) {
     if (dynCool <= 0 && !menu.isOpen) {
       // ปรับความละเอียดอัตโนมัติ: ลดเฉพาะตอนช้ามากจริงๆ (<28 FPS ติดกัน 2 รอบ) และไม่เพิ่มกลับเอง
       // (การเปลี่ยนความละเอียดบ่อยๆ ทำให้ภาพกะพริบ)
+      // ลดเมื่อ FPS < 40 ติดกัน 2 รอบ (ครึ่งวินาทีต่อรอบ) ลดทีละ 10% ต่ำสุด 60%
+      // เมื่อลื่นต่อเนื่อง (> 58 FPS) ค่อยๆ เพิ่มกลับทีละน้อย ถ้าเพิ่มแล้วช้าอีก จะรอนานขึ้นเป็นเท่าตัว กันภาพกะพริบขึ้นลง
       let ns = dynScale;
-      if (fpsNow < 28 && dynScale > 0.75) { slowCount++; if (slowCount >= 2) { ns = Math.max(0.75, dynScale - 0.125); slowCount = 0; } }
-      else slowCount = 0;
+      const nowMs = performance.now();
+      if (fpsNow < 40 && dynScale > 0.6) {
+        fastCount = 0; slowCount++;
+        if (slowCount >= 2) { ns = Math.max(0.6, dynScale - 0.1); slowCount = 0; if (nowMs - lastRaiseAt < 20000) fastNeed = Math.min(80, fastNeed * 2); }
+      } else if (fpsNow > 58 && dynScale < 1) {
+        slowCount = 0; fastCount++;
+        if (fastCount >= fastNeed) { ns = Math.min(1, dynScale + 0.05); fastCount = 0; lastRaiseAt = nowMs; }
+      } else { slowCount = 0; fastCount = 0; }
       if (ns !== dynScale) {
         dynScale = ns; dynCool = 4;
         const r = Math.max(0.6, baseRatio * dynScale);
@@ -5125,7 +5230,7 @@ async function visitCity(id) {
   const r = await Online.fetchCity(id).catch(() => null);
   if (!r || !Array.isArray(r.data?.tiles) || r.data.tiles.length !== N * N) return toast(t('fr.cantview'));
   if (activeId) save();
-  if (!Saves.setVisit({ state: r.data, map: r.profile?.map || 'river', name: r.profile?.city_name || '', owner: r.profile?.name || '' })) return toast(t('fr.cantview'));
+  if (!Saves.setVisit({ ownerId: id, state: r.data, map: r.profile?.map || 'river', name: r.profile?.city_name || '', owner: r.profile?.name || '' })) return toast(t('fr.cantview'));
   Saves.setAutoStart();
   location.reload();
 }

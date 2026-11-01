@@ -125,3 +125,21 @@ export async function fetchCity(id) {
   const d = fail(city);
   return d ? { data: d.data, profile: fail(prof) } : null;
 }
+
+// ---------- คอมเมนต์สถานที่ (ตาราง place_comments ใน supabase/schema.sql) ----------
+// ownerId = null → เมืองของเราเอง
+export async function listPlaceComments(ownerId, tile, kind) {
+  const p = await connect();
+  const c = await client();
+  return fail(await c.from('place_comments').select('id, author, author_name, stars, body, created_at').eq('city_id', ownerId || p.id).eq('tile', tile).eq('kind', kind || '').order('created_at', { ascending: false }).limit(30));
+}
+export async function postPlaceComment(ownerId, tile, kind, stars, body, name) {
+  const p = await connect();
+  const c = await client();
+  fail(await c.from('place_comments').insert({ city_id: ownerId || p.id, tile, kind: kind || '', author: p.id, author_name: (name || p.name || '').slice(0, 20), stars, body: body.slice(0, 200) }));
+}
+export async function deletePlaceComment(id) {
+  await connect();
+  const c = await client();
+  fail(await c.from('place_comments').delete().eq('id', id));
+}

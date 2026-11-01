@@ -38,6 +38,17 @@ export function createPlacePanel(h) {
   document.head.appendChild(st);
 
   let cur = -1, tab = 'info', draftStars = 5, draftText = '';
+  // คอมเมนต์ออนไลน์ (เพื่อนที่เข้ามาดูเมืองก็เขียนได้): โหลดตอนเปิดแท็บรีวิว
+  let remote = { mi: -1, rows: null, err: false, busy: false };
+  const kindOf = mi => { const tl = h.state().tiles[mi]; return tl ? tl.t + ':' + (tl.v || '') : ''; };
+  function loadRemote(force) {
+    if (!h.remote || cur < 0) return;
+    if (!force && remote.mi === cur && remote.rows) return;
+    const mi = cur;
+    remote = { mi, rows: remote.mi === mi ? remote.rows : null, err: false, busy: true };
+    h.remote.list(mi, kindOf(mi)).then(rows => { if (cur === mi) { remote = { mi, rows, err: false, busy: false }; render(); } })
+      .catch(() => { if (cur === mi) { remote = { mi, rows: [], err: true, busy: false }; render(); } });
+  }
   const places = () => (h.state().places ||= {});
   const entry = mi => {
     const tl = h.state().tiles[mi], key = tl ? tl.t + ':' + (tl.v || '') : '';
@@ -72,7 +83,8 @@ export function createPlacePanel(h) {
     const E = entry(cur), readOnly = h.readOnly();
     const title = E.name || D.name;
     const auto = autoReviews(cur, D), mine = E.cm || [];
-    const all = [...auto, ...mine];
+    const rrows = h.remote && remote.mi === cur && remote.rows ? remote.rows.map(r => ({ w: r.author_name || t('pl.anon'), s: r.stars, x: r.body, d: new Date(r.created_at).toLocaleDateString(), id: r.id, au: r.author, net: true })) : [];
+    const all = [...auto, ...mine, ...rrows];
     const avg = all.reduce((a, b) => a + b.s, 0) / Math.max(1, all.length);
     let body = '';
     if (tab === 'info') {
@@ -85,12 +97,16 @@ export function createPlacePanel(h) {
         + (D.canUpgrade ? `<div class="row2"><button class="pbtn" data-a="upgrade" style="flex:1">${escH(t('pl.upgrade'))}</button></div>` : '');
     } else {
       body += `<div class="big"><b>${avg.toFixed(1)}</b><span class="star">${stars(avg)}</span><span class="dim">(${all.length})</span></div>`;
-      if (!readOnly) {
+      if (!readOnly || h.remote) {
         body += `<h5>${escH(t('pl.write'))}</h5><div class="pick">${[1, 2, 3, 4, 5].map(n => `<button data-a="star" data-n="${n}" class="${n <= draftStars ? 'on' : ''}">★</button>`).join('')}</div>`
           + `<textarea rows="3" maxlength="200" placeholder="${escH(t('pl.hint'))}">${escH(draftText)}</textarea><div class="row2"><button class="pbtn" data-a="post">${escH(t('pl.post'))}</button></div>`;
       }
       body += `<h5>${escH(t('pl.reviews'))}</h5>`;
-      body += [...mine.map(x => ({ ...x, me: true })).reverse(), ...auto].map(x => `<div class="rv"><div class="w">${escH(x.w)}${x.me ? `<span class="me">${escH(t('pl.you'))}</span>` : ''} <span class="star">${stars(x.s)}</span> <span class="dim">· ${escH(t('pl.day', { n: x.d }))}</span></div><div class="x">${escH(x.x)}</div></div>`).join('');
+      if (h.remote && remote.err) body += `<div class="dim">${escH(t('pl.remote.off'))}</div>`;
+      if (h.remote && remote.busy && !remote.rows) body += `<div class="dim">${escH(t('fr.loading'))}</div>`;
+      const meId = h.remote?.me?.(), ownerId = h.remote?.ownerId?.();
+      body += [...rrows.map(x => ({ ...x, me: !!x.au && x.au === meId, del: x.au === meId || (!!ownerId && ownerId === meId) })), ...mine.map(x => ({ ...x, me: true })).reverse(), ...auto]
+        .map(x => `<div class="rv"><div class="w">${escH(x.w)}${x.me ? `<span class="me">${escH(t('pl.you'))}</span>` : ''} <span class="star">${stars(x.s)}</span> <span class="dim">· ${escH(x.net ? x.d : t('pl.day', { n: x.d }))}</span>${x.del ? ` <button class="pbtn" data-a="rdel" data-id="${x.id}" style="padding:0 6px;font-size:11px">✕</button>` : ''}</div><div class="x">${escH(x.x)}</div></div>`).join('');
     }
     el.innerHTML = `<div class="ph"><div class="pt1"><div class="pn">${escH(title)}</div><div class="ps">${escH(D.sub)} · <span class="star">★</span> ${avg.toFixed(1)}</div></div><button class="pbtn" data-a="close">✕</button></div>`
       + `<div class="ptabs"><button class="ptab ${tab === 'info' ? 'on' : ''}" data-a="tab" data-t="info">${escH(t('pl.tab.info'))}</button><button class="ptab ${tab === 'rev' ? 'on' : ''}" data-a="tab" data-t="rev">${escH(t('pl.tab.rev'))} (${all.length})</button></div>`
@@ -103,8 +119,20 @@ export function createPlacePanel(h) {
     const a = b.dataset.a;
     h.sfx?.('click');
     if (a === 'close') return hide();
-    if (a === 'tab') { tab = b.dataset.t; return render(); }
+    if (a === 'tab') { tab = b.dataset.t; if (tab === 'rev') loadRemote(); return render(); }
     if (a === 'star') { draftText = el.querySelector('textarea')?.value ?? draftText; draftStars = +b.dataset.n; return render(); }
+    if (a === 'rdel' && h.remote) { h.remote.del(+b.dataset.id).then(() => loadRemote(true)).catch(() => {}); return; }
+    if (a === 'post' && h.remote) {
+      const txt = (el.querySelector('textarea')?.value || '').trim().slice(0, 200);
+      if (!txt) return;
+      b.disabled = true;
+      h.remote.post(cur, kindOf(cur), draftStars, txt).then(() => { draftText = ''; loadRemote(true); render(); }).catch(() => {   // เซิร์ฟเวอร์ใช้ไม่ได้ (ยังไม่ได้สร้างตาราง ฯลฯ): เมืองตัวเองเก็บคอมเมนต์ในเซฟแทน
+        remote.err = true;
+        if (!h.readOnly()) { const E = entry(cur); E.cm.push({ w: h.playerName() || t('pl.anon'), s: draftStars, x: txt, d: h.state().day }); if (E.cm.length > 30) E.cm.shift(); draftText = ''; h.changed(); }
+        b.disabled = false; render();
+      });
+      return;
+    }
     if (cur < 0 || h.readOnly()) return;
     const E = entry(cur);
     if (a === 'rename') { E.name = el.querySelector('input.nm').value.trim().slice(0, 30) || undefined; h.changed(); return render(); }
@@ -122,6 +150,7 @@ export function createPlacePanel(h) {
   function show(mi) {
     if (mi !== cur) { tab = 'info'; draftText = ''; draftStars = 5; }
     cur = mi; render(); el.classList.add('show');
+    if (tab === 'rev') loadRemote();
   }
   function hide() { cur = -1; el.classList.remove('show'); }
   window.addEventListener('keydown', e => { if (e.key === 'Escape' && cur >= 0 && !el.contains(document.activeElement)) hide(); });

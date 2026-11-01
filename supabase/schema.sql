@@ -65,3 +65,44 @@ create policy "cities view" on public.cities for select to authenticated using (
            or (p.privacy = 'friends' and exists (select 1 from public.friends f where f.owner = p.id and f.friend = auth.uid())))
   )
 );
+
+-- ---------------------------------------------------------------
+-- คอมเมนต์/รีวิวสถานที่ (เพื่อนที่เข้ามาดูเมืองเขียนได้) — รันส่วนนี้เพิ่มถ้าใช้ schema เดิมอยู่แล้ว
+--   city_id = เจ้าของเมือง, tile = ช่องหลักของอาคาร, kind = ชนิดอาคาร (กันคอมเมนต์เก่าติดอาคารใหม่ที่ถูกสร้างทับ)
+--   อ่านได้ถ้าเป็นเจ้าของ หรือดูเมืองนั้นได้ (ผ่าน RLS ของ cities)
+--   เขียนได้ถ้าดูเมืองนั้นได้ ลบได้เฉพาะคนเขียนหรือเจ้าของเมือง จำกัด 5 ข้อความต่อนาทีต่อคน
+-- ---------------------------------------------------------------
+create table if not exists public.place_comments (
+  id bigint generated always as identity primary key,
+  city_id uuid not null references public.profiles on delete cascade,
+  tile integer not null check (tile between 0 and 4095),
+  kind text not null default '' check (char_length(kind) <= 40),
+  author uuid not null references public.profiles on delete cascade,
+  author_name text not null default '' check (char_length(author_name) <= 20),
+  stars integer not null check (stars between 1 and 5),
+  body text not null check (char_length(body) between 1 and 200),
+  created_at timestamptz not null default now()
+);
+create index if not exists place_comments_lookup on public.place_comments (city_id, tile, created_at desc);
+alter table public.place_comments enable row level security;
+
+drop policy if exists "pc read" on public.place_comments;
+create policy "pc read" on public.place_comments for select to authenticated using (
+  city_id = auth.uid() or exists (select 1 from public.cities c where c.id = place_comments.city_id)
+);
+drop policy if exists "pc write" on public.place_comments;
+create policy "pc write" on public.place_comments for insert to authenticated with check (
+  author = auth.uid() and (city_id = auth.uid() or exists (select 1 from public.cities c where c.id = place_comments.city_id))
+);
+drop policy if exists "pc delete" on public.place_comments;
+create policy "pc delete" on public.place_comments for delete to authenticated using (author = auth.uid() or city_id = auth.uid());
+
+create or replace function public.place_comments_rate() returns trigger language plpgsql as $$
+begin
+  if (select count(*) from public.place_comments where author = new.author and created_at > now() - interval '1 minute') >= 5 then
+    raise exception 'too many comments';
+  end if;
+  return new;
+end $$;
+drop trigger if exists place_comments_rate on public.place_comments;
+create trigger place_comments_rate before insert on public.place_comments for each row execute function public.place_comments_rate();
