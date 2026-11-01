@@ -7,6 +7,9 @@
 // ค่าคงที่ ไม่สุ่มใหม่ทุกครั้ง เพื่อให้เมืองที่เซฟไว้ตรงกับแผนที่เสมอ
 // ---------------------------------------------------------------
 
+export let HALF = 24;   // ครึ่งความกว้างของพื้นที่เล่น (หน่วยช่อง) ตั้งจาก setMapSize
+export function setMapSize(n) { HALF = n / 2; }
+export const mapHalf = () => HALF;
 export const SEA_Y = 0;          // ระดับผิวน้ำ
 export const WATER_LIMIT = 0.04; // ช่องที่ความสูงเฉลี่ยต่ำกว่านี้ = น้ำ (สร้างได้แค่สะพาน)
 
@@ -44,9 +47,9 @@ export function fbm(x, z, oct = 4) {
 // เส้นกลางแม่น้ำ (z ที่ตำแหน่ง x)
 export const MAP_IDS = ['river', 'coast', 'lake', 'island', 'chiangmai'];
 const MAPS = {
-  river:  { ox: 0,   oz: 0,   river: true,  sea: [25, 40], lake: null, island: false },
+  river:  { ox: 0,   oz: 0,   river: true,  sea: [1, 16], seaEdge: true, lake: null, island: false },
   coast:  { ox: 37,  oz: -21, river: false, sea: [9, 22],  lake: null, island: false },
-  lake:   { ox: -23, oz: 61,  river: false, sea: [25, 40], lake: { x: 3, z: -8, r: 7.5 }, island: false },
+  lake:   { ox: -23, oz: 61,  river: false, sea: [1, 16], seaEdge: true, lake: { x: 3, z: -8, r: 7.5 }, island: false },
   island: { ox: 77,  oz: 5,   river: false, sea: null,     lake: null, island: true },
   // เชียงใหม่: แอ่งที่ราบล้อมด้วยภูเขาสูง (ดอยสุเทพทางตะวันตก) แม่น้ำปิงทางใต้ และคูเมืองสี่เหลี่ยมกลางเมืองที่มีประตูเมือง 4 ด้าน
   chiangmai: { ox: 143, oz: -67, river: true, rz: 23, sea: null, lake: null, island: false, basin: true, moat: { half: 6.5, w: 1.0, gate: 1.25 } },
@@ -73,17 +76,19 @@ export function terrainH(wx, wz) {
   h = Math.max(h, 0.14);
 
   // ภูเขาล้อมรอบ ลดลงทางตะวันออก
-  const ring = ss(P.basin ? 21 : 26, P.basin ? 44 : 56, rC);
+  const R = HALF;
+  const ring = ss(P.basin ? R - 3 : R + 2, P.basin ? R + 20 : R + 32, rC);   // ภูเขาล้อมเริ่มนอกพื้นที่เล่น
   const east = P.basin ? 1 - 0.4 * ss(8, 30, wx) : 1 - ss(8, 30, wx);   // เชียงใหม่ภูเขาล้อมทุกด้าน (ตะวันออกต่ำกว่าเล็กน้อย)
   if (!P.island) h += (3.5 + 13 * fbm(wx * 0.04 + 50 + P.ox, wz * 0.04 + 50 + P.oz, 4)) * ring * east;
-  if (P.basin) h += (7 + 6 * fbm(wx * 0.07 + 8 + P.ox, wz * 0.07 + 3 + P.oz, 3)) * ss(-14, -34, wx) * (1 - 0.5 * ss(20, 40, Math.abs(wz)));   // ดอยสุเทพ
+  if (P.basin) h += (7 + 6 * fbm(wx * 0.07 + 8 + P.ox, wz * 0.07 + 3 + P.oz, 3)) * ss(-(R - 10), -(R + 10), wx) * (1 - 0.5 * ss(R - 4, R + 16, Math.abs(wz)));   // ดอยสุเทพ
 
   // ทะเลทางตะวันออก
-  if (P.sea) h = lerp(h, -1.4, ss(P.sea[0], P.sea[1], wx));
+  if (P.sea) { const o = P.seaEdge ? R : 0; h = lerp(h, -1.4, ss(o + P.sea[0], o + P.sea[1], wx)); }   // ทะเลทางตะวันออก (บางแมปอยู่ขอบพื้นที่เล่นเสมอ)
   if (P.island) {
     const d = Math.hypot(wx, wz) + (fbm(wx * 0.12 + 5 + P.ox, wz * 0.12 + 5, 2) - 0.5) * 5;
-    h = lerp(h, -1.4, ss(14, 21, d));
-    h += 0.5 * (1 - ss(0, 12, Math.hypot(wx, wz))) * fbm(wx * 0.08 + 9, wz * 0.08 + 3, 2); // เนินกลางเกาะ
+    const k = R / 24;   // เกาะใหญ่ตามขนาดแผนที่
+    h = lerp(h, -1.4, ss(14 * k, 21 * k, d));
+    h += 0.5 * (1 - ss(0, 12 * k, Math.hypot(wx, wz))) * fbm(wx * 0.08 + 9, wz * 0.08 + 3, 2); // เนินกลางเกาะ
   }
   if (P.lake) {
     const L = P.lake;
@@ -93,7 +98,7 @@ export function terrainH(wx, wz) {
   }
 
   // แม่น้ำ (เริ่มจากเชิงเขาทางตะวันตก)
-  const rw = P.river ? ss(-36, -24, wx) : 0;
+  const rw = P.river ? ss(-(R + 12), -R, wx) : 0;
   if (rw > 0) {
     const d = Math.abs(wz - riverZ(wx));
     // ที่ราบริมแม่น้ำ: ลดความสูงใกล้ฝั่งให้เรียบ (ไม่ยกขึ้น) เพื่อให้สะพานเชื่อมถนนฝั่งตรงข้ามได้พอดี

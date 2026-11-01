@@ -3,12 +3,12 @@
 // ---------------------------------------------------------------
 import { t, getLang, LANGS, onLang } from './i18n.js';
 import * as Saves from './saves.js';
-import { MAP_IDS, previewMap } from './terrain.js';
+import { MAP_IDS, previewMap, mapHalf } from './terrain.js';
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function drawPreview(canvas, id) {
-  const n = 80, span = 70;
+  const n = 80, span = mapHalf() * 2 * 1.45;
   const hs = previewMap(id, n, span);
   canvas.width = n; canvas.height = n;
   const g = canvas.getContext('2d');
@@ -24,7 +24,7 @@ function drawPreview(canvas, id) {
     else { r = 244; gr = 246; b = 250; }
     // ขอบเมือง (กรอบ 48x48 ช่อง ตรงกลาง) ทำให้เห็นพื้นที่เล่นจริง
     const x = k % n, y = Math.floor(k / n);
-    const half = (24 / span) * n, c = n / 2;
+    const half = (mapHalf() / span) * n, c = n / 2;
     const edge = Math.abs(Math.max(Math.abs(x - c), Math.abs(y - c)) - half) < 0.7;
     if (edge) { r = 255; gr = 255; b = 255; }
     img.data[k * 4] = r; img.data[k * 4 + 1] = gr; img.data[k * 4 + 2] = b; img.data[k * 4 + 3] = 255;

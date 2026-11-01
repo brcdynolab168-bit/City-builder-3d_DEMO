@@ -142,3 +142,7 @@ begin
 end $$;
 revoke all on function public.admin_del_comment(text, bigint) from public, anon;
 grant execute on function public.admin_del_comment(text, bigint) to authenticated;
+
+-- แมปใหม่ใหญ่ขึ้น (80×80) ข้อมูลเมืองที่อัปโหลดจึงใหญ่ขึ้น: ขยายเพดานจาก ~600 KB เป็น ~1.5 MB
+alter table public.cities drop constraint if exists cities_data_check;
+alter table public.cities add constraint cities_data_check check (pg_column_size(data) < 1500000);

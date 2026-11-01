@@ -15,7 +15,7 @@ import { ICON, mountIcons } from './icons.js';
 import { createMinimap } from './minimap.js';
 import { createDrag } from './dragrace.js';
 import { blob, broadleafCrown, coniferCrown, trunkGeo } from './trees.js';
-import { terrainH, terrainColor, fbm, hash2, SEA_Y, WATER_LIMIT, setMap, mapHasRiver } from './terrain.js';
+import { terrainH, terrainColor, fbm, hash2, SEA_Y, WATER_LIMIT, setMap, setMapSize, mapHasRiver } from './terrain.js';
 import { t, hasKey, setLang, getLang, onLang, LANGS } from './i18n.js';
 import * as Saves from './saves.js';
 import * as Online from './online.js';
@@ -39,6 +39,8 @@ const VISIT = Saves.getVisit();   // กำลังดูเมืองเพ�
 let activeId = VISIT ? null : Saves.getActiveId() || Saves.listSlots()[0]?.id || null;
 if (activeId) Saves.setActive(activeId);
 const MAP_ID = VISIT?.map || (activeId && Saves.getSlot(activeId)?.map) || 'river';
+const MAP_N = 80;   // ขนาดแผนที่ใหม่ 80×80 (เดิม 48×48): เซฟเก่าจะถูกย้ายมาไว้กลางแผนที่ใหม่โดยอัตโนมัติ
+setMapSize(MAP_N);
 setMap(MAP_ID);
 const audio = createAudio();
 const ECON = 10; // 1 วันในเกมเท่ากับรายได้/รายจ่าย 10 หน่วยของตัวเลขสถิติ
@@ -46,7 +48,8 @@ const ECON = 10; // 1 วันในเกมเท่ากับรายไ�
 // ---------------------------------------------------------------
 // ค่าตั้งต้น / เครื่องมือ
 // ---------------------------------------------------------------
-const N = 48; // ขนาดแผนที่ N x N ช่อง
+const N = MAP_N; // ขนาดแผนที่ N x N ช่อง
+const MAPK = N / 48;   // สัดส่วนเทียบแผนที่เดิม ใช้ปรับระยะกล้อง/หมอก/LOD ให้สมกับแผนที่ที่ใหญ่ขึ้น
 const START_MONEY = 20000;
 const DAY_LENGTH_SEC = 300; // 1 วันในเกม = 5 นาทีจริง (ที่ความเร็ว 1x) ทั้งท้องฟ้า เงิน และตัวนับวันเดินพร้อมกัน
 const BRIDGE_Y = 1.0;       // ความสูงพื้นสะพาน
@@ -332,6 +335,7 @@ const cityLevel = () => state.level || 1;
 
 // ---------- ประเภทถนน / เขตจำกัดความเร็ว ----------
 const ROAD_W = { soi: 0.56, street: 0.74, avenue: 0.88, highway: 0.96 };   // ความกว้างผิวแอสฟัลต์ (หน่วยช่อง)
+const ROAD_CAP = { soi: 0.6, street: 1, avenue: 1.8, highway: 2.4 };   // ความจุการจราจรต่อช่อง (ถนนใหญ่รับรถได้มากกว่า)
 const ROAD_UPKEEP = Object.fromEntries(VARIANTS.road.map(v => [v.k, v.upkeep]));
 const roadKind = (x, z) => { const tl = tileAt(x, z); return tl?.t === 'road' ? (ROAD_W[tl.v] ? tl.v : 'street') : null; };   // เซฟเก่าไม่มี v = ถนน 2 เลน
 const isAccessRoad = (x, z) => { const k = roadKind(x, z); return !!k && k !== 'highway'; };              // ทางหลวงไม่ใช่ทางเข้าอาคาร
@@ -386,9 +390,24 @@ function save() {
   if (!ok && !saveFailShown) { saveFailShown = true; toast(t('toast.saveFail')); }
   else if (ok) saveFailShown = false;
 }
+// ย้ายเมืองจากแผนที่ขนาดเก่า (เช่น 48×48) มาไว้กลางแผนที่ใหม่ (ตำแหน่งโลกเดิมไม่เปลี่ยน จึงตรงกับภูมิประเทศเดิม)
+// ต้องแปลงทุกอย่างที่อ้างตำแหน่งเป็นเลขช่อง: ช่องของอาคารใหญ่ (part.m) ความเห็นสถานที่ และคอนเสิร์ต
+function migrateState(d) {
+  if (!d || !Array.isArray(d.tiles) || d.tiles.length === N * N) return d;
+  const oldN = Math.round(Math.sqrt(d.tiles.length));
+  if (oldN * oldN !== d.tiles.length || oldN >= N) return d;
+  const off = Math.floor((N - oldN) / 2), mv = i => (Math.floor(i / oldN) + off) * N + (i % oldN) + off;
+  const tiles = new Array(N * N).fill(null);
+  d.tiles.forEach((tl, i) => { if (!tl) return; if (tl.t === 'part') tl.m = mv(tl.m); tiles[mv(i)] = tl; });
+  d.tiles = tiles;
+  if (d.places) d.places = Object.fromEntries(Object.entries(d.places).map(([k, v]) => [mv(+k), v]));
+  if (d.concert) { if (d.concert.sched) d.concert.sched.at = mv(d.concert.sched.at); if (d.concert.live) d.concert.live.at = mv(d.concert.live.at); }
+  d.migratedFrom = oldN;
+  return d;
+}
 function load() {
   limitsDirty = true;
-  const data = VISIT ? VISIT.state : activeId ? Saves.loadData(activeId) : null;
+  const data = migrateState(VISIT ? VISIT.state : activeId ? Saves.loadData(activeId) : null);
   if (data && Array.isArray(data.tiles) && data.tiles.length === N * N) {
     // ถ้ามีของที่ตกอยู่บนน้ำ (จากเซฟเก่า) ให้ลบทิ้ง ยกเว้นถนน (กลายเป็นสะพาน)
     data.tiles.forEach((tl, i) => { if (tl && tileIsWater[i] && tl.t !== 'road') data.tiles[i] = null; });
@@ -476,7 +495,7 @@ app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8fc4ee);
-scene.fog = new THREE.Fog(0x8fc4ee, 70, 170);
+scene.fog = new THREE.Fog(0x8fc4ee, 70 * MAPK, 170 * MAPK);
 
 // แสงสะท้อนรอบด้าน ทำให้กระจกและวัสดุมีมิติ
 const pmrem = new THREE.PMREMGenerator(renderer);
@@ -492,7 +511,7 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.12;
 controls.maxPolarAngle = Math.PI / 2.15;
 controls.minDistance = 5;
-controls.maxDistance = 90;
+controls.maxDistance = 90 * MAPK;
 // ซ้าย = สร้างของ, ขวา = หมุน, ล้อกลาง = ซูม
 controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
 controls.listenToKeyEvents(window); // ลูกศร = เลื่อนกล้อง
@@ -663,7 +682,7 @@ function syncDrag() {
   let base = -1e9; for (let dz = 0; dz < tl.fd; dz++) for (let dx = 0; dx < tl.fw; dx++) base = Math.max(base, tileY(x + dx, z + dz));
   drag.setStrip({ cx: x + tl.fw / 2 - N / 2, cz: z + tl.fd / 2 - N / 2, y: base + 0.06, rot: tl.rot || 0 });
 }
-const wildlife = createWildlife({ scene, blocked: bridgeAtX, boats: mapHasRiver() });
+const wildlife = createWildlife({ scene, blocked: bridgeAtX, boats: mapHasRiver(), size: N });
 const agents = createAgents({
   scene, N,
   tileType: (x, z) => { const tl = tileAt(x, z); if (tl?.t === 'part') return state.tiles[tl.m]?.t === 'park' ? 'park' : 'part'; return tl?.t ?? null; },
@@ -847,7 +866,7 @@ zebraMat.map.wrapS = zebraMat.map.wrapT = THREE.ClampToEdgeWrapping;
 // ---------------------------------------------------------------
 // ภูมิประเทศ: เนิน แม่น้ำ ทะเล ภูเขา (ทั้งหมดสร้างจากฟังก์ชัน terrainH)
 // ---------------------------------------------------------------
-const TERRAIN_SIZE = 200;
+const TERRAIN_SIZE = 260;
 const detailTex = noiseTex('#ffffff', ['rgba(0,0,0,.10)', 'rgba(255,255,255,.12)', 'rgba(0,0,0,.06)'], 256, TERRAIN_SIZE / 6);
 const terrainGeo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SIZE);
 terrainGeo.rotateX(-Math.PI / 2);
@@ -1954,7 +1973,7 @@ scene.add(tileGroup);
 scene.matrixAutoUpdate = false; tileGroup.matrixAutoUpdate = false;
 // ช่องที่ไม่มีอะไรขยับ: คำนวณตำแหน่งครั้งเดียวตอนสร้าง แล้วข้ามทั้งช่องในการอัปเดตทุกเฟรม (เรียกแบบบังคับเท่านั้นถึงจะคำนวณใหม่)
 function frozenMatrixWorld(force) { if (force) THREE.Object3D.prototype.updateMatrixWorld.call(this, true); }
-const FAR_LOD = 58;   // ระยะกล้อง (หน่วยช่อง) ที่ถือว่าซูมออกไกล
+const FAR_LOD = 58 * MAPK;   // ระยะกล้อง (หน่วยช่อง) ที่ถือว่าซูมออกไกล
 let farLod = false;
 let tilesCullDirty = true;   // ต้องคำนวณใหม่ว่าช่องไหนอยู่ในกล้อง (ช่องถูกสร้างใหม่)
 const meshes = new Array(N * N).fill(null);
@@ -2850,7 +2869,7 @@ let lastMood = 70;   // ความพอใจล่าสุด (อัปเ
 function computeStats() {
   const s = {
     pop: 0, jobsCom: 0, jobsInd: 0, powerCap: 0, powerUse: 0, waterCap: 0, waterUse: 0,
-    roads: 0, roadUp: 0, bridges: 0, parks: 0, plants: 0, wplants: 0, comLv: 0, indLv: 0, junctions: 0, upkeep: 0,
+    roads: 0, roadCap: 0, roadUp: 0, bridges: 0, parks: 0, plants: 0, wplants: 0, comLv: 0, indLv: 0, junctions: 0, upkeep: 0,
     extraTax: { finance: 0, health: 0, edu: 0, transit: 0, leisure: 0, industry: 0, parking: 0 }, skillSupply: 0, skillNeed: 0, skillFill: 1,
   };
   const brands = [], resL = [], stL = [], pkL = [], tradeP = [];
@@ -2874,7 +2893,7 @@ function computeStats() {
     if (t.t === 'res') { resL.push([i % N, Math.floor(i / N), POP_PER[lv]]); s.pop += POP_PER[lv]; s.powerUse += POWER_USE.res[lv]; s.waterUse += WATER_USE.res[lv]; }
     else if (t.t === 'com') { s.jobsCom += JOBS_COM[lv]; s.powerUse += POWER_USE.com[lv]; s.waterUse += WATER_USE.com[lv]; s.comLv += lv; }
     else if (t.t === 'ind') { if (lv) tradeP.push({ key: 'ind:lv' + lv }); s.jobsInd += JOBS_IND[lv]; s.powerUse += POWER_USE.ind[lv]; s.waterUse += WATER_USE.ind[lv]; s.indLv += lv; }
-    else if (t.t === 'road') { s.roads++; s.roadUp += ROAD_UPKEEP[t.v] ?? 0.5; if (tileIsWater[i]) s.bridges++; if (isJunction(i % N, Math.floor(i / N))) s.junctions++; }
+    else if (t.t === 'road') { s.roads++; s.roadCap += ROAD_CAP[t.v || 'street'] ?? 1; s.roadUp += ROAD_UPKEEP[t.v] ?? 0.5; if (tileIsWater[i]) s.bridges++; if (isJunction(i % N, Math.floor(i / N))) s.junctions++; }
     else if (t.t === 'park') { const PV = variantOf(t); s.parks += (t.fw || 1) * (t.fd || 1); s.waterUse += 1 + (t.fw ? t.fw * t.fd : 0); s.upkeep += PV?.upkeep ? PV.upkeep : 0; s.jobsCom += PV?.jobs || 0; }
     else if (t.t === 'power') { const V = variantOf(t), c = plantCap(t, i); s.plants++; s.powerCap += c; if (V.green) s.greenCap += c; s.upkeep += V.upkeep; }
     else if (t.t === 'water') { const V = variantOf(t); s.wplants++; s.waterCap += plantCap(t, i) * (V.k === 'well' ? 1 : 1 + 0.15 * weather.state.rain); s.upkeep += V.upkeep; } // ฝนตก น้ำดิบมากขึ้น (บ่อบาดาลไม่ขึ้นกับฝน)
@@ -2943,6 +2962,9 @@ function computeStats() {
   s.evCharge = Math.round(carDemand * s.evShare * 0.5);
   s.powerUse += s.evCharge;
   // การค้า: ผลผลิตฟาร์ม/โรงงานใช้กันเองในเมืองก่อน ที่เหลือส่งออก ที่ขาดนำเข้า (ผ่านสถานีขนส่งสินค้า)
+  // ไฟ/น้ำไม่พอ: โรงงาน ฟาร์ม และร้านค้าผลิต/ขายได้น้อยลงตามสัดส่วน (ต่ำสุด 40%) ไม่ใช่แค่ตัวเลขแดงบนแถบบน
+  s.utilK = clamp(Math.min(s.powerUse > 0 ? s.powerCap / s.powerUse : 1, s.waterUse > 0 ? s.waterCap / s.waterUse : 1), 0.4, 1);
+  for (const p of tradeP) p.mul = (p.mul ?? 1) * s.utilK;
   s.trade = trade(tradeP, ccache.freight);
   s.extraTax.industry = Math.max(0, s.extraTax.industry - s.trade.extraCost * 0.1);   // ไม่มีสถานี: วัตถุดิบแพง กำไรโรงงานลด
   // ภาษีแยกประเภท (รวมกันเท่ากับสูตรเดิม + ภาษีพิเศษของธุรกิจใหม่)
@@ -2950,6 +2972,10 @@ function computeStats() {
     land: s.pop * 0.2 * (1 - 0.05 * (pol2.greenCut || 0)), pit: s.pop * 0.25, vat: s.jobsCom * 0.5 * (state.day % 7 >= 5 ? 1.15 : 1) * (dayEventNow() === 'market' ? 1.25 : 1), corp: s.jobsCom * 0.4 + s.jobsInd * 0.5, ind: s.jobsInd * 0.3 * (state.day % 7 >= 5 ? 0.8 : 1),
     vehicle: s.pop * 0.025 * (1 - s.evShare * 0.25 * (pol2.evCut || 0)), export: s.trade.income, finance: s.extraTax.finance, health: s.extraTax.health, edu: s.extraTax.edu, transit: s.extraTax.transit, leisure: s.extraTax.leisure, industry: s.extraTax.industry, parking: s.extraTax.parking,
   };
+  // รายได้ต้องสัมพันธ์กับเศรษฐกิจจริง: ธุรกิจเสียรายได้เมื่อไฟ/น้ำขาด, ภาษีเงินได้ลดเมื่อคนตกงาน, ร้านค้ามากเกินลูกค้าขายได้น้อยลง
+  for (const k of ['vat', 'corp', 'ind', 'export']) s.taxes[k] *= s.utilK;
+  s.taxes.pit *= 0.5 + 0.5 * clamp(s.jobs / Math.max(1, s.pop * 0.5), 0, 1);
+  s.taxes.vat *= clamp(s.pop / Math.max(1, s.jobsCom * 3), 0.4, 1);
   s.income = Object.values(s.taxes).reduce((a, b) => a + b, 0);
   s.expense = s.roadUp + s.bridges * 1.5 + s.upkeep + s.parks * 2 + s.junctions * 0.5 + (s.incidentCost || 0);
   s.net = s.income - s.expense;
@@ -2982,6 +3008,8 @@ function tick() {
   let zoneN = 0;
   state.tiles.forEach(tt => { if (tt && ZONES.includes(tt.t)) zoneN++; });
   const lvN = lvIdx();
+  let zoneSites = 0;
+  for (const e of constructing.values()) if (e.t.cs?.to) zoneSites++;
   const siteCap = Math.min(12, 4 + Math.floor(zoneN / 30));
   for (let z = 0; z < N; z++) {
     for (let x = 0; x < N; x++) {
@@ -2994,12 +3022,12 @@ function tick() {
         continue;
       }
       if (t.cs || !powered || !watered || t.lv >= 3) continue;
-      if (constructing.size >= siteCap) continue;
+      if (zoneSites >= siteCap) continue;   // นับเฉพาะไซต์ที่โซนโตเอง ไม่นับอาคารที่ผู้เล่นสั่งสร้าง (ไม่งั้นตึกใหญ่ที่สร้างเป็นชั่วโมงจะบล็อกการเติบโตของโซนทั้งเมือง)
 
-      let p = 0.012 + 0.05 * s.demand[t.t];
+      let p = 0.003 + 0.06 * s.demand[t.t];   // ไม่มีความต้องการ (ไม่มีงาน/ไม่มีคนมาอยู่) โซนแทบไม่โต
       if (t.t === 'res' && nearPark.has(i)) p += 0.015;
       p *= GROW_RATE[lvN];
-      if (Math.random() < p) { startZoneBuild(t, x, z); }
+      if (Math.random() < p) { startZoneBuild(t, x, z); zoneSites++; }
     }
   }
 
@@ -3086,8 +3114,8 @@ function civicSnapshot() {
   const nd = calcNeeds({
     pop: s.pop, powerUse: s.powerUse, powerCap: s.powerCap, waterUse: s.waterUse, waterCap: s.waterCap,
     jobs: s.jobs, workers: demo.workers, hospitals: cc.hospital + 0.6 * cc.hospital_p + 0.08 * cc.pharmacy, schools: cc.school + 0.7 * cc.school_p, universities: cc.bu, transit: cc.bus * 2 + cc.taxi + cc.grab,
-    police: cc.police, fire: cc.fire, parks: cc.parks + 3 * cc.game, roads: s.roads, liveCars: ac.car, kids: demo.child + demo.youth,
-    green: s.green, chargers: cc.ev, evCars: ac.ev, shops: s.jobsCom,
+    police: cc.police, fire: cc.fire, parks: cc.parks + 3 * cc.game, roads: s.roadCap * 7.8, liveCars: Math.round(carDemand), kids: demo.child + demo.youth,   // ใช้ความต้องการรถจริง ไม่ใช่รถที่วาดบนจอ (ไม่งั้นกราฟิกต่ำ = รถติดน้อยลงเอง)
+    green: s.green, chargers: cc.ev, evCars: Math.round(carDemand * s.evShare), shops: s.jobsCom,
     cemeteries: cc.cemetery || 0, temples: cc.temple + cc.mosque + cc.church,
   });
   return { s, demo, cc, ac, nd };
@@ -3170,7 +3198,8 @@ function endConcert(cancel) {
   if (!L) return;
   const tl = state.tiles[L.at], x = L.at % N, z = (L.at / N) | 0, A = ACTS[L.act], p = { act: t('act.' + L.act) };
   if (cancel || !tl || tl.t !== 'service') { addNews('warn', ['concert.cancel', p]); return; }
-  const pop = computeStats().pop, att = Math.round(Math.min(CONCERT_CAP[tl.v] || 1000, pop * 0.35 * A.pull + 30));
+  // ฝนตกคนไปน้อยลง วันหยุดคนไปมากขึ้น (สัมพันธ์กับจำนวนคนเดินที่ลดตามฝน)
+  const pop = computeStats().pop, att = Math.round(Math.min(CONCERT_CAP[tl.v] || 1000, (pop * 0.35 * A.pull + 30) * (1 - 0.45 * weather.state.rain) * (state.day % 7 >= 5 ? 1.2 : 1)));
   const money = Math.round(att * A.price * 0.6);
   state.money += money; gainXp(Math.round(money / 40));
   C.held++; cnt().concerts++;
@@ -3424,6 +3453,7 @@ const smokeM = new THREE.MeshBasicMaterial({ color: 0x484848, transparent: true,
 const flameGeo = new THREE.ConeGeometry(0.5, 1, 6);
 function startFire(mi) {
   const tl = state.tiles[mi];
+  if (!tl || tl.t === 'part') return;
   const mx = mi % N, mz = Math.floor(mi / N), fw = tl.fw || 1, fd = tl.fd || 1;
   const grp = new THREE.Group();
   grp.position.set(mx + fw / 2 - N / 2, tileY(mx, mz), mz + fd / 2 - N / 2);
@@ -3725,13 +3755,13 @@ function cityEvents(s) {
   flags.jobs--; flags.traffic--;
   const snap = pop > 40 ? civicSnapshot() : null;
   if (snap && flags.jobs <= 0 && s.jobs < snap.demo.workers * 0.65) { flags.jobs = 150; addNews('warn', ['news.jobs', {}]); }
-  if (snap && flags.traffic <= 0 && s.roads > 6 && snap.ac.car / s.roads > 0.36) { flags.traffic = 160; addNews('warn', ['news.traffic', {}]); if (!ccache.metro) later(14 + Math.random() * 10, () => addNews('info', ['news.traffic.tip', {}])); }
+  if (snap && flags.traffic <= 0 && s.roads > 6 && carDemand / Math.max(1, s.roadCap * 3.5) > 0.8) { flags.traffic = 160; addNews('warn', ['news.traffic', {}]); if (!ccache.metro) later(14 + Math.random() * 10, () => addNews('info', ['news.traffic.tip', {}])); }
 
   // หลักไมล์ประชากร
   while (flags.milestone < MILES.length && pop >= MILES[flags.milestone]) { addNews('good', ['news.milestone', { n: MILES[flags.milestone].toLocaleString() }]); flags.milestone++; }
 
   // ไฟไหม้
-  const flam = ccache.flammable.filter(i => !fires.some(f => f.mi === i));
+  const flam = ccache.flammable.filter(i => state.tiles[i] && state.tiles[i].t !== 'part' && !fires.some(f => f.mi === i));
   if (flam.length && fires.length < 2) {
     const p = 0.0028 * (1 - 0.55 * fireCover(pop)) * (W.cloud > 0.8 && W.rain > 0.6 ? 2.2 : 1);
     if (Math.random() < p) {
@@ -4032,6 +4062,8 @@ function livingFactors(mi) {
     if (o.t === 'park' && d <= 8) near.park += (o.fw || 1) * (o.fd || 1) * (1 - d / 9);
     if (o.t === 'com' && d <= 6) near.shop += 1 - d / 7;
     if (o.t === 'ind' && d <= 6 && (o.lv || fixedVariant(o))) near.ind += (1 - d / 7) * (o.lv || 2);
+    if (o.t === 'service' && (o.v === 'airport' || o.v === 'port') && d <= 8) near.ind += 2 * (1 - d / 9);   // เสียงเครื่องบิน/ท่าเรือรบกวนคนแถวนั้น
+    if (o.t === 'service' && (o.v === 'stadium' || o.v === 'concert') && d <= 4) near.ind += 0.8 * (1 - d / 5);
     if (o.t === 'power' && (o.v === 'gas' || o.v === 'thermal' || !o.v) && d <= 5) near.ind += 1.2;
     if (o.t === 'service' || o.t === 'com') {
       const g = o.v === 'school' || o.v === 'school_p' || o.v === 'bu' ? 'school' : o.v === 'hospital' || o.v === 'hospital_p' || o.v === 'pharmacy' ? 'health'
@@ -5192,14 +5224,21 @@ let acc = 0;
 let saveAcc = 0;
 let last = performance.now();
 const FRAME_MS = 1000 / 144; // จำกัดสูงสุด 144 FPS
+let errShown = 0;
+const reportErr = e => { if (errShown++ < 5) console.error('เกิดข้อผิดพลาดในเกม (เกมยังเล่นต่อ):', e); };
+const safe = (fn, ...a) => { try { fn(...a); } catch (e) { reportErr(e); } };
 function loop(now) {
-  if (now - last < FRAME_MS - 1) { requestAnimationFrame(loop); return; }
+  try { frame(now); } catch (e) { reportErr(e); }
+  requestAnimationFrame(loop);
+}
+function frame(now) {
+  if (now - last < FRAME_MS - 1) return;
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
 
   if (speed > 0 && !menu.isOpen) {
     acc += dt * speed;
-    while (acc >= 1) { acc -= 1; tick(); }
+    while (acc >= 1) { acc -= 1; safe(tick); }
   }
   saveAcc += dt;
   if (saveAcc > 5) { saveAcc = 0; if (!menu.isOpen) save(); }
@@ -5212,7 +5251,7 @@ function loop(now) {
   updateSignalLamps();
 
   lastTargetsAt -= dt;
-  if (lastTargetsAt <= 0) { lastTargetsAt = 1; updateAgentTargets(); }
+  if (lastTargetsAt <= 0) { lastTargetsAt = 1; safe(updateAgentTargets); }
   _pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _fr.setFromProjectionMatrix(_pv);
   if (tilesCullDirty || !_pvLast.equals(_pv)) { _pvLast.copy(_pv); tilesCullDirty = false; cullTiles(); }
   agents.update(dt, night, speed, { rain: weather.state.rain, dark: lampLevel, hospital: ccache.hospital + ccache.hospital_p > 0, police: policeCover(), accidentRate: 1 - 0.3 * policeCover(), drunk: ccache.pub > 0 ? clamp(nightLevel * 1.2, 0, 1) * Math.min(1, 0.4 + 0.3 * ccache.pub) * (agents.checkpointActive() ? 0.3 : 1) : 0, cam: camera.position, frustum: _fr });
@@ -5222,7 +5261,7 @@ function loop(now) {
   updateMinimap(dt);
   updateFly(dt);
   drag.update(speed > 0 && !menu.isOpen ? dt * Math.min(speed, 2) : 0);
-  animateConstruction(dt, performance.now() / 1000);
+  safe(animateConstruction, dt, performance.now() / 1000);
   updateBake(dt);
   popRefresh -= dt;
   if (popRefresh <= 0) { popRefresh = 1; if (popOpen) renderPop(); }
@@ -5248,11 +5287,11 @@ function loop(now) {
   wildlife.update(dt, { frustum: _fr, night: nightLevel, rain: W.rain, wind: wvec, windMag: W.wind });
   // เสียง: ยิ่งซูมเข้าใกล้ ยิ่งได้ยินรายละเอียดชัด
   audioStatsT -= dt;
-  if (audioStatsT <= 0) { audioStatsT = 0.5; refreshAudioStats(); }
+  if (audioStatsT <= 0) { audioStatsT = 0.5; safe(refreshAudioStats); }
   levelT -= dt;
-  if (levelT <= 0) { levelT = 3; checkLevelUp(); }
+  if (levelT <= 0) { levelT = 3; safe(checkLevelUp); }
   questT -= dt;
-  if (questT <= 0) { questT = 4; checkQuests(); }
+  if (questT <= 0) { questT = 4; safe(checkQuests); }
   publishT -= dt;
   if (publishT <= 0) { publishT = 120; publishCity(); }
   const spin = dt * Math.min(speed, 1) * (0.4 + 2.2 * W.wind);   // กังหันลมหมุนตามแรงลม หยุดเมื่อพักเกม
@@ -5342,7 +5381,6 @@ function loop(now) {
     }
     fpsFrames = 0; fpsTime = 0;
   }
-  requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 window.addEventListener('beforeunload', save);
@@ -5411,7 +5449,8 @@ async function publishCity() {
 }
 async function visitCity(id, adminPass) {
   const r = await Online.fetchCity(id, adminPass).catch(() => null);
-  if (!r || !Array.isArray(r.data?.tiles) || r.data.tiles.length !== N * N) return toast(t('fr.cantview'));
+  const len = r?.data?.tiles?.length || 0, sq = Math.round(Math.sqrt(len));
+  if (!r || !Array.isArray(r.data?.tiles) || sq * sq !== len || sq > N) return toast(t('fr.cantview'));   // รับเมืองจากทุกขนาดที่ไม่ใหญ่กว่าแผนที่นี้
   if (activeId) save();
   if (!Saves.setVisit({ ownerId: id, state: r.data, map: r.profile?.map || 'river', name: r.profile?.city_name || '', owner: r.profile?.name || '' })) return toast(t('fr.cantview'));
   Saves.setAutoStart();

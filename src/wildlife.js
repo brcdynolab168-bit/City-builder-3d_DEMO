@@ -10,7 +10,7 @@ import { riverZ, SEA_Y } from './terrain.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 
-export function createWildlife({ scene, blocked = () => false, boats: withBoats = true }) {
+export function createWildlife({ scene, blocked = () => false, boats: withBoats = true, size = 48 }) {
   const root = new THREE.Group();
   root.name = 'wildlife';
   scene.add(root);
@@ -66,7 +66,7 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
 
   // ---------- เรือหลายแบบ: ประมง / หางยาว / เรือใบ / เรือพายชาวบ้าน / เรือบรรทุก / เรือโดยสาร ----------
   const boats = [];
-  const X0 = -17, X1 = 36;
+  const HALFN = size / 2, X0 = -HALFN * 0.7, X1 = HALFN + 12, WRAP = HALFN + 12;   // ที่ N=48: X0=-17 X1=36 เหมือนเดิม
   let wakeTex = null;
   try {
     const cv = document.createElement('canvas'); cv.width = 64; cv.height = 128;
@@ -253,8 +253,8 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
       if (!birdsOut) continue;
       const fl = b.flock;
       fl.cx += wv.x * wm * dt * 1.2; fl.cz += wv.z * wm * dt * 1.2;
-      if (fl.cx > 36) fl.cx -= 72; else if (fl.cx < -36) fl.cx += 72;
-      if (fl.cz > 36) fl.cz -= 72; else if (fl.cz < -36) fl.cz += 72;
+      if (fl.cx > WRAP) fl.cx -= 2 * WRAP; else if (fl.cx < -WRAP) fl.cx += 2 * WRAP;
+      if (fl.cz > WRAP) fl.cz -= 2 * WRAP; else if (fl.cz < -WRAP) fl.cz += 2 * WRAP;
       b.a += fl.w * dt;
       const rr = fl.r + b.dr;
       const x = fl.cx + Math.cos(b.a) * rr, z = fl.cz + Math.sin(b.a) * rr;
