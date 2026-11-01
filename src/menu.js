@@ -155,7 +155,7 @@ export function createMenu(h) {
         <div class="mdesc">${t('fr.privacyDesc.' + (S.privacy || 'friends'))}</div></div>` : ''}
       <div class="msec"><h4>${t('set.language')}</h4>${seg('lang', LANGS.map(l => [l.id, l.name]), getLang())}</div>
       <div class="msec"><h4>${t('set.sound')}</h4>
-        ${slider('master', t('set.master'))}${slider('sfx', t('set.sfx'))}${slider('music', t('set.music'))}
+        ${slider('master', t('set.master'))}${slider('sfx', t('set.sfx'))}${slider('amb', t('set.amb'))}${slider('traffic', t('set.traffic'))}${slider('music', t('set.music'))}
         <label class="mchk"><input type="checkbox" data-chk="mute" ${S.mute ? 'checked' : ''}> ${t('set.mute')}</label>
       </div>
       <div class="msec"><h4>${t('set.graphics')}</h4>${seg('quality', [['low', t('q.low')], ['med', t('q.med')], ['high', t('q.high')], ['rtx', 'RTX']], S.quality)}

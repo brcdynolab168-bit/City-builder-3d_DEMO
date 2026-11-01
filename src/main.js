@@ -26,6 +26,7 @@ import { createSky, periodKey } from './sky.js';
 import { createNews, demographics, needs as calcNeeds, PAGES, pickOf } from './civic.js';
 import { LEVELS, MAX_LEVEL, levelChecks, reachableLevel, levelFromPop, dailyXp, buildXp } from './levels.js';
 import { GOODS, trade } from './trade.js';
+import { createPlacePanel } from './place.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ---------------------------------------------------------------
@@ -132,6 +133,8 @@ const VARIANTS = {
     { k: 'crop',    label: 'ไร่ผักและโรงเรือน', cost: 380, jobs: 10, power: 2, water: 7, upkeep: 3 },
     { k: 'orchard', label: 'สวนผลไม้',         cost: 420, jobs: 9,  power: 1, water: 6, upkeep: 3 },
     { k: 'barn',    label: 'ฟาร์มปศุสัตว์',     cost: 650, jobs: 16, power: 3, water: 10, upkeep: 5 },
+    { k: 'fish',    label: 'ฟาร์มปลา',          cost: 560, jobs: 12, power: 3, water: 12, upkeep: 4 },
+    { k: 'cricket', label: 'ฟาร์มจิ้งหรีด',      cost: 340, jobs: 7,  power: 2, water: 3,  upkeep: 2 },
   ],
   power: [
     { k: 'solar',   label: 'โซลาร์ฟาร์ม (เล็ก)',  cost: 220,  cap: 150, upkeep: 4, green: 1 },
@@ -185,7 +188,7 @@ const UNLOCK_LV = {
   'com:game': 2, 'com:pet': 2, 'com:lotus': 2, 'com:market': 2, 'com:dealer': 2, 'com:gold': 2, 'com:parking': 2, 'com:ev': 2,
   'com:bank': 3, 'com:mall': 3, 'com:pub': 3, 'com:tuner': 3,
   'ind:shindengen': 3, 'ind:keihin': 3, 'ind:honda': 3, 'ind:denso': 4, 'ind:toyota': 4, 'ind:bmw': 5,
-  'farm:barn': 2, 'park:plaza': 2, 'park:sports': 2, 'park:garden': 3,
+  'farm:barn': 2, 'farm:fish': 2, 'park:plaza': 2, 'park:sports': 2, 'park:garden': 3,
   'power:wind': 2, 'power:bio': 2, 'power:thermal': 3, 'power:hydro': 3, 'water:big': 3,
   'service:hospital': 2, 'service:police': 2, 'service:fire': 2, 'service:taxi': 2, 'service:grab': 2, 'service:pea': 2, 'service:pwa': 2,
   'service:temple': 2, 'service:mosque': 2, 'service:church': 2, 'service:cemetery': 2,
@@ -531,7 +534,7 @@ const QUALITY = {
     rain: 7000, forest: 4000, rtx: true,
   },
 };
-const settings = { quality: 'med', mode: 'trackpad', lang: 'th', master: 0.8, sfx: 0.8, music: 0.35, mute: false, playerName: '', privacy: 'friends' };
+const settings = { quality: 'med', mode: 'trackpad', lang: 'th', master: 0.8, sfx: 0.8, amb: 0.8, traffic: 0.8, music: 0.35, mute: false, playerName: '', privacy: 'friends' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch {}
 if (!QUALITY[settings.quality]) settings.quality = 'med';
 if (settings.mode !== 'trackpad' && settings.mode !== 'mouse') settings.mode = 'trackpad';
@@ -2760,7 +2763,7 @@ function computeStats() {
   }
   s.transitCover = cov;
   s.transitShare = clamp(cov * (1 + 0.12 * (pol.parkFee - 2)) * (1.2 - 0.2 * pol.fare) * (1 + 0.25 * weather.state.rain), 0, 0.6);
-  s.carCut = clamp(s.transitShare * 0.85, 0, 0.5);
+  s.carCut = clamp(s.transitShare * 1.1, 0, 0.7);   // ขนส่งสาธารณะครอบคลุมมาก รถส่วนตัวบนถนนลดลงมาก
   s.riders = Math.round(s.pop * s.transitShare * 0.6);
   s.fareIncome = stL.some(x => x[2] === 'bus' || x[2] === 'metro') ? s.riders * pol.fare * 0.03 : 0;
   s.parkCap = pkL.length * 40;
@@ -3742,10 +3745,73 @@ function pickBuilding(e) {
   const tl = pickTile(e);
   return tl ? idx(tl.x, tl.z) : -1;
 }
+// ----- ดับเบิลคลิกอาคาร → แผงข้อมูลสถานที่ (ชื่อ รายละเอียด ความเป็นอยู่ รีวิว คอมเมนต์) -----
+const seededName = seed => nameOf({ sex: seed & 1 ? 'f' : 'm', fn: Math.abs(seed * 13) % 997, sn: Math.abs(seed * 7 + 5) % 997 });
+// ความเป็นอยู่รอบสถานที่: สำรวจสิ่งอำนวยความสะดวกในรัศมีรอบอาคาร แต่ละด้านให้คะแนน 0-100
+function livingFactors(mi) {
+  const tl = state.tiles[mi], fw = tl.fw || 1, fd = tl.fd || 1;
+  const cx = (mi % N) + fw / 2, cz = Math.floor(mi / N) + fd / 2;
+  const near = { park: 0, shop: 0, ind: 0 }, dist = {};
+  const isTransit = new Set(['bus', 'metro', 'taxi', 'grab']);
+  state.tiles.forEach((o, i) => {
+    if (!o || o.t === 'part' || i === mi) return;
+    const d = Math.hypot((i % N) + 0.5 - cx, Math.floor(i / N) + 0.5 - cz);
+    if (o.t === 'park' && d <= 8) near.park += (o.fw || 1) * (o.fd || 1) * (1 - d / 9);
+    if (o.t === 'com' && d <= 6) near.shop += 1 - d / 7;
+    if (o.t === 'ind' && d <= 6 && (o.lv || fixedVariant(o))) near.ind += (1 - d / 7) * (o.lv || 2);
+    if (o.t === 'power' && (o.v === 'gas' || o.v === 'thermal' || !o.v) && d <= 5) near.ind += 1.2;
+    if (o.t === 'service' || o.t === 'com') {
+      const g = o.v === 'school' || o.v === 'school_p' || o.v === 'bu' ? 'school' : o.v === 'hospital' || o.v === 'hospital_p' || o.v === 'pharmacy' ? 'health'
+        : o.v === 'police' ? 'safety' : o.v === 'fire' ? 'fire' : isTransit.has(o.v) ? 'transit' : null;
+      if (g && (!(g in dist) || d < dist[g])) dist[g] = d;
+    }
+  });
+  const byDist = (k, R) => (k in dist ? clamp(100 * (1 - dist[k] / R), 0, 100) : 0);
+  const s = computeStats();
+  const util = Math.min(s.powerUse <= 0 ? 1 : s.powerCap / s.powerUse, s.waterUse <= 0 ? 1 : s.waterCap / s.waterUse);
+  return [
+    { k: 'park', v: clamp(near.park * 22, 0, 100) }, { k: 'school', v: byDist('school', 14) }, { k: 'health', v: byDist('health', 14) },
+    { k: 'safety', v: byDist('safety', 16) }, { k: 'fire', v: byDist('fire', 16) }, { k: 'transit', v: byDist('transit', 10) },
+    { k: 'shops', v: clamp(near.shop * 22, 0, 100) }, { k: 'clean', v: clamp(100 - near.ind * 16, 0, 100) }, { k: 'utility', v: clamp(util * 100, 0, 100) },
+  ];
+}
+function placeDescribe(i) {
+  const mi = masterOf(i), tl = mi >= 0 ? state.tiles[mi] : null;
+  if (!tl || tl.t === 'road') return null;
+  const V = variantOf(tl), FV = fixedVariant(tl), lv = tl.lv || 0;
+  const key = `v.${tl.t}.${tl.v || DEFAULT_V[tl.t]}`;
+  const name = FV || (V && tl.t !== 'res' && tl.t !== 'com' && tl.t !== 'ind') ? (hasKey(key) ? t(key) : t('tool.' + tl.t)) : t('tool.' + tl.t) + ' · ' + t('bld.lv', { n: lv });
+  const desc = hasKey(key + '.note') ? t(key + '.note') : t('pl.desc.' + tl.t);
+  const rows = [[t('pl.r.cat'), t('tool.' + tl.t)]];
+  if ((tl.fw || 1) * (tl.fd || 1) > 1) rows.push([t('pl.r.size'), `${tl.fw || 1}×${tl.fd || 1}`]);
+  if (tl.cs && !tl.cs.to) rows.push([t('pl.r.status'), t('pl.r.building')]);
+  const pop = tl.t === 'res' ? (FV ? FV.pop : POP_PER[lv]) : 0;
+  const jobs = FV?.jobs ?? (tl.t === 'com' ? JOBS_COM[lv] : tl.t === 'ind' ? JOBS_IND[lv] : V?.jobs) ?? 0;
+  const pw = FV?.power ?? POWER_USE[tl.t]?.[lv] ?? V?.power ?? 0, wt = FV?.water ?? WATER_USE[tl.t]?.[lv] ?? V?.water ?? 0;
+  if (pop) rows.push([t('pl.r.pop'), fmt(pop)]);
+  if (jobs) rows.push([t('pl.r.jobs'), fmt(jobs)]);
+  if (pw || wt) rows.push([t('pl.r.use'), t('st.use', { p: pw, w: wt })]);
+  if (tl.t === 'power' || tl.t === 'water') rows.push([t('pl.r.cap'), fmt(plantCap(tl, mi))]);
+  if (V?.upkeep) rows.push([t('pl.r.upkeep'), money(V.upkeep) + '/' + t('pl.r.day')]);
+  if (V?.tax) rows.push([t('pl.r.tax'), money(V.tax) + '/' + t('pl.r.day')]);
+  const factors = livingFactors(mi);
+  const w = { park: 1, school: 1, health: 1, safety: 1, fire: 0.6, transit: 1, shops: 1, clean: 1.2, utility: 1.5 };
+  let sc = 0, ws = 0;
+  for (const f of factors) { sc += f.v * w[f.k]; ws += w[f.k]; }
+  const residents = pop ? Array.from({ length: Math.min(5, pop) }, (_, k) => seededName(mi * 29 + k * 11 + 3)) : null;
+  return { name, sub: t('tool.' + tl.t) + (tl.fw ? '' : ''), desc, rows, factors, score: sc / ws, residents, canUpgrade: tl.t === 'res' && !!upgradeOptions(mi)?.opts.length && !(tl.cs && !tl.cs.to) };
+}
+const placePanel = createPlacePanel({
+  state: () => state, describe: placeDescribe, villagerName: seededName, readOnly: () => !!VISIT, playerName: () => settings.playerName,
+  sfx: n => audio.sfx(n), changed: () => { if (!VISIT) save(); }, upgrade: (i, x, y) => showUpgrade(i, x - 330, y),
+});
+window.addEventListener('keydown', e => { if (e.key === 'Escape') placePanel.hide(); });
 renderer.domElement.addEventListener('dblclick', e => {
-  if (currentTool !== 'select') return;
+  if (currentTool === 'bulldoze') return;
   const i = pickBuilding(e);
-  if (i >= 0) showUpgrade(i, e.clientX, e.clientY);
+  if (i < 0) return;
+  if (state.tiles[i]?.t === 'road') return showUpgrade(i, e.clientX, e.clientY);
+  if (placeDescribe(i)) { audio.sfx('click'); placePanel.show(masterOf(i)); }
 });
 document.addEventListener('dblclick', e => {
   const row = e.target.closest?.('.ni.go');
@@ -4526,7 +4592,8 @@ function updateAgentTargets() {
   const awake = 0.12 + 0.88 * (sm(h, 5, 8) - sm(h, 21.5, 24));
   const rainy = 1 - 0.7 * W.rain;
 
-  const cars = (s.pop * 0.1 + s.jobsCom * 0.07 + s.jobsInd * 0.1 + Math.min(6, s.roads * 0.12)) * rush * (0.25 + 0.75 * awake);
+  // รถส่วนตัวเพิ่มตามประชากรและงาน (เมืองใหญ่รถติด) ส่วนขนส่งสาธารณะ (carCut) หักออกตามสัดส่วนเสมอ แม้ถึงเพดานกราฟิกแล้วก็ยังเห็นผล
+  const cars = (s.pop * 0.16 + s.jobsCom * 0.08 + s.jobsInd * 0.12 + Math.min(6, s.roads * 0.12)) * rush * (0.25 + 0.75 * awake);
   const people = (s.pop * 0.16 + s.jobs * 0.04 + s.parks * 1.5 + Math.min(4, s.roads * 0.08)) * awake * rainy;
   const petMul = 1 + 0.2 * Math.min(3, ccache.pet);   // มีร้านอุปกรณ์สัตว์เลี้ยง คนเลี้ยงหมาแมวมากขึ้น
   const dogs = s.pop * 0.02 * (0.4 + 0.6 * awake) * rainy * petMul;
@@ -4536,7 +4603,7 @@ function updateAgentTargets() {
   agents.setTargets({
     bus: Math.min(ccache.bus * 3, 9), taxi: Math.min(ccache.taxi * 4, 12), grab: Math.min(ccache.grab * 5, 12),
     cargo: ccache.freight ? Math.min(8, 2 + Math.round(s.trade.units * s.trade.cov / 150)) : 0, ev: s.evShare,
-    car: Math.min(Math.round(cars * transitCut), q.cars),
+    car: Math.round(Math.min(cars, q.cars * 1.25) * transitCut),
     person: Math.min(Math.round(people), q.people),
     dog: Math.min(Math.round(dogs), Math.ceil(q.pets * 0.55)),
     cat: Math.min(Math.round(cats), Math.floor(q.pets * 0.45)),
@@ -4559,7 +4626,7 @@ function startGame() { audio.init(); }
 function setSetting(k, v) {
   switch (k) {
     case 'lang': settings.lang = v; setLang(v); break;
-    case 'master': case 'sfx': case 'music': settings[k] = +v; audio.setVolume(k, +v); break;
+    case 'master': case 'sfx': case 'amb': case 'traffic': case 'music': settings[k] = +v; audio.setVolume(k, +v); break;
     case 'mute': settings.mute = !!v; audio.setMute(!!v); break;
     case 'quality': applyQuality(v); break;
     case 'mode': applyControlMode(v); break;
@@ -4596,7 +4663,7 @@ onLang(() => {
   rebuildAll(); // ป้ายบนอาคารเปลี่ยนภาษา
   menu.refresh();
 });
-audio.setVolume('master', settings.master); audio.setVolume('sfx', settings.sfx); audio.setVolume('music', settings.music); audio.setMute(settings.mute);
+audio.setVolume('master', settings.master); audio.setVolume('sfx', settings.sfx); audio.setVolume('amb', settings.amb); audio.setVolume('traffic', settings.traffic); audio.setVolume('music', settings.music); audio.setMute(settings.mute);
 // เบราว์เซอร์อนุญาตให้เล่นเสียงหลังผู้ใช้กดอะไรสักอย่างเท่านั้น
 const unlockAudio = () => { audio.init(); if (audio.ready) { window.removeEventListener('pointerdown', unlockAudio); window.removeEventListener('keydown', unlockAudio); } };
 window.addEventListener('pointerdown', unlockAudio);
@@ -4962,3 +5029,4 @@ if (VISIT) {
   bar.append(msg, back);
   document.body.appendChild(bar);
 }
+

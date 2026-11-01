@@ -14,7 +14,7 @@ export const FOOT = {
   'com:mall': [3, 2], 'com:market': [2, 2], 'com:dealer': [2, 1], 'com:fishing': [1, 1],
   'com:parking': [2, 1], 'service:metro': [2, 1], 'ind:honda': [3, 3], 'ind:toyota': [4, 3], 'ind:bmw': [3, 3], 'ind:shindengen': [2, 2], 'ind:keihin': [2, 2], 'ind:denso': [3, 2],
   'power:wind': [1, 1], 'power:hydro': [2, 1], 'power:bio': [2, 1], 'water:well': [1, 1], 'com:ev': [1, 1], 'service:freight': [3, 2], 'service:cemetery': [2, 2], 'com:cafe': [1, 1], 'com:game': [1, 1], 'com:pharmacy': [1, 1], 'com:pet': [1, 1],
-  'farm:rice': [3, 2], 'farm:crop': [2, 2], 'farm:barn': [3, 2], 'farm:orchard': [2, 2],
+  'farm:fish': [3, 2], 'farm:cricket': [2, 2], 'farm:rice': [3, 2], 'farm:crop': [2, 2], 'farm:barn': [3, 2], 'farm:orchard': [2, 2],
   'park:plaza': [2, 2], 'park:play': [1, 1], 'park:sports': [2, 2], 'park:garden': [3, 3],
   'park:fountain': [1, 1], 'park:flowers': [1, 1], 'park:pond': [1, 1], 'park:pavilion': [1, 1], 'park:picnic': [1, 1],
   'park:zen': [1, 1], 'park:basket': [1, 1], 'park:dog': [1, 1], 'park:forest': [1, 1], 'park:fitness': [1, 1],
@@ -561,6 +561,45 @@ export function createBig(c) {
     tree(bg, -1.35, -0.85, 1.3, 0.2); tree(bg, 1.35, -0.8, 1.4, 0.6);
     // รถบรรทุกเล็ก
     put(bg, boxGeo, band(0x1565c0), 0.85, y0 + 0.06, -0.55, 0.14, 0.08, 0.3);
+  }
+  // ฟาร์มปลา: บ่อดินล้อมคันดิน มีใบพัดตีน้ำให้อากาศ กระท่อมเฝ้าบ่อ และถังอาหารปลา
+  function fishFarm(bg) {
+    ground(bg, 3, 2, MT.paddy2);
+    const ponds = [[-0.75, -0.42], [0.2, -0.42], [-0.75, 0.38], [0.2, 0.38]];
+    ponds.forEach(([px, pz], k) => {
+      put(bg, boxGeo, MT.soil, px, y0 + 0.012, pz, 0.88, 0.024, 0.7);
+      put(bg, boxGeo, k % 2 ? MT.water : MT.paddyWater, px, y0 + 0.026, pz, 0.78, 0.012, 0.6);
+      // ใบพัดตีน้ำ + ทุ่นลอย
+      put(bg, cylGeo, M.white, px + 0.12, y0 + 0.04, pz, 0.02, 0.04, 0.02);
+      for (const sx of [-1, 1]) put(bg, boxGeo, MT.woodDark, px + 0.12 + sx * 0.06, y0 + 0.04, pz, 0.08, 0.012, 0.035);
+      put(bg, icoGeo, band(0x29b6f6), px - 0.2, y0 + 0.04, pz + 0.12, 0.05, 0.02, 0.025);
+    });
+    // ทางเดินคันดินกลาง
+    put(bg, boxGeo, M.path, 0.2, y0 + 0.016, 0, 0.96, 0.012, 0.08);
+    // กระท่อมเฝ้าบ่อ + ถังอาหาร
+    put(bg, boxGeo, MT.wood, 1.18, y0 + 0.1, -0.55, 0.34, 0.2, 0.3);
+    put(bg, gableGeo(0.4, 0.38, 0.1), MT.slate, 1.18, y0 + 0.2, -0.55, 1, 1, 1, Math.PI / 2);
+    put(bg, cylGeo, MT.tire, 1.2, y0 + 0.06, 0.1, 0.16, 0.12, 0.16);
+    put(bg, cylGeo, band(0x1565c0), 1.2, y0 + 0.07, 0.5, 0.16, 0.14, 0.16);
+    signAt(bg, t('sign.fish'), '#0d6e8a', '#ffffff', 0.2, y0 + 0.2, 0.86, 0.6, 0.08, 28);
+    put(bg, cylGeo, MT.wood, -0.1, y0 + 0.1, 0.86, 0.015, 0.2, 0.015); put(bg, cylGeo, MT.wood, 0.5, y0 + 0.1, 0.86, 0.015, 0.2, 0.015);
+    tree(bg, 1.35, 0.85, 1.2, 0.4);
+  }
+  // ฟาร์มจิ้งหรีด: โรงเรือนยาว 2 หลัง ภายในวางถาดไข่กับกระบะเลี้ยง หน้าโรงเรือนมีลังและกระบะบรรจุ
+  function cricketFarm(bg) {
+    ground(bg, 2, 2, M.walk);
+    for (const z of [-0.5, 0.2]) {
+      put(bg, boxGeo, M.white, 0, y0 + 0.11, z, 1.6, 0.22, 0.46);
+      put(bg, gableGeo(0.5, 1.64, 0.12), MT.slate, 0, y0 + 0.22, z, 1, 1, 1, Math.PI / 2);
+      put(bg, boxGeo, MT.glass, -0.1, y0 + 0.1, z + 0.236, 1.1, 0.07, 0.006);   // ช่องระบายอากาศมุ้งลวด
+      put(bg, boxGeo, M.door, 0.7, y0 + 0.09, z + 0.236, 0.14, 0.18, 0.01);
+    }
+    // ตั้งถาดไข่ซ้อนหน้าโรงเรือน
+    for (let k = 0; k < 6; k++) put(bg, boxGeo, band(k % 2 ? 0xc9b48a : 0xb59d70), -0.65 + k * 0.1, y0 + 0.03 + (k % 3) * 0.05, 0.78, 0.09, 0.04, 0.2);
+    for (const [x, z] of [[0.45, 0.75], [0.65, 0.8], [0.85, 0.72]]) put(bg, boxGeo, band(0x1e88e5), x, y0 + 0.04, z, 0.14, 0.08, 0.1);
+    put(bg, boxGeo, band(0xf9a825), 0.7, y0 + 0.1, 0.78, 0.16, 0.02, 0.12);   // ป้ายเหลืองสไตล์จิ้งหรีด
+    signAt(bg, t('sign.cricket'), '#6a4a1a', '#ffe08a', 0, y0 + 0.188, 0.2 + 0.24, 1.0, 0.07, 28);
+    tree(bg, 0.85, -0.85, 1.1, 0.6);
   }
   function orchard(bg) {
     ground(bg, 2, 2, M.park);
@@ -1336,7 +1375,7 @@ export function createBig(c) {
     'service:bu': university, 'service:hospital': hospital, 'service:school': school,
     'service:temple': temple, 'service:church': church, 'service:mosque': mosque,
     'com:mall': mall, 'com:market': market, 'com:dealer': dealer, 'com:fishing': fishing,
-    'farm:rice': rice, 'farm:crop': crop, 'farm:barn': barn, 'farm:orchard': orchard,
+    'farm:rice': rice, 'farm:crop': crop, 'farm:barn': barn, 'farm:orchard': orchard, 'farm:fish': fishFarm, 'farm:cricket': cricketFarm,
     'park:plaza': plaza, 'park:play': playground, 'park:sports': sports, 'park:garden': garden,
     'park:fountain': pFountain, 'park:flowers': pFlowers, 'park:pond': pPond, 'park:pavilion': pPavilion, 'park:picnic': pPicnic,
     'park:zen': pZen, 'park:basket': pBasket, 'park:dog': pDog, 'park:forest': pForest, 'park:fitness': pFitness,

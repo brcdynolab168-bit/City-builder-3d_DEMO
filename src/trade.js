@@ -10,6 +10,8 @@ export const GOODS = {
   'farm:crop':      { out: [['veg', 30, 1.4]], in: [['fert', 3, 1]] },
   'farm:orchard':   { out: [['fruit', 26, 2.2]], in: [['fert', 2, 1]] },
   'farm:barn':      { out: [['meat', 12, 3], ['milk', 20, 1.2]], in: [['feed', 10, 0.8]] },
+  'farm:fish':      { out: [['fish', 22, 2.4]], in: [['feed', 6, 0.8]] },
+  'farm:cricket':   { out: [['cricket', 28, 2]], in: [['feed', 3, 0.8]] },
   'ind:lv1':        { out: [['goods', 6, 2]], in: [['steel', 2, 1.5]] },
   'ind:lv2':        { out: [['goods', 14, 2]], in: [['steel', 5, 1.5]] },
   'ind:lv3':        { out: [['goods', 30, 2]], in: [['steel', 10, 1.5], ['chip', 4, 2]] },

@@ -11,9 +11,9 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export function createAudio() {
   let ctx = null;
-  let master, sfxG, musG, ambG, ambLP;
+  let master, sfxG, musG, ambG, ambLP, trafG;
   const L = {};               // เลเยอร์เสียงต่อเนื่อง
-  const vol = { master: 0.8, sfx: 0.8, music: 0.35, mute: false };
+  const vol = { master: 0.8, sfx: 0.8, amb: 0.8, traffic: 0.8, music: 0.35, mute: false };
   const timers = { bird: 2, dog: 8, cat: 12, horn: 6, siren: 40, music: 1, cricket: 0.2, bell: 0 };
   let lastBellDay = -1;
   let musicStep = 0;
@@ -31,7 +31,7 @@ export function createAudio() {
     }
     return b;
   }
-  function layer(kind, filters, gain0 = 0) {
+  function layer(kind, filters, gain0 = 0, dest = ambLP) {
     const src = ctx.createBufferSource();
     src.buffer = noiseBuffer(kind);
     src.loop = true;
@@ -45,7 +45,7 @@ export function createAudio() {
     const g = ctx.createGain();
     g.gain.value = gain0;
     node.connect(g);
-    g.connect(ambLP);
+    g.connect(dest);
     src.start(0, rnd() * 2);
     return { src, filters: fs, g };
   }
@@ -68,13 +68,14 @@ export function createAudio() {
     ambG = ctx.createGain(); ambG.connect(master);
     ambLP = ctx.createBiquadFilter(); ambLP.type = 'lowpass'; ambLP.frequency.value = 4000;
     ambLP.connect(ambG);
+    trafG = ctx.createGain(); trafG.connect(master);
 
     L.wind = layer('white', [['lowpass', 500, 0.7], ['bandpass', 400, 0.5]]);
     lfo(L.wind.filters[1].frequency, 0.11, 160, 420);
     L.rain = layer('white', [['highpass', 1500], ['lowpass', 9000]]);
     L.water = layer('white', [['bandpass', 600, 0.8]]);
     lfo(L.water.filters[0].frequency, 0.35, 220, 650);
-    L.traffic = layer('brown', [['lowpass', 380]]);
+    L.traffic = layer('brown', [['lowpass', 380]], 0, trafG);
     L.crowd = layer('white', [['bandpass', 900, 1.2]]);
     L.hum = layer('brown', [['lowpass', 160]]);
     L.cricket = (() => {
@@ -96,7 +97,8 @@ export function createAudio() {
     const m = vol.mute ? 0 : vol.master;
     master.gain.setTargetAtTime(m, ctx.currentTime, 0.05);
     sfxG.gain.value = vol.sfx;
-    ambG.gain.value = vol.sfx;
+    ambG.gain.value = vol.amb;
+    trafG.gain.value = vol.traffic;
     musG.gain.value = vol.music * 0.6;
   }
 
