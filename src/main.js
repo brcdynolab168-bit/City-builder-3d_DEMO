@@ -3949,7 +3949,7 @@ document.body.appendChild(questPanel);
   st.textContent = `#questPanel{position:fixed;z-index:9;right:64px;top:70px;width:min(340px,calc(100vw - 80px));max-height:calc(100vh - 240px);overflow:auto;background:rgba(10,15,24,.96);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.18);border-radius:12px;color:#fff;box-shadow:0 14px 36px rgba(0,0,0,.55);opacity:0;pointer-events:none;transform:translateX(12px);transition:opacity .15s,transform .15s;font-size:13px;padding:10px 12px}
 #questPanel.show{opacity:1;pointer-events:auto;transform:none}#questPanel h3{margin:0 0 8px;font-size:15px;display:flex;justify-content:space-between;align-items:center}#questPanel h3 span{font-size:11px;color:#9aa6b2;font-weight:400}
 #questPanel .q{padding:8px 0;border-top:1px solid rgba(255,255,255,.08)}#questPanel .q b{display:block;font-size:13.5px}#questPanel .q i{display:block;font-style:normal;color:#9aa6b2;font-size:11.5px;margin:1px 0 5px}
-#questPanel .qb{height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}#questPanel .qb u{display:block;height:100%;background:#4fc3f7}#questPanel .qr{display:flex;justify-content:space-between;font-size:11.5px;margin-top:4px;color:#ffd36a}#questPanel .q.done{opacity:.5}#questPanel .q.done .qb u{background:#66bb6a}`;
+#questPanel .qb{height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}#questPanel .qb u{display:block;height:100%;background:#4fc3f7}#questPanel .qr{display:flex;justify-content:space-between;font-size:11.5px;margin-top:4px;color:#ffd36a}#questPanel .qh{display:block;font-style:normal;font-size:11.5px;line-height:1.45;color:#cfe3f5;background:rgba(79,195,247,.1);border-left:2px solid #4fc3f7;border-radius:4px;padding:5px 8px;margin:0 0 6px}#questPanel .qh b{display:inline;color:#4fc3f7;font-size:11.5px}#questPanel .q.done{opacity:.5}#questPanel .q.done .qb u{background:#66bb6a}`;
   document.head.appendChild(st);
   const btn = document.createElement('button');
   btn.id = 'questBtn'; btn.className = 'rbtn closed'; btn.textContent = '🎯'; btn.style.fontSize = '20px';
@@ -3970,7 +3970,7 @@ function renderQuests() {
   const rows = QUESTS.map(q => ({ q, p: q.prog(C), d: !!done[q.id] }));
   const nDone = rows.filter(r => r.d).length;
   questPanel.innerHTML = `<h3>🎯 ${escH(t('mq.title'))}<span>${nDone}/${QUESTS.length}</span></h3>`
-    + rows.sort((a, b) => a.d - b.d).map(({ q, p, d }) => `<div class="q${d ? ' done' : ''}"><b>${d ? '✓ ' : ''}${escH(t('mq.' + q.id))}</b><i>${escH(t('mq.' + q.id + '.d'))}</i><div class="qb"><u style="width:${100 * p[0] / p[1]}%"></u></div><div class="qr"><span>${fmt(p[0])} / ${fmt(p[1])}</span><span>${d ? escH(t('mq.done')) : '+' + money(q.reward.money) + ' · +' + q.reward.xp + ' XP'}</span></div></div>`).join('');
+    + rows.sort((a, b) => a.d - b.d).map(({ q, p, d }) => `<div class="q${d ? ' done' : ''}"><b>${d ? '✓ ' : ''}${escH(t('mq.' + q.id))}</b><i>${escH(t('mq.' + q.id + '.d'))}</i>${d ? '' : `<em class="qh"><b>${escH(t('mq.how'))}</b> ${escH(t('mq.' + q.id + '.h'))}</em>`}<div class="qb"><u style="width:${100 * p[0] / p[1]}%"></u></div><div class="qr"><span>${fmt(p[0])} / ${fmt(p[1])}</span><span>${d ? escH(t('mq.done')) : '+' + money(q.reward.money) + ' · +' + q.reward.xp + ' XP'}</span></div></div>`).join('');
 }
 let questT = 0;
 function checkQuests() {
