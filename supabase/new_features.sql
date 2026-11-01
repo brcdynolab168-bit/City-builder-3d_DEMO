@@ -67,3 +67,13 @@ revoke all on function public.admin_ok(text) from public, anon;
 revoke all on function public.admin_city(text, uuid) from public, anon;
 grant execute on function public.admin_ok(text) to authenticated;
 grant execute on function public.admin_city(text, uuid) to authenticated;
+
+-- แอดมินลบคอมเมนต์สถานที่ของใครก็ได้ (ตรวจรหัสด้วย admin_ok)
+create or replace function public.admin_del_comment(pass text, cid bigint) returns void
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not public.admin_ok(pass) then raise exception 'denied'; end if;
+  delete from public.place_comments where id = cid;
+end $$;
+revoke all on function public.admin_del_comment(text, bigint) from public, anon;
+grant execute on function public.admin_del_comment(text, bigint) to authenticated;

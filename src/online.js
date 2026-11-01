@@ -159,3 +159,10 @@ export async function profilesByIds(ids) {
   const c = await client();
   return fail(await c.from('profiles').select('*').in('id', ids.slice(0, 100)));
 }
+
+// แอดมินลบคอมเมนต์ของใครก็ได้ (ตรวจรหัสที่เซิร์ฟเวอร์ ฟังก์ชัน admin_del_comment)
+export async function adminDeleteComment(pass, id) {
+  await connect();
+  const c = await client();
+  fail(await c.rpc('admin_del_comment', { pass, cid: id }));
+}

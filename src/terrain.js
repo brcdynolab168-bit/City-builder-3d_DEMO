@@ -42,18 +42,20 @@ export function fbm(x, z, oct = 4) {
 }
 
 // เส้นกลางแม่น้ำ (z ที่ตำแหน่ง x)
-export const MAP_IDS = ['river', 'coast', 'lake', 'island'];
+export const MAP_IDS = ['river', 'coast', 'lake', 'island', 'chiangmai'];
 const MAPS = {
   river:  { ox: 0,   oz: 0,   river: true,  sea: [25, 40], lake: null, island: false },
   coast:  { ox: 37,  oz: -21, river: false, sea: [9, 22],  lake: null, island: false },
   lake:   { ox: -23, oz: 61,  river: false, sea: [25, 40], lake: { x: 3, z: -8, r: 7.5 }, island: false },
   island: { ox: 77,  oz: 5,   river: false, sea: null,     lake: null, island: true },
+  // เชียงใหม่: แอ่งที่ราบล้อมด้วยภูเขาสูง (ดอยสุเทพทางตะวันตก) แม่น้ำปิงทางใต้ และคูเมืองสี่เหลี่ยมกลางเมืองที่มีประตูเมือง 4 ด้าน
+  chiangmai: { ox: 143, oz: -67, river: true, rz: 23, sea: null, lake: null, island: false, basin: true, moat: { half: 6.5, w: 1.0, gate: 1.25 } },
 };
 let P = MAPS.river;
 export function setMap(id) { P = MAPS[id] || MAPS.river; }
 export const mapHasRiver = () => P.river;
 export function riverZ(wx) {
-  return -9 + 3 * Math.sin(wx * 0.1 + 0.6) + 1.4 * Math.sin(wx * 0.27 + 2);
+  return -9 + (P.rz || 0) + 3 * Math.sin(wx * 0.1 + 0.6) + 1.4 * Math.sin(wx * 0.27 + 2);
 }
 
 export function terrainH(wx, wz) {
@@ -71,9 +73,10 @@ export function terrainH(wx, wz) {
   h = Math.max(h, 0.14);
 
   // ภูเขาล้อมรอบ ลดลงทางตะวันออก
-  const ring = ss(26, 56, rC);
-  const east = 1 - ss(8, 30, wx);
+  const ring = ss(P.basin ? 21 : 26, P.basin ? 44 : 56, rC);
+  const east = P.basin ? 1 - 0.4 * ss(8, 30, wx) : 1 - ss(8, 30, wx);   // เชียงใหม่ภูเขาล้อมทุกด้าน (ตะวันออกต่ำกว่าเล็กน้อย)
   if (!P.island) h += (3.5 + 13 * fbm(wx * 0.04 + 50 + P.ox, wz * 0.04 + 50 + P.oz, 4)) * ring * east;
+  if (P.basin) h += (7 + 6 * fbm(wx * 0.07 + 8 + P.ox, wz * 0.07 + 3 + P.oz, 3)) * ss(-14, -34, wx) * (1 - 0.5 * ss(20, 40, Math.abs(wz)));   // ดอยสุเทพ
 
   // ทะเลทางตะวันออก
   if (P.sea) h = lerp(h, -1.4, ss(P.sea[0], P.sea[1], wx));
@@ -97,6 +100,13 @@ export function terrainH(wx, wz) {
     h = Math.min(h, lerp(h, 0.42, (1 - ss(2.5, 9, d)) * rw * 0.85));
     const t = 1 - ss(0.7, 3.3, d);
     h = lerp(h, -0.5, t * rw);
+  }
+  // คูเมือง: คลองสี่เหลี่ยมรอบเมืองเก่า เว้นช่องประตูเมืองกลางแต่ละด้านให้เดินรถข้ามได้โดยไม่ต้องสร้างสะพาน
+  if (P.moat) {
+    const Mo = P.moat, rc = Math.max(Math.abs(wx), Math.abs(wz)), d = Math.abs(rc - Mo.half);
+    const gate = Math.min(Math.abs(wx), Math.abs(wz)) < Mo.gate;
+    if (gate) { if (d < Mo.w + 1.2) h = Math.max(h, 0.55); }
+    else h = lerp(h, -0.5, 1 - ss(Mo.w - 0.35, Mo.w + 0.45, d));
   }
   return h;
 }

@@ -27,7 +27,7 @@ import { createNews, demographics, needs as calcNeeds, PAGES, pickOf } from './c
 import { LEVELS, MAX_LEVEL, levelChecks, reachableLevel, levelFromPop, dailyXp, buildXp } from './levels.js';
 import { GOODS, trade } from './trade.js';
 import { createPlacePanel } from './place.js';
-import { QUESTS } from './quests.js';
+import { QUESTS, DAILY } from './quests.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ---------------------------------------------------------------
@@ -171,6 +171,10 @@ const VARIANTS = {
     { k: 'drag',     label: 'สนามแข่งรถคลอง 5', cost: 3200, jobs: 30, power: 14, water: 6, upkeep: 22, tax: 30, note: '3×7 ช่อง สนามแข่งถูกกฎหมาย ลดรถซิ่งบนถนน' },
     { k: 'mosque',   label: 'มัสยิด',          cost: 1200, jobs: 6, power: 3, water: 4, upkeep: 8, note: '3×3 ช่อง' },
     { k: 'cemetery', label: 'สุสาน',           cost: 700,  jobs: 4, power: 1, water: 2, upkeep: 4, note: '2×2 ช่อง ที่ฝังศพ ญาติมาเยี่ยม' },
+    { k: 'concert',  label: 'หอคอนเสิร์ต',     cost: 3000, jobs: 50, power: 26, water: 8, upkeep: 30, tax: 45, note: '3×3 ช่อง จัดคอนเสิร์ตสุ่มให้เมือง ศิลปินมาแสดงแล้วคนแห่มาดู ขายบัตรสร้างรายได้' },
+    { k: 'stadium',  label: 'สนามกีฬา',         cost: 4200, jobs: 90, power: 40, water: 18, upkeep: 40, tax: 60, note: '4×3 ช่อง จัดคอนเสิร์ตใหญ่ได้ ความจุสูงกว่าหอคอนเสิร์ต' },
+    { k: 'airport',  label: 'สนามบิน',          cost: 9500, jobs: 220, power: 60, water: 20, upkeep: 90, tax: 140, note: '5×3 ช่อง นับเป็นสถานีขนส่งสินค้า 2 แห่ง และเก็บภาษีการท่องเที่ยว' },
+    { k: 'port',     label: 'ท่าเรือ',           cost: 5200, jobs: 140, power: 30, water: 10, upkeep: 55, tax: 80, note: '4×2 ช่อง ต้องวางริมแม่น้ำ/ทะเล นับเป็นสถานีขนส่งสินค้า 1.5 แห่ง' },
     { k: 'freight',  label: 'สถานีขนส่งสินค้า', cost: 2600, jobs: 45, power: 8, water: 4, upkeep: 18, note: '3×2 ช่อง ส่งออก/นำเข้าสินค้า' },
   ],
   // ถนน: ซอยแคบ / ถนน 2 เลน / ถนนสายหลัก 4 เลน (แซงได้) / ทางหลวง 4 เลน มีแบริเออร์กลาง (คนเดินไม่ได้ อาคารใช้เป็นทางเข้าไม่ได้)
@@ -194,7 +198,7 @@ const UNLOCK_LV = {
   'service:hospital': 2, 'service:police': 2, 'service:fire': 2, 'service:taxi': 2, 'service:grab': 2, 'service:pea': 2, 'service:pwa': 2,
   'service:temple': 2, 'service:mosque': 2, 'service:church': 2, 'service:cemetery': 2,
   'service:dohw': 3, 'service:school_p': 3, 'service:hospital_p': 3, 'service:bus': 3, 'service:freight': 3,
-  'service:bu': 4, 'service:metro': 4, 'service:drag': 4,
+  'service:bu': 4, 'service:metro': 4, 'service:drag': 4, 'service:concert': 3, 'service:stadium': 4, 'service:port': 4, 'service:airport': 5,
 };
 for (const [key, lv] of Object.entries(UNLOCK_LV)) { const [tool, k] = key.split(':'); const V = VARIANTS[tool].find(v => v.k === k); V.req = { ...V.req, lv }; }
 const currentVar = { ...DEFAULT_V };
@@ -244,7 +248,7 @@ const JOBS_COM = [0, 6, 20, 60];
 const JOBS_IND = [0, 10, 28, 70];
 let carDemand = 0;   // จำนวนรถที่ต้องการวิ่ง (ใช้คิดรายได้ลานจอดรถ)
 const TRANSIT_ST = { bus: { R: 7, w: 0.12 }, taxi: { R: 5, w: 0.04 }, grab: { R: 5, w: 0.04 }, metro: { R: 9, w: 0.34 } };   // รัศมีบริการ(ช่อง)/น้ำหนักการดึงคนมาใช้ขนส่ง
-const TAX_GROUP = { honda: 'industry', toyota: 'industry', bmw: 'industry', shindengen: 'industry', keihin: 'industry', denso: 'industry', pub: 'leisure', tuner: 'leisure', drag: 'leisure', bank: 'finance', gold: 'finance', hospital_p: 'health', school_p: 'edu', bus: 'transit', taxi: 'transit', grab: 'transit' };
+const TAX_GROUP = { concert: 'leisure', stadium: 'leisure', airport: 'transit', port: 'transit', honda: 'industry', toyota: 'industry', bmw: 'industry', shindengen: 'industry', keihin: 'industry', denso: 'industry', pub: 'leisure', tuner: 'leisure', drag: 'leisure', bank: 'finance', gold: 'finance', hospital_p: 'health', school_p: 'edu', bus: 'transit', taxi: 'transit', grab: 'transit' };
 const POWER_USE = { res: [0, 2, 6, 14], com: [0, 3, 8, 20], ind: [0, 4, 12, 30] };
 const WATER_USE = { res: [0, 3, 9, 22], com: [0, 2, 6, 15], ind: [0, 4, 12, 28] };
 const POWER_CAP = 200;
@@ -556,12 +560,25 @@ const QUALITY = {
   },
   ultra: {
     label: 'อัลตร้า', desc: 'อัลตร้า: ทุกอย่างของสูงมาก + ภาพคมกว่า เงาละเอียดพิเศษ รถ คน สัตว์ และป่าหนาแน่นสุด สำหรับการ์ดจอแรงเท่านั้น',
-    pixelRatio: 2.5, shadows: true, shadowSize: 8192, bloom: true, cars: 220, people: 240, pets: 60, details: 2,
+    pixelRatio: 2, shadows: true, shadowSize: 8192, bloom: true, cars: 200, people: 220, pets: 56, details: 2,
     rain: 10000, forest: 6000, rtx: true,
   },
 };
 const settings = { quality: 'med', mode: 'trackpad', lang: 'th', master: 0.8, sfx: 0.8, amb: 0.8, traffic: 0.8, music: 0.35, mute: false, playerName: '', privacy: 'friends' };
+const FIRST_RUN = (() => { try { return localStorage.getItem(SETTINGS_KEY) === null; } catch { return false; } })();
 try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch {}
+// เลือกระดับกราฟิกให้เหมาะกับการ์ดจอ (ใช้ตอนเปิดเกมครั้งแรก และใช้เตือนเมื่อเลือกระดับที่หนักเกินไป) ไม่เลือกสูงมาก/อัลตร้าให้เองเด็ดขาด
+function suggestQuality() {
+  const g = (gpuName || '').toLowerCase();
+  const mobile = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || /android|iphone|ipad/i.test(navigator.userAgent);
+  if (/swiftshader|llvmpipe|software|basic render/.test(g) || mobile) return 'low';
+  if (/rtx|rx 6\d\d\d|rx 7\d\d\d|rx 9\d\d\d|apple m\d|arc a7/.test(g)) return 'high';
+  if (/gtx 16|gtx 10|gtx 9|rx 5\d\d|rx 4\d\d|vega|iris xe|apple/.test(g)) return 'med';
+  if (/intel|uhd|hd graphics|mali|adreno|powervr|mesa/.test(g)) return 'low';
+  return 'med';
+}
+if (FIRST_RUN) settings.quality = suggestQuality();
+let qInit = false, lowFpsT = 0, lowFpsAsked = false;
 if (!QUALITY[settings.quality]) settings.quality = 'med';
 if (settings.mode !== 'trackpad' && settings.mode !== 'mouse') settings.mode = 'trackpad';
 if (!LANGS.some(l => l.id === settings.lang)) settings.lang = 'th';
@@ -2665,6 +2682,11 @@ function evalBig(tool, x, z) {
     for (let dz = 0; dz < R.fd; dz++) for (let dx = 0; dx < R.fw; dx++) if (nearWater(R.x0 + dx, R.z0 + dz, 1)) wet = true;
     if (!wet) reason = 'toast.hydro';
   }
+  if (!reason && tool === 'service' && currentVar.service === 'port') {   // ท่าเรือต้องติดแม่น้ำ/ทะเล
+    let wet = false;
+    for (let dz = -1; dz <= R.fd && !wet; dz++) for (let dx = -1; dx <= R.fw; dx++) if (nearWater(R.x0 + dx, R.z0 + dz, 1)) { wet = true; break; }
+    if (!wet) reason = 'toast.port';
+  }
   if (!reason && state.money < toolCost(tool)) reason = 'toast.nomoney';
   return { R, ok: !reason, reason, params };
 }
@@ -2731,6 +2753,7 @@ function buildCost(tool, x, z) {
   return toolCost(tool);
 }
 
+function countPlace(tool) { const c = cnt(); c.placed++; (c.tool ||= {})[tool] = (c.tool[tool] || 0) + 1; }
 function applyTool(x, z) {
   if (VISIT || currentTool === 'select' || !inBounds(x, z)) return;
   const i = idx(x, z);
@@ -2764,6 +2787,7 @@ function applyTool(x, z) {
     const { R } = e, mi = idx(R.x0, R.z0);
     for (let dz = 0; dz < R.fd; dz++) for (let dx = 0; dx < R.fw; dx++) state.tiles[idx(R.x0 + dx, R.z0 + dz)] = { t: 'part', m: mi };
     state.tiles[mi] = { t: currentTool, lv: 0, v: currentVar[currentTool], fw: R.fw, fd: R.fd, rot: R.rot, cs: { p: 0, dur: 30 + 9 * Math.sqrt(R.fw * R.fd) } };
+    countPlace(currentTool);
     audio.sfx('place');
     for (let dz = 0; dz < R.fd; dz++) for (let dx = 0; dx < R.fw; dx++) refresh(R.x0 + dx, R.z0 + dz);
     updateHUD();
@@ -2796,6 +2820,7 @@ function applyTool(x, z) {
   gainXp(buildXp(cost2));
   state.tiles[i] = VARIANTS[currentTool] ? { t: currentTool, lv: 0, v: currentVar[currentTool] } : { t: currentTool, lv: 0 };
   if (['res', 'com', 'ind', 'service', 'power', 'water'].includes(currentTool) && (fixedVariant(state.tiles[i]) || currentTool === 'power' || currentTool === 'water')) state.tiles[i].cs = { p: 0, dur: currentTool === 'power' || currentTool === 'water' ? 45 : 28 };
+  countPlace(currentTool);
   audio.sfx(currentTool === 'road' ? 'road' : 'place');
   refresh(x, z);
   updateHUD();
@@ -2922,7 +2947,7 @@ function computeStats() {
   s.extraTax.industry = Math.max(0, s.extraTax.industry - s.trade.extraCost * 0.1);   // ไม่มีสถานี: วัตถุดิบแพง กำไรโรงงานลด
   // ภาษีแยกประเภท (รวมกันเท่ากับสูตรเดิม + ภาษีพิเศษของธุรกิจใหม่)
   s.taxes = {
-    land: s.pop * 0.2 * (1 - 0.05 * (pol2.greenCut || 0)), pit: s.pop * 0.25, vat: s.jobsCom * 0.5 * (state.day % 7 >= 5 ? 1.15 : 1), corp: s.jobsCom * 0.4 + s.jobsInd * 0.5, ind: s.jobsInd * 0.3 * (state.day % 7 >= 5 ? 0.8 : 1),
+    land: s.pop * 0.2 * (1 - 0.05 * (pol2.greenCut || 0)), pit: s.pop * 0.25, vat: s.jobsCom * 0.5 * (state.day % 7 >= 5 ? 1.15 : 1) * (dayEventNow() === 'market' ? 1.25 : 1), corp: s.jobsCom * 0.4 + s.jobsInd * 0.5, ind: s.jobsInd * 0.3 * (state.day % 7 >= 5 ? 0.8 : 1),
     vehicle: s.pop * 0.025 * (1 - s.evShare * 0.25 * (pol2.evCut || 0)), export: s.trade.income, finance: s.extraTax.finance, health: s.extraTax.health, edu: s.extraTax.edu, transit: s.extraTax.transit, leisure: s.extraTax.leisure, industry: s.extraTax.industry, parking: s.extraTax.parking,
   };
   s.income = Object.values(s.taxes).reduce((a, b) => a + b, 0);
@@ -2938,6 +2963,8 @@ function computeStats() {
 }
 
 function tick() {
+  tickConcert();
+  tickDayEvent();
   const s = computeStats();
   const powered = s.powerCap > s.powerUse;
   const watered = s.waterCap > s.waterUse;
@@ -3037,6 +3064,7 @@ function civicCounts() {
     else if (tl.t === 'park') c.parks += (tl.fw || 1) * (tl.fd || 1);
     if (['res', 'com', 'ind', 'farm'].includes(tl.t) && (fixedVariant(tl) || tl.lv > 0)) c.flammable.push(i);
   });
+  c.freight = (c.freight || 0) + 2 * (c.airport || 0) + 1.5 * (c.port || 0);   // สนามบิน/ท่าเรือช่วยขนส่งสินค้าเหมือนสถานีขนส่ง
   return c;
 }
 let ccache = civicCounts();
@@ -3091,9 +3119,112 @@ function gainXp(n) {
   state.xp = (state.xp || 0) + n;
   if ($('cityLv')) refreshLevelBadge();
 }
+// ---------- คอนเสิร์ต: สุ่มจัดที่หอคอนเสิร์ต/สนามกีฬา มีประกาศศิลปิน ผู้ชมแห่มา ขายบัตรได้เงิน ----------
+// ศิลปินทั้งหมดเป็นวงสมมติ pull = แรงดึงดูดคน price = ราคาบัตร tier 3 = ซูเปอร์สตาร์ (ต้องมีสนามกีฬาและเมืองใหญ่พอ)
+const ACTS = [
+  { pull: 1.0, price: 22, tier: 1 }, { pull: 0.8, price: 16, tier: 1 }, { pull: 1.2, price: 30, tier: 2 }, { pull: 0.9, price: 14, tier: 1 }, { pull: 0.9, price: 34, tier: 2 },
+  { pull: 0.7, price: 18, tier: 1 }, { pull: 1.3, price: 28, tier: 2 }, { pull: 1.1, price: 24, tier: 2 }, { pull: 1.7, price: 46, tier: 3 }, { pull: 1.2, price: 26, tier: 2 },
+];
+const CONCERT_CAP = { concert: 1200, stadium: 4000 };
+const concertState = () => (state.concert ||= { sched: null, live: null, last: -9, held: 0 });
+const cnt = () => (state.cnt ||= { placed: 0, concerts: 0 });
+const hallName = tl => t('v.service.' + tl.v);
+function concertVenues() {
+  const out = [];
+  state.tiles.forEach((tl, i) => { if (tl && tl.t === 'service' && (tl.v === 'concert' || tl.v === 'stadium') && !(tl.cs && !tl.cs.to)) out.push(i); });
+  return out;
+}
+function scheduleConcert() {
+  const C = concertState();
+  if (VISIT || C.sched || C.live || state.day - C.last < 1) return;
+  const vs = concertVenues();
+  if (!vs.length) return;
+  const weekend = state.day % 7 >= 5;
+  if (Math.random() > (weekend ? 0.6 : 0.3)) return;
+  const pop = computeStats().pop, stadium = vs.filter(i => state.tiles[i].v === 'stadium');
+  const pool = ACTS.map((a, k) => k).filter(k => ACTS[k].tier < 3 || (stadium.length && pop >= 1500));
+  const act = pool[(Math.random() * pool.length) | 0];
+  const venues = ACTS[act].tier === 3 ? stadium : vs;
+  const at = venues[(Math.random() * venues.length) | 0];
+  const day = state.day + 1 + (Math.random() < 0.4 ? 1 : 0);
+  C.sched = { act, at, day, reminded: false };
+  C.last = state.day;
+  const x = at % N, z = (at / N) | 0;
+  const p = { act: t('act.' + act), genre: t('act.' + act + '.g'), venue: hallName(state.tiles[at]), dow: t('dow.' + (day % 7)) };
+  withAt(x, z, () => addNews('good', ['concert.announce', p]));
+  toast(t('concert.announce', p));
+}
+function startConcert() {
+  const C = concertState(), S = C.sched, tl = state.tiles[S.at];
+  C.sched = null;
+  if (!tl || tl.t !== 'service') return;
+  C.live = { act: S.act, at: S.at, day: state.day };
+  const x = S.at % N, z = (S.at / N) | 0, p = { act: t('act.' + S.act), venue: hallName(tl) };
+  withAt(x, z, () => addNews('good', ['concert.start', p]));
+  toast(t('concert.start', p));
+  audio.sfx('place');
+}
+function endConcert(cancel) {
+  const C = concertState(), L = C.live;
+  C.live = null;
+  if (!L) return;
+  const tl = state.tiles[L.at], x = L.at % N, z = (L.at / N) | 0, A = ACTS[L.act], p = { act: t('act.' + L.act) };
+  if (cancel || !tl || tl.t !== 'service') { addNews('warn', ['concert.cancel', p]); return; }
+  const pop = computeStats().pop, att = Math.round(Math.min(CONCERT_CAP[tl.v] || 1000, pop * 0.35 * A.pull + 30));
+  const money = Math.round(att * A.price * 0.6);
+  state.money += money; gainXp(Math.round(money / 40));
+  C.held++; cnt().concerts++;
+  p.n = fmt(att); p.money = '$' + fmt(money);
+  withAt(x, z, () => addNews('good', ['concert.end', p]));
+  toast(t('concert.end', p));
+}
+function tickConcert() {
+  if (VISIT) return;
+  const C = concertState(), h = tod * 24;
+  if (C.sched && !C.live) {
+    if (state.day > C.sched.day || !state.tiles[C.sched.at]) C.sched = null;
+    else if (state.day === C.sched.day) {
+      if (h >= 17 && !C.sched.reminded) {
+        C.sched.reminded = true;
+        const p = { act: t('act.' + C.sched.act), venue: hallName(state.tiles[C.sched.at]) };
+        withAt(C.sched.at % N, (C.sched.at / N) | 0, () => addNews('info', ['concert.today', p]));
+      }
+      if (h >= 19) startConcert();
+    }
+  }
+  const L = C.live;
+  if (L) {
+    const tl = state.tiles[L.at];
+    if (!tl || tl.t !== 'service') endConcert(true);
+    else if (h >= 22 || state.day !== L.day) endConcert(false);
+  }
+}
+// ---------- เหตุการณ์วันหยุด (เสาร์-อาทิตย์): ตลาดนัด งานวัด ดนตรีในสวน ----------
+function pickDayEvent() {
+  if (VISIT || state.day % 7 < 5) return;
+  const s = computeStats(), opts = [];
+  if (s.jobsCom >= 10) opts.push('market');
+  if (ccache.temple + ccache.mosque + ccache.church > 0) opts.push('fair');
+  if (ccache.parks >= 6) opts.push('music');
+  state.dayEv = opts.length && Math.random() < 0.75 ? { day: state.day, id: opts[(Math.random() * opts.length) | 0], shown: false } : null;
+}
+function dayEventNow() {
+  const e = state.dayEv;
+  return e && e.day === state.day && e.shown ? e.id : null;
+}
+function tickDayEvent() {
+  const e = state.dayEv;
+  if (!e || e.day !== state.day || e.shown || tod * 24 < 9) return;
+  e.shown = true;
+  addNews('good', ['ev.' + e.id, {}]);
+  toast(t('ev.' + e.id));
+}
 function onNewDay() {
   const s = computeStats(), n = dailyXp(s.pop, s.net, lastMood);
   if (n > 0) { gainXp(n); toast(t('xp.day', { n: fmt(n) })); }
+  scheduleConcert();
+  pickDayEvent();
+  newDaily();
 }
 function checkLevelUp() {
   const P = civicSnapshot(), ctx = levelCtx(P);
@@ -3144,13 +3275,14 @@ const VENUE = {   // base = น้ำหนักพื้นฐาน, cat = �
   'com:tuner': { base: 0.4, cat: 'other', time: 'eve' }, 'com:fishing': { base: 0.4, cat: 'shop', time: 'morning' }, 'com:zone': { base: 0.6, cat: 'shop', time: 'day' },
   'com:parking': { base: 0.5, cat: 'other', time: 'day' }, 'service:metro': { base: 1.6, cat: 'transit', time: 'rush' }, 'service:bus': { base: 0.7, cat: 'transit', time: 'rush' },
   'service:cemetery': { base: 0.4, cat: 'worship', time: 'morning' },
+  'service:concert': { base: 1.0, cat: 'fun', time: 'concert' }, 'service:stadium': { base: 0.8, cat: 'fun', time: 'concert' },
   'com:cafe': { base: 1.1, cat: 'food', time: 'morning' }, 'com:pharmacy': { base: 0.8, cat: 'health', time: 'day' },
   'com:game': { base: 0.9, cat: 'fun', time: 'eve' }, 'com:pet': { base: 0.7, cat: 'shop', time: 'day' },   // ญาติไปเยี่ยมหลุมช่วงเช้า
   'service:temple': { base: 0.9, cat: 'worship', time: 'temple' }, 'service:church': { base: 0.8, cat: 'worship', time: 'church' }, 'service:mosque': { base: 0.8, cat: 'worship', time: 'mosque' },
   'service:hospital': { base: 0.9, cat: 'health', time: 'office' }, 'service:hospital_p': { base: 0.8, cat: 'health', time: 'office' },
 };
 const CATS = ['food', 'shop', 'worship', 'health', 'fun', 'money', 'transit', 'other'];
-function venueW(key, hr, rel) {
+function venueW(key, hr, rel, v) {
   const V = VENUE[key];
   let m;
   switch (V.time) {
@@ -3165,9 +3297,11 @@ function venueW(key, hr, rel) {
     case 'night': m = hr >= 18 || hr < 3 ? 0.2 + 0.8 * bump(hr < 6 ? hr + 24 : hr, 23, 2.4) : 0; break;
     case 'temple': m = (0.08 + 0.92 * Math.max(bump(hr, 7, 1.4), bump(hr, 17, 1.2))) * (rel.bud / 0.9); break;
     case 'mosque': m = (0.08 + 0.92 * Math.max(bump(hr, 5.3, 0.7), bump(hr, 12.6, 0.9), bump(hr, 18.8, 0.8))) * (rel.mus / 0.05); break;
-    case 'church': m = (state.day % 7 === 0 ? 0.15 + 0.85 * bump(hr, 9.5, 1.5) : 0.1 * bump(hr, 17, 2)) * (rel.chr / 0.02); break;
+    case 'church': m = (state.day % 7 === 6 ? 0.15 + 0.85 * bump(hr, 9.5, 1.5) : 0.1 * bump(hr, 17, 2)) * (rel.chr / 0.02); break;
+    case 'concert': m = state.concert?.live && state.concert.live.at === v?.z * N + v?.x ? 22 : 0.03; break;   // คอนเสิร์ตกำลังแสดง: คนแห่มาที่นี่
     default: m = 1;
   }
+  if (V.time === 'temple' && dayEventNow() === 'fair') m *= 3;   // งานวัด
   return Math.max(0, V.base * m);
 }
 const venueObjs = new Map();   // key 'x,z' -> อ็อบเจกต์สถานที่ (คงตัวเดิมไว้ ให้ตัวละครอ้างอิงได้ต่อเนื่อง)
@@ -3209,7 +3343,7 @@ let visY = null;   // สรุปเมื่อวาน
 function visitTick(pop) {
   const hr = tod * 24, rel = religionShares();
   const list = buildVenueList();
-  for (const v of list) v.w = venueW(v.key, hr, rel);
+  for (const v of list) v.w = venueW(v.key, hr, rel, v);
   const sc = visScale();
   // คนแน่นร้าน
   flags.crowdCool = (flags.crowdCool ?? 60) - 1;
@@ -3961,15 +4095,36 @@ function questCtx() {
   const vc = {};
   state.tiles.forEach(tl => { if (tl && tl.t !== 'part' && !(tl.cs && !tl.cs.to) && tl.v) vc[tl.t + ':' + tl.v] = (vc[tl.t + ':' + tl.v] || 0) + 1; });
   const s = computeStats();
-  return { pop: s.pop, level: cityLevel(), money: state.money, day: state.day, vc, cc: ccache, s };
+  return { pop: s.pop, level: cityLevel(), money: state.money, day: state.day, mood: lastMood, xp: state.xp || 0, vc, cc: ccache, cnt: cnt(), s };
+}
+// ---------- ภารกิจรายวัน ----------
+function newDaily() {
+  if (VISIT) return;
+  const C = questCtx(), L = cityLevel();
+  const pool = DAILY.filter(d => !d.need || d.need(C));
+  const ids = [];
+  const rnd = mulberry32(state.day * 7919 + 17);
+  while (ids.length < 3 && pool.length > ids.length) { const d = pool[(rnd() * pool.length) | 0]; if (!ids.includes(d.id)) ids.push(d.id); }
+  state.daily = { day: state.day, ids, done: {}, base: { pop: C.pop, xp: C.xp, placed: C.cnt.placed, tool: { ...(C.cnt.tool || {}) }, concerts: C.cnt.concerts || 0 } };
+}
+const dailyReward = L => ({ money: 600 * L + 400, xp: 40 * L + 30 });
+function dailyRows(C) {
+  const D = state.daily;
+  if (!D) return [];
+  const L = cityLevel();
+  return D.ids.map(id => DAILY.find(d => d.id === id)).filter(Boolean).map(d => ({ d, goal: d.goal(L), cur: Math.max(0, Math.min(d.goal(L), d.d(C, D.base))), done: !!D.done[d.id], reward: dailyReward(L) }));
 }
 function renderQuests() {
   questPanel.classList.toggle('show', questOpen);
   if (!questOpen) return;
   const C = questCtx(), done = (state.quests ||= { done: {} }).done;
+  if (!state.daily || state.daily.day !== state.day) newDaily();
   const rows = QUESTS.map(q => ({ q, p: q.prog(C), d: !!done[q.id] }));
   const nDone = rows.filter(r => r.d).length;
-  questPanel.innerHTML = `<h3>🎯 ${escH(t('mq.title'))}<span>${nDone}/${QUESTS.length}</span></h3>`
+  const dRows = dailyRows(C);
+  questPanel.innerHTML = `<h3>📅 ${escH(t('mq.daily'))}<span>${escH(t('dow.' + (state.day % 7)))} · ${escH(t('mq.dailyNote'))}</span></h3>`
+    + dRows.map(({ d, goal, cur, done: dn, reward }) => `<div class="q${dn ? ' done' : ''}"><b>${dn ? '✓ ' : ''}${escH(t('md.' + d.id, { n: goal }))}</b><div class="qb"><u style="width:${100 * cur / goal}%"></u></div><div class="qr"><span>${fmt(cur)} / ${fmt(goal)}</span><span>${dn ? escH(t('mq.done')) : '+' + money(reward.money) + ' · +' + reward.xp + ' XP'}</span></div></div>`).join('')
+    + `<h3 style="margin-top:12px">🎯 ${escH(t('mq.title'))}<span>${nDone}/${QUESTS.length}</span></h3>`
     + rows.sort((a, b) => a.d - b.d).map(({ q, p, d }) => `<div class="q${d ? ' done' : ''}"><b>${d ? '✓ ' : ''}${escH(t('mq.' + q.id))}</b><i>${escH(t('mq.' + q.id + '.d'))}</i>${d ? '' : `<em class="qh"><b>${escH(t('mq.how'))}</b> ${escH(t('mq.' + q.id + '.h'))}</em>`}<div class="qb"><u style="width:${100 * p[0] / p[1]}%"></u></div><div class="qr"><span>${fmt(p[0])} / ${fmt(p[1])}</span><span>${d ? escH(t('mq.done')) : '+' + money(q.reward.money) + ' · +' + q.reward.xp + ' XP'}</span></div></div>`).join('');
 }
 let questT = 0;
@@ -3986,14 +4141,27 @@ function checkQuests() {
     addNews('good', ['mq.complete', { name: t('mq.' + q.id), money: money(q.reward.money) }]);
     audio.sfx('place');
   }
+  if (!state.daily || state.daily.day !== state.day) newDaily();
+  for (const r of dailyRows(C)) {
+    if (r.done || r.cur < r.goal) continue;
+    state.daily.done[r.d.id] = true;
+    state.money += r.reward.money; gainXp(r.reward.xp);
+    const nm = t('md.' + r.d.id, { n: r.goal });
+    toast(t('mq.complete', { name: nm, money: money(r.reward.money) }));
+    addNews('good', ['mq.complete', { name: nm, money: money(r.reward.money) }]);
+    audio.sfx('place');
+  }
   if (questOpen) renderQuests();
 }
+let ADMIN_PASS = '';
+try { ADMIN_PASS = sessionStorage.getItem('mini-city-admin') || ''; } catch {}
 const placePanel = createPlacePanel({
   remote: Online.onlineEnabled() ? {
     ownerId: () => (VISIT ? VISIT.ownerId : Online.myProfile()?.id) || null,
     list: (mi, kind) => Online.listPlaceComments(VISIT ? VISIT.ownerId : null, mi, kind),
     post: (mi, kind, stars, body) => Online.postPlaceComment(VISIT ? VISIT.ownerId : null, mi, kind, stars, body, settings.playerName),
-    del: id => Online.deletePlaceComment(id),
+    del: id => (ADMIN_PASS ? Online.adminDeleteComment(ADMIN_PASS, id) : Online.deletePlaceComment(id)),
+    isAdmin: () => !!ADMIN_PASS,
     me: () => Online.myProfile()?.id,
   } : null,
   state: () => state, describe: placeDescribe, villagerName: seededName, readOnly: () => !!VISIT, playerName: () => settings.playerName,
@@ -4718,6 +4886,7 @@ function applyQuality(key) {
   const q = QUALITY[key];
   qualityKey = key;
   settings.quality = key;
+  if (qInit && (key === 'rtx' || key === 'ultra') && ['low', 'med'].includes(suggestQuality())) toast(t('q.heavy'));   // เลือกระดับที่การ์ดจอของเครื่องนี้อาจรับไม่ไหว
   saveSettings();
 
   const ratio = Math.min(window.devicePixelRatio || 1, q.pixelRatio);
@@ -4808,11 +4977,11 @@ function updateAgentTargets() {
 
   // รถส่วนตัวเพิ่มตามประชากรและงาน (เมืองใหญ่รถติด) ส่วนขนส่งสาธารณะ (carCut) หักออกตามสัดส่วนเสมอ แม้ถึงเพดานกราฟิกแล้วก็ยังเห็นผล
   const cars = (s.pop * 0.16 + (s.jobsCom * 0.08 + s.jobsInd * 0.12) * (weekend ? 0.45 : 1) + Math.min(6, s.roads * 0.12)) * rush * (0.25 + 0.75 * awake);
-  const people = (s.pop * 0.16 + s.jobs * 0.04 + s.parks * 1.5 * (weekend ? 1.8 : 1) + Math.min(4, s.roads * 0.08)) * (weekend ? 1.2 : 1) * awake * rainy;
+  const people = (s.pop * 0.16 + s.jobs * 0.04 + s.parks * 1.5 * (weekend ? 1.8 : 1) + Math.min(4, s.roads * 0.08)) * (weekend ? 1.2 : 1) * ({ market: 1.25, fair: 1.2, music: 1.2 }[dayEventNow()] || 1) * awake * rainy;
   const petMul = 1 + 0.2 * Math.min(3, ccache.pet);   // มีร้านอุปกรณ์สัตว์เลี้ยง คนเลี้ยงหมาแมวมากขึ้น
   const dogs = s.pop * 0.02 * (0.4 + 0.6 * awake) * rainy * petMul;
   const cats = petMul * s.pop * 0.015 * (0.4 + 0.6 * awake) * (1 - 0.5 * W.rain);
-  const transitCut = 1 - (s.carCut || 0);
+  const transitCut = (1 - (s.carCut || 0)) * (state.concert?.live ? 1.25 : 1);   // คอนเสิร์ตกำลังแสดง รถไปที่งานเยอะ
   carDemand = cars * transitCut;
   agents.setTargets({
     bus: Math.min(ccache.bus * 3, 9), taxi: Math.min(ccache.taxi * 4, 12), grab: Math.min(ccache.grab * 5, 12),
@@ -4887,6 +5056,8 @@ window.addEventListener('keydown', unlockAudio);
 load();
 applyControlMode(settings.mode);
 applyQuality(settings.quality); // สร้างเมืองครั้งแรกตามระดับกราฟิก
+qInit = true;
+if (FIRST_RUN) setTimeout(() => toast(t('q.auto', { q: t('q.' + settings.quality) })), 4500);
 // ตอนเปิดเกม: อาคาร + รถทั่วไป/สัตว์เลี้ยง (ใช้ทันที) ส่วนเรือรอหลังเกมขึ้นจอแล้ว หมวดอื่นโหลดตามที่เมืองต้องใช้ (ensureModels)
 Promise.all(['res', 'com', 'ind', 'power', 'park'].map(g => loadModelGroup(g))).then(r => { if (r.some(n => n > 0)) rebuildAll(); });
 Promise.all(['cars', 'bikes', 'buses', 'dogs', 'cats'].map(g => loadModelGroup(g))).then(r => {
@@ -5163,6 +5334,11 @@ function loop(now) {
         renderer.setPixelRatio(r); renderer.setSize(window.innerWidth, window.innerHeight);
         if (composer) { composer.setPixelRatio(r); composer.setSize(window.innerWidth, window.innerHeight); }
       }
+    }
+    // เล่นระดับสูงมาก/อัลตร้าแล้ว FPS ต่ำต่อเนื่อง (ต่ำกว่า 24 นาน 12 วินาที) แนะนำให้ลดระดับ (ถามครั้งเดียวต่อการเปิดเกม)
+    if ((qualityKey === 'rtx' || qualityKey === 'ultra') && !menu.isOpen && !lowFpsAsked) {
+      lowFpsT = fpsNow < 24 ? lowFpsT + 0.5 : Math.max(0, lowFpsT - 1);
+      if (lowFpsT >= 12) { lowFpsAsked = true; toast(t('q.suggest')); }
     }
     fpsFrames = 0; fpsTime = 0;
   }

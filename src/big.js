@@ -14,6 +14,7 @@ export const FOOT = {
   'com:mall': [3, 2], 'com:market': [2, 2], 'com:dealer': [2, 1], 'com:fishing': [1, 1],
   'com:parking': [2, 1], 'service:metro': [2, 1], 'ind:honda': [3, 3], 'ind:toyota': [4, 3], 'ind:bmw': [3, 3], 'ind:shindengen': [2, 2], 'ind:keihin': [2, 2], 'ind:denso': [3, 2],
   'power:wind': [1, 1], 'power:hydro': [2, 1], 'power:bio': [2, 1], 'water:well': [1, 1], 'com:ev': [1, 1], 'service:freight': [3, 2], 'service:cemetery': [2, 2], 'com:cafe': [1, 1], 'com:game': [1, 1], 'com:pharmacy': [1, 1], 'com:pet': [1, 1],
+  'service:concert': [3, 3], 'service:stadium': [4, 3], 'service:airport': [5, 3], 'service:port': [4, 2],
   'farm:fish': [3, 2], 'farm:cricket': [2, 2], 'farm:rice': [3, 2], 'farm:crop': [2, 2], 'farm:barn': [3, 2], 'farm:orchard': [2, 2],
   'park:plaza': [2, 2], 'park:play': [1, 1], 'park:sports': [2, 2], 'park:garden': [3, 3],
   'park:fountain': [1, 1], 'park:flowers': [1, 1], 'park:pond': [1, 1], 'park:pavilion': [1, 1], 'park:picnic': [1, 1],
@@ -1300,6 +1301,116 @@ export function createBig(c) {
     miniCar(bg, -0.135, 0.02, 0, band(0x1fa5a0)); miniCar(bg, 0.135, 0.06, 0, M.white);
     signAt(bg, t('sign.ev'), '#00897b', '#ffffff', 0, y0 + 0.36, 0.25, 0.5, 0.08, 26);
   }
+  // =============================================================
+  // หอคอนเสิร์ต (3×3): ตัวอาคารหลังคาโค้ง เวทีด้านหน้า จอ LED ไฟนีออน ป้ายไฟ และลานหน้างาน
+  // =============================================================
+  function concert(bg) {
+    ground(bg, 3, 3, M.walk);
+    put(bg, boxGeo, M.asphalt, 0, y0 + 0.012, 1.2, 2.9, 0.012, 0.5);                       // ลานหน้างาน
+    put(bg, boxGeo, band(0x24203a), 0, y0 + 0.17, -0.45, 2.4, 0.34, 1.55);                  // ตัวอาคารหลัก
+    put(bg, domeGeo, M.metal, 0, y0 + 0.34, -0.45, 2.3, 0.2, 1.45);                         // หลังคาโค้งเตี้ย
+    for (const sx of [-1, 1]) put(bg, boxGeo, band(0x14102a), sx * 1.22, y0 + 0.12, -0.45, 0.1, 0.24, 1.5);
+    // เวทีหน้าอาคารพร้อมโครงไฟ
+    put(bg, boxGeo, band(0x2a2a33), 0, y0 + 0.04, 0.55, 1.9, 0.08, 0.5);
+    for (const sx of [-1, 1]) put(bg, boxGeo, M.metal, sx * 0.95, y0 + 0.24, 0.55, 0.035, 0.4, 0.035);
+    put(bg, boxGeo, M.metal, 0, y0 + 0.44, 0.55, 1.95, 0.04, 0.05);
+    for (let k = 0; k < 7; k++) put(bg, icoGeo, k % 2 ? MT.neonPink : MT.neonCyan, -0.8 + k * 0.27, y0 + 0.4, 0.55, 0.07, 0.05, 0.07);
+    put(bg, boxGeo, M.glassShop, 0, y0 + 0.22, 0.31, 1.5, 0.28, 0.02);                      // จอ LED ด้านหลังเวที
+    signAt(bg, t('sign.concert'), '#6a1b9a', '#ffffff', 0, y0 + 0.36, 0.28, 1.4, 0.13, 30);
+    // แถบนีออนบนอาคาร
+    put(bg, boxGeo, MT.neonPink, 0, y0 + 0.3, -1.24, 2.2, 0.025, 0.02);
+    put(bg, boxGeo, MT.neonCyan, 0, y0 + 0.24, -1.24, 2.2, 0.025, 0.02);
+    // ซุ้มทางเข้า ป้ายโฆษณา และเสาธง
+    put(bg, boxGeo, band(0x8e24aa), -1.05, y0 + 0.05, 1.18, 0.5, 0.1, 0.3);
+    put(bg, boxGeo, M.white, 1.05, y0 + 0.07, 1.18, 0.3, 0.14, 0.24);
+    for (const x of [-1.35, -0.4, 0.4, 1.35]) lamp(bg, x, 1.35, 0.3);
+    for (const [x, c] of [[-0.6, 0xff4081], [0.6, 0x40c4ff]]) flag(bg, x, 1.05, c, 0.5);
+    tree(bg, -1.38, -1.3, 1.3, 0.2); tree(bg, 1.38, -1.3, 1.2, 0.6);
+  }
+
+  // =============================================================
+  // สนามกีฬา (4×3): อัฒจันทร์วงรี ลู่วิ่งสีแดง สนามหญ้า เสาไฟสี่มุม
+  // =============================================================
+  function stadium(bg) {
+    ground(bg, 4, 3, M.concrete);
+    put(bg, cylGeo, band(0xd9dde2), 0, y0 + 0.17, 0, 3.5, 0.34, 2.55);                      // อัฒจันทร์
+    put(bg, cylGeo, band(0x9aa3ad), 0, y0 + 0.345, 0, 3.0, 0.02, 2.1);                      // ขอบที่นั่งแถวบน
+    put(bg, cylGeo, MT.track, 0, y0 + 0.30, 0, 2.5, 0.12, 1.65);                             // ลู่วิ่ง
+    put(bg, cylGeo, MT.pitch, 0, y0 + 0.315, 0, 2.05, 0.13, 1.25);                           // สนามหญ้า
+    put(bg, boxGeo, M.white, 0, y0 + 0.381, 0, 0.012, 0.004, 1.1);                          // เส้นกลางสนาม
+    put(bg, cylGeo, band(0xffffff), 0, y0 + 0.381, 0, 0.34, 0.004, 0.34);
+    for (const [x, z, c] of [[-1.5, 0.6, 0xe53935], [-1.5, -0.6, 0xfdd835], [1.5, 0.6, 0x1e88e5], [1.5, -0.6, 0x43a047]]) put(bg, boxGeo, band(c), x, y0 + 0.36, z, 0.1, 0.04, 0.3);   // ที่นั่งหลากสี
+    for (const [x, z] of [[-1.7, -1.3], [1.7, -1.3], [-1.7, 1.3], [1.7, 1.3]]) {                // เสาไฟสปอตไลต์
+      put(bg, cylGeo, M.pole, x, y0 + 0.4, z, 0.04, 0.8, 0.04);
+      put(bg, boxGeo, MT.neonGreen, x, y0 + 0.82, z, 0.2, 0.12, 0.05);
+      put(bg, boxGeo, M.lamp, x, y0 + 0.82, z + (z > 0 ? -0.03 : 0.03), 0.18, 0.1, 0.02);
+    }
+    put(bg, boxGeo, band(0xb0bec5), 0, y0 + 0.2, 1.38, 0.8, 0.4, 0.16);                      // ทางเข้า
+    signAt(bg, t('sign.stadium'), '#1565c0', '#ffffff', 0, y0 + 0.43, 1.47, 0.7, 0.09, 30);
+    tree(bg, -1.85, 0.2, 1.2, 0.3); tree(bg, 1.85, -0.2, 1.2, 0.8);
+  }
+
+  // =============================================================
+  // สนามบิน (5×3): รันเวย์ อาคารผู้โดยสาร หอควบคุม เครื่องบิน และโรงเก็บ
+  // =============================================================
+  function airport(bg) {
+    ground(bg, 5, 3, M.park);
+    put(bg, boxGeo, M.asphalt, 0, y0 + 0.012, -0.85, 4.8, 0.012, 0.5);                      // รันเวย์
+    for (let k = 0; k < 12; k++) put(bg, boxGeo, M.white, -2.1 + k * 0.38, y0 + 0.02, -0.85, 0.2, 0.004, 0.03);
+    for (const sx of [-1, 1]) for (let k = 0; k < 5; k++) put(bg, boxGeo, M.white, sx * 2.25, y0 + 0.02, -0.98 + k * 0.1, 0.1, 0.004, 0.025);   // เลขรันเวย์
+    put(bg, boxGeo, M.asphalt, 0.3, y0 + 0.012, 0.0, 3.6, 0.012, 0.55);                     // ทางขับ/ลานจอด
+    put(bg, boxGeo, M.asphalt, 0.3, y0 + 0.012, -0.45, 0.3, 0.012, 0.5);
+    // อาคารผู้โดยสาร
+    put(bg, boxGeo, M.concrete, -0.4, y0 + 0.1, 0.8, 2.6, 0.2, 0.55);
+    put(bg, boxGeo, M.glassShop, -0.4, y0 + 0.1, 0.525, 2.5, 0.14, 0.02);
+    put(bg, boxGeo, MT.slate, -0.4, y0 + 0.215, 0.8, 2.75, 0.03, 0.65);
+    signAt(bg, t('sign.airport'), '#0d47a1', '#ffffff', -0.4, y0 + 0.255, 1.13, 1.1, 0.1, 30);
+    for (let k = 0; k < 3; k++) put(bg, boxGeo, M.metal, -1.3 + k * 0.9, y0 + 0.09, 0.4, 0.05, 0.12, 0.2);   // งวงเทียบเครื่อง
+    // หอควบคุม
+    put(bg, cylGeo, M.concrete, 1.5, y0 + 0.28, 0.85, 0.16, 0.56, 0.16);
+    put(bg, cylGeo, M.glassShop, 1.5, y0 + 0.6, 0.85, 0.3, 0.12, 0.3);
+    put(bg, coneGeo, M.beacon, 1.5, y0 + 0.7, 0.85, 0.05, 0.08, 0.05);
+    // เครื่องบิน 2 ลำ (ลำตัว ปีก หาง)
+    for (const [x, z, ry] of [[0.2, -0.05, 0], [1.4, 0.05, 0.25]]) {
+      put(bg, cylGeo, M.white, x, y0 + 0.07, z, 0.08, 0.55, 0.08, ry).rotation.z = Math.PI / 2;
+      put(bg, boxGeo, band(0x1565c0), x, y0 + 0.06, z + 0.01, 0.5, 0.012, 0.08, ry);
+      put(bg, boxGeo, M.white, x - 0.03, y0 + 0.066, z, 0.12, 0.012, 0.6, ry);
+      put(bg, boxGeo, band(0x1565c0), x - 0.25, y0 + 0.15, z, 0.1, 0.12, 0.012, ry);
+    }
+    // โรงเก็บเครื่องบิน
+    put(bg, boxGeo, MT.wall, -2.0, y0 + 0.12, 0.0, 0.5, 0.24, 0.7);
+    put(bg, gableGeo(0.56, 0.76, 0.14), MT.slate, -2.0, y0 + 0.24, 0.0, 1, 1, 1);
+    lamp(bg, -1.8, 0.3, 0.3); lamp(bg, 2.0, 0.3, 0.3);
+    tree(bg, 2.1, 1.2, 1.3, 0.4);
+  }
+
+  // =============================================================
+  // ท่าเรือ (4×2): ท่าน้ำคอนกรีต ปั้นจั่น ตู้คอนเทนเนอร์ โกดัง และเรือสินค้า
+  // =============================================================
+  function port(bg) {
+    ground(bg, 4, 2, M.asphalt);
+    put(bg, boxGeo, M.concrete, 0, y0 + 0.01, -0.62, 3.9, 0.03, 0.7);                       // ท่าน้ำ
+    put(bg, boxGeo, band(0x37474f), 0.1, y0 + 0.07, -0.88, 2.8, 0.1, 0.34);                  // ลำเรือ
+    put(bg, boxGeo, band(0xc62828), 0.1, y0 + 0.045, -0.88, 2.82, 0.04, 0.36);
+    put(bg, boxGeo, M.white, 1.1, y0 + 0.18, -0.88, 0.4, 0.14, 0.26);                        // ห้องคนขับ
+    put(bg, boxGeo, M.glassShop, 1.1, y0 + 0.2, -0.74, 0.34, 0.05, 0.01);
+    const COLS = [0x1e5aa8, 0xc62828, 0x2e7d32, 0xef6c00, 0x6a1b9a, 0x00838f];
+    let c = 0;
+    for (let col = 0; col < 7; col++) for (let k = 0; k < 2; k++) put(bg, boxGeo, band(COLS[c++ % COLS.length]), -1.0 + col * 0.31, y0 + 0.155 + k * 0.07, -0.88, 0.28, 0.065, 0.2);   // ตู้บนเรือ
+    for (const x of [-0.8, 0.5]) {                                                              // ปั้นจั่นท่าเรือ
+      for (const z of [-0.45, -0.75]) put(bg, boxGeo, band(0xfbc02d), x, y0 + 0.28, z, 0.04, 0.56, 0.04);
+      put(bg, boxGeo, band(0xfbc02d), x, y0 + 0.56, -0.6, 0.06, 0.05, 0.9);
+    }
+    for (let row = 0; row < 3; row++) for (let col = 0; col < 6; col++) {                      // ลานตู้คอนเทนเนอร์
+      const h = 1 + ((row * 5 + col * 3) % 3);
+      for (let k = 0; k < h; k++) put(bg, boxGeo, band(COLS[(row + col) % COLS.length]), -1.4 + col * 0.34, y0 + 0.06 + k * 0.1, 0.0 + row * 0.2, 0.31, 0.095, 0.17);
+    }
+    put(bg, boxGeo, MT.wall, 1.45, y0 + 0.16, 0.5, 0.8, 0.32, 0.55);                         // โกดัง
+    put(bg, boxGeo, MT.slate, 1.45, y0 + 0.335, 0.5, 0.84, 0.03, 0.59);
+    signAt(bg, t('sign.port'), '#01579b', '#ffffff', 1.45, y0 + 0.22, 0.78, 0.7, 0.09, 30);
+    lamp(bg, -1.8, 0.8, 0.3); lamp(bg, 1.9, 0.0, 0.3);
+  }
+
   function freight(bg) {
     ground(bg, 3, 2, M.asphalt);
     put(bg, boxGeo, MT.wall, -0.9, y0 + 0.22, -0.4, 1.1, 0.44, 1.0);                     // โกดังสินค้า
@@ -1365,7 +1476,7 @@ export function createBig(c) {
 
   const MAP = {
     'service:cemetery': cemetery, 'com:cafe': cafe, 'com:game': gameShop, 'com:pharmacy': pharmacy, 'com:pet': petShop,
-    'power:wind': wind, 'power:hydro': hydro, 'power:bio': bio, 'water:well': well, 'com:ev': evStation, 'service:freight': freight,
+    'power:wind': wind, 'power:hydro': hydro, 'power:bio': bio, 'water:well': well, 'com:ev': evStation, 'service:freight': freight, 'service:concert': concert, 'service:stadium': stadium, 'service:airport': airport, 'service:port': port,
     'com:parking': parking, 'service:metro': metro,
     'ind:honda': honda, 'ind:toyota': toyota, 'ind:bmw': bmw, 'ind:shindengen': shindengen, 'ind:keihin': keihin, 'ind:denso': denso,
     'service:hospital_p': bg => hospital(bg, true), 'service:school_p': bg => school(bg, true), 'com:bank': bank,

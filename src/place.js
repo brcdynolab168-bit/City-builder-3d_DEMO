@@ -4,6 +4,13 @@
 // ---------------------------------------------------------------
 import { t, hasKey } from './i18n.js';
 
+// ตัวกรองคำหยาบพื้นฐาน (ไทย/อังกฤษ/จีน): คอมเมนต์ที่มีคำเหล่านี้โพสต์ไม่ได้ และคำเหล่านี้ในคอมเมนต์เก่าจะถูกปิดด้วย ***
+// ไม่ใช่ตัวกรองสมบูรณ์ เจ้าของเมือง/แอดมินยังลบคอมเมนต์ได้
+const BAD = ['ควย', 'เหี้ย', 'สัส', 'แม่ง', 'ชิบหาย', 'ระยำ', 'ไอ้สัตว์', 'อีสัตว์', 'ส้นตีน', 'fuck', 'shit', 'bitch', 'asshole', 'dick', 'cunt', 'nigger', '傻逼', '他妈的', '妈的', '操你', '滚蛋'];
+const BAD_RE = new RegExp(BAD.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi');
+export const hasBad = s => { BAD_RE.lastIndex = 0; return BAD_RE.test(s); };
+export const maskBad = s => String(s).replace(BAD_RE, m => '*'.repeat(m.length));
+
 const FACTORS = ['park', 'school', 'health', 'safety', 'fire', 'transit', 'shops', 'clean', 'utility'];
 
 // สุ่มแบบกำหนดผลได้ (เปิดแผงเดิมซ้ำแล้วรีวิวชุดเดิมไม่เปลี่ยน)
@@ -83,7 +90,7 @@ export function createPlacePanel(h) {
     const E = entry(cur), readOnly = h.readOnly();
     const title = E.name || D.name;
     const auto = autoReviews(cur, D), mine = E.cm || [];
-    const rrows = h.remote && remote.mi === cur && remote.rows ? remote.rows.map(r => ({ w: r.author_name || t('pl.anon'), s: r.stars, x: r.body, d: new Date(r.created_at).toLocaleDateString(), id: r.id, au: r.author, net: true })) : [];
+    const rrows = h.remote && remote.mi === cur && remote.rows ? remote.rows.map(r => ({ w: r.author_name || t('pl.anon'), s: r.stars, x: maskBad(r.body), d: new Date(r.created_at).toLocaleDateString(), id: r.id, au: r.author, net: true })) : [];
     const all = [...auto, ...mine, ...rrows];
     const avg = all.reduce((a, b) => a + b.s, 0) / Math.max(1, all.length);
     let body = '';
@@ -105,8 +112,8 @@ export function createPlacePanel(h) {
       if (h.remote && remote.err) body += `<div class="dim">${escH(t('pl.remote.off'))}</div>`;
       if (h.remote && remote.busy && !remote.rows) body += `<div class="dim">${escH(t('fr.loading'))}</div>`;
       const meId = h.remote?.me?.(), ownerId = h.remote?.ownerId?.();
-      body += [...rrows.map(x => ({ ...x, me: !!x.au && x.au === meId, del: x.au === meId || (!!ownerId && ownerId === meId) })), ...mine.map(x => ({ ...x, me: true })).reverse(), ...auto]
-        .map(x => `<div class="rv"><div class="w">${escH(x.w)}${x.me ? `<span class="me">${escH(t('pl.you'))}</span>` : ''} <span class="star">${stars(x.s)}</span> <span class="dim">· ${escH(x.net ? x.d : t('pl.day', { n: x.d }))}</span>${x.del ? ` <button class="pbtn" data-a="rdel" data-id="${x.id}" style="padding:0 6px;font-size:11px">✕</button>` : ''}</div><div class="x">${escH(x.x)}</div></div>`).join('');
+      body += [...rrows.map(x => ({ ...x, me: !!x.au && x.au === meId, del: x.au === meId || (!!ownerId && ownerId === meId) || !!h.remote?.isAdmin?.() })), ...mine.map(x => ({ ...x, me: true })).reverse(), ...auto]
+        .map(x => `<div class="rv"><div class="w">${escH(x.w)}${x.me ? `<span class="me">${escH(t('pl.you'))}</span>` : ''} <span class="star">${stars(x.s)}</span> <span class="dim">· ${escH(x.net ? x.d : t('pl.day', { n: x.d }))}</span>${x.del ? ` <button class="pbtn" data-a="rdel" data-id="${x.id}" style="padding:0 6px;font-size:11px">✕</button>` : ''}</div><div class="x">${escH(maskBad(x.x))}</div></div>`).join('');
     }
     el.innerHTML = `<div class="ph"><div class="pt1"><div class="pn">${escH(title)}</div><div class="ps">${escH(D.sub)} · <span class="star">★</span> ${avg.toFixed(1)}</div></div><button class="pbtn" data-a="close">✕</button></div>`
       + `<div class="ptabs"><button class="ptab ${tab === 'info' ? 'on' : ''}" data-a="tab" data-t="info">${escH(t('pl.tab.info'))}</button><button class="ptab ${tab === 'rev' ? 'on' : ''}" data-a="tab" data-t="rev">${escH(t('pl.tab.rev'))} (${all.length})</button></div>`
@@ -125,6 +132,7 @@ export function createPlacePanel(h) {
     if (a === 'post' && h.remote) {
       const txt = (el.querySelector('textarea')?.value || '').trim().slice(0, 200);
       if (!txt) return;
+      if (hasBad(txt)) { alert(t('pl.badword')); return; }
       b.disabled = true;
       h.remote.post(cur, kindOf(cur), draftStars, txt).then(() => { draftText = ''; loadRemote(true); render(); }).catch(() => {   // เซิร์ฟเวอร์ใช้ไม่ได้ (ยังไม่ได้สร้างตาราง ฯลฯ): เมืองตัวเองเก็บคอมเมนต์ในเซฟแทน
         remote.err = true;
@@ -140,6 +148,7 @@ export function createPlacePanel(h) {
     if (a === 'post') {
       const txt = (el.querySelector('textarea')?.value || '').trim().slice(0, 200);
       if (!txt) return;
+      if (hasBad(txt)) { alert(t('pl.badword')); return; }
       E.cm.push({ w: h.playerName() || t('pl.anon'), s: draftStars, x: txt, d: h.state().day });
       if (E.cm.length > 30) E.cm.shift();
       draftText = ''; h.changed(); render();
