@@ -1328,6 +1328,14 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     }
   }
 
+  const SHADOW2 = 30 * 30;   // เกินระยะนี้ไม่วาดเงาของรถ/คน
+  function setAgentShadow(a, on) {
+    a.obj.traverse(o => {
+      if (!o.isMesh) return;
+      o.userData.cs ??= o.castShadow;   // จำค่าเดิมไว้ (บางชิ้นไม่ตั้งใจให้มีเงา)
+      o.castShadow = on && o.userData.cs;
+    });
+  }
   const NEAR2 = 24 * 24, HIDE2 = 62 * 62; // เกณฑ์ระยะ LOD ของคน/สัตว์เลี้ยง (หน่วยช่อง ยกกำลังสอง)
 
 
@@ -1659,6 +1667,11 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
         a.obj.visible = true;
         place(a);
         if (a.role === 'rbike' && a.rig) stuntUpdate(a, dt, sdt);
+        if (cam && a.obj.visible) {   // ไกลเกิน: ตัวเล็กจนเงามองไม่เห็น ปิดการสร้างเงา (ลดงานรอบวาดเงา)
+          const sx = a.obj.position.x - cam.x, sy = a.obj.position.y - cam.y, sz = a.obj.position.z - cam.z;
+          const sh = sx * sx + sy * sy + sz * sz < SHADOW2;
+          if (a.shadowOn !== sh) { a.shadowOn = sh; setAgentShadow(a, sh); }
+        }
         if (a.full && cam) {
           // ระยะจากกล้อง: ไกลมาก = ซ่อน, ไกล = โมเดลรวมชิ้นเดียว ไม่แกว่งแขนขา, ใกล้ = เคลื่อนไหวเต็ม
           const dx = a.obj.position.x - cam.x, dy = a.obj.position.y - cam.y, dz = a.obj.position.z - cam.z;

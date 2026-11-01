@@ -1930,6 +1930,8 @@ scene.add(tileGroup);
 scene.matrixAutoUpdate = false; tileGroup.matrixAutoUpdate = false;
 // ช่องที่ไม่มีอะไรขยับ: คำนวณตำแหน่งครั้งเดียวตอนสร้าง แล้วข้ามทั้งช่องในการอัปเดตทุกเฟรม (เรียกแบบบังคับเท่านั้นถึงจะคำนวณใหม่)
 function frozenMatrixWorld(force) { if (force) THREE.Object3D.prototype.updateMatrixWorld.call(this, true); }
+const FAR_LOD = 58;   // ระยะกล้อง (หน่วยช่อง) ที่ถือว่าซูมออกไกล
+let farLod = false;
 let tilesCullDirty = true;   // ต้องคำนวณใหม่ว่าช่องไหนอยู่ในกล้อง (ช่องถูกสร้างใหม่)
 const meshes = new Array(N * N).fill(null);
 const incidents = [];   // เหตุขัดข้องที่ยังไม่ได้ซ่อม (ไฟดับ/ท่อแตก/ถนนพัง)
@@ -2518,7 +2520,7 @@ function buildTile(x, z) {
   meshes[i] = g;
   if (incidents.length) applyBlackoutTile(i);   // สร้างช่องใหม่กลางย่านไฟดับ ให้ดับด้วย
   tileGroup.add(g);
-  if (swayList.length) { swayList.g = g; swayTiles.set(i, swayList); }
+  if (swayList.length) { swayList.g = g; swayTiles.set(i, swayList); if (farLod) for (const s of swayList) s.obj.visible = false; }
   g.updateMatrixWorld(true);
   if (!swayList.length && !spinTiles.has(i) && !t.cs) g.updateMatrixWorld = frozenMatrixWorld;
   g.userData.cullR = 1.6 + 0.75 * Math.max(t.fw || 1, t.fd || 1);   // รัศมีทดสอบกล้อง (อาคารหลายช่องใหญ่กว่า)
@@ -4936,8 +4938,11 @@ function loop(now) {
   swayClock += dt;
   const sw1 = swayClock * (1.3 + W.wind * 2.2), sw2 = swayClock * 1.1;
   const swA = 0.015 + 0.09 * W.wind, swB = 0.01 + 0.05 * W.wind;
+  // ซูมออกไกล: ต้นไม้ข้างถนนเล็กกว่าจุดภาพ ซ่อนไว้เลย (ลดคำสั่งวาดและไม่ต้องคำนวณการโยก)
+  const far = camera.position.distanceTo(controls.target) > FAR_LOD;
+  if (far !== farLod) { farLod = far; for (const arr of swayTiles.values()) for (const s of arr) s.obj.visible = !far; }
   swayFrame ^= 1;
-  if (swayFrame) for (const arr of swayTiles.values()) {
+  if (swayFrame && !farLod) for (const arr of swayTiles.values()) {
     _sp.center.copy(arr.g.position); _sp.radius = 2.5;
     if (!_fr.intersectsSphere(_sp)) continue;   // ช่องที่อยู่นอกจอไม่ต้องโยกต้นไม้   // อัปเดตต้นไม้สลับเฟรม (ตาแยกไม่ออก แต่เบาลงครึ่งหนึ่ง)
     for (const s of arr) {
@@ -4946,7 +4951,7 @@ function loop(now) {
     }
   }
   const wvec = weather.windVec();
-  wildlife.update(dt, { night: nightLevel, rain: W.rain, wind: wvec, windMag: W.wind });
+  wildlife.update(dt, { frustum: _fr, night: nightLevel, rain: W.rain, wind: wvec, windMag: W.wind });
   // เสียง: ยิ่งซูมเข้าใกล้ ยิ่งได้ยินรายละเอียดชัด
   audioStatsT -= dt;
   if (audioStatsT <= 0) { audioStatsT = 0.5; refreshAudioStats(); }

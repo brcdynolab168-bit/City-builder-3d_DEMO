@@ -235,9 +235,13 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
   let t = 0;
 
   // env: { night, rain, wind: {x,z}, windMag }
+  let fr = null;
+  const _vs = new THREE.Sphere();
+  const seen = g => { if (!fr) return true; _vs.center.copy(g.position); _vs.radius = 2; return fr.intersectsSphere(_vs); };
   function update(dt, env = {}) {
     t += dt;
     const night = env.night || 0, rain = env.rain || 0;
+    fr = env.frustum || null;
     // คลื่นท้ายเรือไม่รับแสง: กลางคืนต้องหรี่ลง ไม่งั้นกราฟิกสูง (bloom) จะเรืองเป็นลำแสงขาว
     { const wc = 1 - 0.8 * Math.min(1, night * 1.2); wakeMat.color.setScalar(wc); M.wake.color.setScalar(wc); }
     const wv = env.wind || { x: 1, z: 0 }, wm = env.windMag || 0;
@@ -257,6 +261,8 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
       const sgn = fl.w < 0 ? -1 : 1;
       const fx = -Math.sin(b.a) * sgn, fz = Math.cos(b.a) * sgn;
       b.g.position.set(x, fl.h + b.dh + Math.sin(t * 0.8 + b.ph) * 0.6, z);
+      if (!seen(b.g)) { b.g.visible = false; continue; }   // นอกจอ: ไม่ต้องหมุน/กระพือปีก
+      b.g.visible = true;
       b.g.rotation.set(0, Math.atan2(fx, fz), -sgn * 0.35);
       const flap = Math.sin(t * (9 + wm * 4) + b.ph) * 0.75;
       b.wings[0].rotation.z = flap;
@@ -284,6 +290,8 @@ export function createWildlife({ scene, blocked = () => false, boats: withBoats 
       let dh = want - b.hd; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
       b.hd += dh * Math.min(1, dt * 1.8);
       b.g.position.set(x, SEA_Y + 0.015 + Math.sin(t * 1.8 + b.ph) * 0.018, z);
+      if (!seen(b.g)) { b.g.visible = false; continue; }   // นอกจอ: เลื่อนตำแหน่งต่อ แต่ไม่ต้องโยกเรือ/พายพาย
+      b.g.visible = true;
       b.g.rotation.y = b.hd;
       const sway = b.big ? 0.4 : b.small ? 1.6 : 1;
       b.inner.rotation.z = Math.sin(t * 1.6 + b.ph) * (0.03 + 0.05 * wm + 0.05 * rain) * sway;
