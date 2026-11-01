@@ -506,6 +506,25 @@ sc.near = 1; sc.far = 140;
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.02;
 scene.add(sun);
+scene.add(sun.target);
+// กรอบเงาตามกล้อง: ซูมเข้าใกล้ = กรอบเล็กลง วาดเงาเฉพาะของที่อยู่ในกรอบ (เร็วขึ้นมาก และเงาคมขึ้น) ซูมออกสุดจะเท่ากับทั้งแผนที่เหมือนเดิม
+const sunOff = new THREE.Vector3(22, 38, 14);
+let shadowHalf = N * 0.8, shadowCx = 0, shadowCz = 0;
+function fitShadow(camDist) {
+  const full = N * 0.8;
+  const half = Math.min(full, [10, 14, 20, 28, 38].find(v => v >= camDist * 1.3 + 4) ?? full);
+  const cx = Math.round(controls.target.x / 2) * 2, cz = Math.round(controls.target.z / 2) * 2;   // ขยับเป็นช่วงๆ ให้เงาไม่สั่นตอนเลื่อนกล้อง
+  const big = half >= full;   // ซูมไกลสุด = ทั้งแผนที่ ไม่ต้องตามกล้อง
+  const tx = big ? 0 : cx, tz = big ? 0 : cz;
+  if (half !== shadowHalf || tx !== shadowCx || tz !== shadowCz) {
+    shadowHalf = half; shadowCx = tx; shadowCz = tz;
+    const c = sun.shadow.camera;
+    c.left = -half; c.right = half; c.top = half; c.bottom = -half; c.updateProjectionMatrix();
+    renderer.shadowMap.needsUpdate = true;
+  }
+  sun.target.position.set(tx, 0, tz);
+  sun.position.set(tx + sunOff.x, sunOff.y, tz + sunOff.z);
+}
 
 // ---------------------------------------------------------------
 // ตั้งค่ากราฟิก 3 ระดับ / โหมดควบคุม
@@ -969,7 +988,7 @@ function updateSky(dt) {
   periodNow = periodKey(hour);
   const ang = (tod - 0.25) * Math.PI * 2;
   const elev = Math.sin(ang);
-  sun.position.set(Math.cos(ang) * 40, Math.max(elev, 0.08) * 40 + 2, 16);
+  sunOff.set(Math.cos(ang) * 40, Math.max(elev, 0.08) * 40 + 2, 16);
   const day = THREE.MathUtils.smoothstep(elev, -0.12, 0.28);
 
   // สีแสงอาทิตย์: ส้มแดงตอนเช้า/เย็น ขาวนวลตอนเที่ยง
@@ -2058,7 +2077,7 @@ function mergeStatic(g, skip) {
     e.list.push(o);
   });
   for (const e of groups.values()) {
-    if (e.list.length < 2) continue;
+    if (e.list.length < 2) { e.list[0].userData.bakeable = true; continue; }   // ชิ้นเดี่ยวที่ไม่ขยับ: ให้รวมข้ามช่องได้
     const geos = [];
     let indexed = e.list.every(o => o.geometry.index), ok = true;
     const attrs = Object.keys(e.list[0].geometry.attributes).sort().join();
@@ -2084,6 +2103,74 @@ function mergeStatic(g, skip) {
   }
   for (const o of dead) o.parent.remove(o);
 }
+// ---------- รวมชิ้นส่วนนิ่งของหลายช่องเป็นก้อนใหญ่ (ลดจำนวนคำสั่งวาดจากหลักพันเหลือหลักสิบ) ----------
+// ช่องที่สร้างเสร็จแล้วมีชิ้นส่วนนิ่งรวมเป็นชิ้นต่อวัสดุอยู่แล้ว (mergeStatic) แต่ถนนและบ้านนับร้อยช่องยังวาดแยกกันทีละช่อง
+// เมื่อเมืองหยุดเปลี่ยนแปลงชั่วครู่ จะรวมช่องในบล็อก 6×6 เป็นชิ้นเดียวต่อวัสดุ ถ้ามีช่องไหนในบล็อกเปลี่ยน
+// จะคืนค่ากลับเป็นช่องแยกทันที (ภาพไม่กระตุก) แล้วรวมใหม่ตอนเงียบ
+const CHUNK = 6, CHUNK_W = Math.ceil(N / CHUNK);
+const bakeGroup = new THREE.Group();
+bakeGroup.matrixAutoUpdate = false;
+scene.add(bakeGroup);
+const chunkMeshes = new Map(), chunkDirty = new Map();   // key → เวลา (ms) ที่บล็อกนี้เปลี่ยนล่าสุด
+const chunkOf = (x, z) => Math.floor(z / CHUNK) * CHUNK_W + Math.floor(x / CHUNK);
+function unbakeChunk(key) {
+  const arr = chunkMeshes.get(key);
+  if (!arr) return;
+  chunkMeshes.delete(key);
+  for (const m of arr) { bakeGroup.remove(m); m.geometry.dispose(); }
+  const cx = (key % CHUNK_W) * CHUNK, cz = Math.floor(key / CHUNK_W) * CHUNK;
+  for (let z = cz; z < Math.min(N, cz + CHUNK); z++) for (let x = cx; x < Math.min(N, cx + CHUNK); x++) {
+    const g = meshes[idx(x, z)];
+    if (g) g.traverse(o => { if (o.userData.baked) { o.userData.baked = false; o.visible = true; } });
+  }
+}
+function dirtyChunk(x, z) {
+  if (!inBounds(x, z)) return;
+  const key = chunkOf(x, z);
+  unbakeChunk(key);
+  chunkDirty.set(key, performance.now());
+}
+function bakeChunk(key) {
+  const cx = (key % CHUNK_W) * CHUNK, cz = Math.floor(key / CHUNK_W) * CHUNK;
+  const groups = new Map();
+  for (let z = cz; z < Math.min(N, cz + CHUNK); z++) for (let x = cx; x < Math.min(N, cx + CHUNK); x++) {
+    const g = meshes[idx(x, z)];
+    if (!g) continue;
+    g.traverse(o => {
+      if (!(o.userData.merged || o.userData.bakeable) || !o.visible || Array.isArray(o.material)) return;
+      const sig = Object.keys(o.geometry.attributes).sort().join() + (o.geometry.index ? 'i' : 'n');
+      const k = o.material.uuid + (o.castShadow ? 'c' : '') + (o.receiveShadow ? 'r' : '') + sig;
+      let e = groups.get(k);
+      if (!e) groups.set(k, e = { mat: o.material, cast: o.castShadow, recv: o.receiveShadow, list: [] });
+      e.list.push(o);
+    });
+  }
+  const out = [];
+  for (const e of groups.values()) {
+    if (e.list.length < 2) continue;
+    const geos = e.list.map(o => { const geo = o.geometry.clone(); geo.applyMatrix4(o.matrixWorld); return geo; });
+    const merged = mergeGeometries(geos, false);
+    for (const geo of geos) geo.dispose();
+    if (!merged) continue;
+    const mm = new THREE.Mesh(merged, e.mat);
+    mm.castShadow = e.cast; mm.receiveShadow = e.recv; mm.matrixAutoUpdate = false;
+    bakeGroup.add(mm); out.push(mm);
+    for (const o of e.list) { o.userData.baked = true; o.visible = false; }
+  }
+  if (out.length) chunkMeshes.set(key, out);
+}
+function updateBake(dt) {
+  if (!chunkDirty.size) return;
+  const now = performance.now();
+  let n = 0;
+  for (const [key, at] of chunkDirty) {
+    if (now - at < 600) continue;   // บล็อกนี้เพิ่งเปลี่ยน รอให้นิ่งก่อน (บล็อกอื่นไม่ต้องรอ)
+    chunkDirty.delete(key);
+    try { bakeChunk(key); } catch (err) { console.warn('รวมบล็อกข้าม:', err); }
+    if (++n >= 2) break;   // ทีละ 2 บล็อกต่อเฟรม ไม่ให้เฟรมสะดุด
+  }
+}
+
 function disposeTile(g) {
   g.traverse(o => { if (o.userData.merged) o.geometry.dispose(); if (o.userData.ownMat) o.material.dispose(); });   // ownMat = วัสดุเฉพาะชิ้น (ตาข่ายนั่งร้าน)
 }
@@ -2263,6 +2350,7 @@ function animateConstruction(dt, time) {
 
 function buildTile(x, z) {
   if (!inBounds(x, z)) return;
+  dirtyChunk(x, z);
   const i = idx(x, z);
   if (meshes[i]) { disposeTile(meshes[i]); tileGroup.remove(meshes[i]); meshes[i] = null; }
   swayTiles.delete(i);
@@ -3258,6 +3346,7 @@ const isLitMat = m => { if (!litSet || litSetN !== facadeMats.length) { litSet =
 function blackoutTile(i, on) {
   const g = meshes[i];
   if (!g) return;
+  dirtyChunk(i % N, (i / N) | 0);
   g.traverse(o => {
     if (!o.isMesh) return;
     if (on) {
@@ -4838,6 +4927,7 @@ function loop(now) {
   updateFly(dt);
   drag.update(speed > 0 && !menu.isOpen ? dt * Math.min(speed, 2) : 0);
   animateConstruction(dt, performance.now() / 1000);
+  updateBake(dt);
   popRefresh -= dt;
   if (popRefresh <= 0) { popRefresh = 1; if (popOpen) renderPop(); }
 
@@ -4896,7 +4986,8 @@ function loop(now) {
 
   controls.update();
   // เงาอัปเดตทุกเฟรมเมื่อ FPS ดี (กันเงารถ/คนสะดุดเป็นจังหวะ) ถ้าเครื่องช้าจึงเว้นเฟรม
-  if ((++shadowTick) % (fpsAvg >= 48 ? 1 : fpsAvg >= 30 ? 2 : 3) === 0) renderer.shadowMap.needsUpdate = true;
+  fitShadow(camDist);
+  if ((++shadowTick) % (fpsAvg >= 90 ? 1 : fpsAvg >= 48 ? 2 : fpsAvg >= 30 ? 3 : 4) === 0) renderer.shadowMap.needsUpdate = true;
   if (useBloom) {
     bloomPass.strength = 0.15 + 0.7 * nightLevel;
     composer.render();
@@ -5030,4 +5121,3 @@ if (VISIT) {
   bar.append(msg, back);
   document.body.appendChild(bar);
 }
-
