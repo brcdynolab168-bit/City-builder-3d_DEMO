@@ -11,6 +11,9 @@ export const LANGS = [
 
 const D = {
   th: {
+    "adm.title": "แอดมิน: ผู้เล่นที่ออนไลน์",
+    "adm.note": "เลือกผู้เล่นเพื่อเข้าไปดูเมือง (ดูอย่างเดียว) เห็นเมืองได้แม้ตั้งเป็นเฉพาะเพื่อน ยกเว้นเมืองที่ตั้งเป็นไม่ให้ใครดู",
+    "adm.none": "ตอนนี้ไม่มีผู้เล่นคนอื่นที่เชื่อมต่อออนไลน์",
     "lv.slow": "⏳ ตั้งแต่ระดับนี้ การก่อสร้างใช้เวลานานขึ้นมาก (เป็นนาทีถึงชั่วโมง) และโซนโตช้าลง กดเร่งเกม 2x/3x เพื่อย่นเวลา",
     "pl.remote.off": "ยังเชื่อมคอมเมนต์ออนไลน์ไม่ได้ (เจ้าของเกมต้องรัน SQL ตาราง place_comments) คอมเมนต์ในเครื่องยังใช้ได้",
     "mq.title": "ภารกิจ",
@@ -549,6 +552,9 @@ const D = {
     'daylen': '1 วันในเกม = 5 นาที',
   },
   en: {
+    "adm.title": "Admin: players online",
+    "adm.note": "Pick a player to view their city (read-only). Works even for friends-only cities, except cities set to private",
+    "adm.none": "No other connected players online right now",
     "lv.slow": "⏳ From this level on, construction takes much longer (minutes to hours) and zones grow slower. Use 2x/3x speed to shorten it",
     "pl.remote.off": "Online comments are unavailable (the game owner must run the place_comments SQL). Local comments still work",
     "mq.title": "Missions",
@@ -1080,6 +1086,9 @@ const D = {
     'daylen': '1 in-game day = 5 minutes',
   },
   zh: {
+    "adm.title": "管理员：在线玩家",
+    "adm.note": "选择玩家查看其城市（只读）。即使设为仅好友也能查看，但设为不公开的城市除外",
+    "adm.none": "目前没有其他已连接的在线玩家",
     "lv.slow": "⏳ 从该等级起，建造耗时大幅增加（几分钟到几小时），区域成长也更慢。可用 2x/3x 加速缩短时间",
     "pl.remote.off": "无法使用在线评论（游戏所有者需运行 place_comments 的 SQL），本地评论仍可用",
     "mq.title": "任务",

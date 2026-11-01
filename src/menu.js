@@ -105,14 +105,42 @@ export function createMenu(h) {
   }
 
   // ----- เมืองเพื่อน (ออนไลน์): รหัสของเรา, เพิ่มเพื่อน, รายชื่อเพื่อน, เมืองสาธารณะ -----
-  let frTok = 0;
+  let frTok = 0, adminPass = '', unsubAdmin = null;
+  function adminScreen() {
+    return `
+      <div class="mtitle">🛡️ ${t('adm.title')}</div>
+      <div class="msec"><h4 id="admCount"></h4><div class="mdesc">${t('adm.note')}</div>
+        <div id="admList" class="slots"><div class="empty">${t('fr.loading')}</div></div></div>
+      <div class="mrow">${btn('friends', t('menu.back'))}</div>`;
+  }
+  let admTok = 0;
+  async function fillAdmin() {
+    const tok = ++admTok, O = h.online, q = id => root.querySelector('#' + id);
+    const paint = async () => {
+      const P = O.presence.get();
+      let profs = [];
+      try { profs = await O.profilesByIds([...P.ids]); } catch { /* ใช้รายชื่อเดิม */ }
+      if (tok !== admTok || !q('admList')) return;
+      q('admCount').textContent = t('fr.onlineNow', { n: Math.max(1, P.count) });
+      const me = O.myProfile?.()?.id;
+      q('admList').innerHTML = profs.filter(f => f.id !== me).map(f => `
+        <div class="slot"><div class="si"><b>${esc(f.name || t('fr.noname'))} <i style="color:#4cd964;font-style:normal;font-size:11px">● ${esc(t('fr.online'))}</i></b>
+          <span>${esc(f.city_name || '-')} · ${mapName(f.map)} · ${t('fr.stats', { pop: (f.pop || 0).toLocaleString(), lv: f.level || 1 })}</span>
+          <small>${esc(t('fr.privacy.' + (f.privacy || 'friends')))}</small></div>
+          <div class="sb"><button class="mb primary" data-act="adminview" data-id="${f.id}">${t('fr.visit')}</button></div></div>`).join('') || `<div class="empty">${t('adm.none')}</div>`;
+    };
+    await connect_safe(O);
+    unsubAdmin?.(); unsubAdmin = O.presence.subscribe(paint);
+    paint();
+  }
+  const connect_safe = O => O.connect().catch(() => {});
   function friendsScreen() {
     return `
       <div class="mtitle">🌏 ${t('fr.title')}</div>
       <div id="frOnline" class="mdesc"></div>
       <div class="msec"><h4>${t('fr.mycode')}</h4><div id="frMe" class="mdesc">${t('fr.loading')}</div></div>
       <div class="msec"><h4>${t('fr.add')}</h4>
-        <label class="mfield"><span>${t('fr.code')}</span><input id="frCode" maxlength="8" placeholder="${esc(t('fr.codeHint'))}" style="text-transform:uppercase"></label>
+        <label class="mfield"><span>${t('fr.code')}</span><input id="frCode" maxlength="40" autocomplete="off" placeholder="${esc(t('fr.codeHint'))}" style="text-transform:uppercase"></label>
         <div class="mrow">${btn('fradd', t('fr.addBtn'), '', 'primary')}</div>
         <div id="frMsg" class="mdesc"></div></div>
       <div class="msec"><h4>${t('fr.list')}</h4><div id="frList" class="slots"><div class="empty">${t('fr.loading')}</div></div></div>
@@ -174,9 +202,10 @@ export function createMenu(h) {
   }
 
   function render() {
-    const body = screen === 'new' ? newScreen() : screen === 'load' ? loadScreen() : screen === 'settings' ? settingsScreen() : screen === 'friends' ? friendsScreen() : mainScreen();
+    const body = screen === 'new' ? newScreen() : screen === 'load' ? loadScreen() : screen === 'settings' ? settingsScreen() : screen === 'friends' ? friendsScreen() : screen === 'admin' ? adminScreen() : mainScreen();
     root.innerHTML = `${langBar()}<div class="mpanel scr-${screen}">${body}</div>`;
     if (screen === 'friends') fillFriends();
+    if (screen === 'admin') fillAdmin();
     root.querySelectorAll('canvas[data-map]').forEach(c => drawPreview(c, c.dataset.map));
   }
 
@@ -210,6 +239,11 @@ export function createMenu(h) {
       case 'fradd': {
         const code = (root.querySelector('#frCode')?.value || '').trim(), msg = root.querySelector('#frMsg');
         if (!code) break;
+        if (code.length > 8) {   // รหัสเพื่อนยาวไม่เกิน 8 ตัว ที่ยาวกว่านั้นลองตรวจเป็นรหัสแอดมิน (ตรวจที่เซิร์ฟเวอร์)
+          msg.textContent = t('fr.loading');
+          h.online.adminCheck(code).then(ok => { if (ok) { adminPass = code; screen = 'admin'; render(); } else msg.textContent = t('fr.notfound'); }).catch(() => { msg.textContent = t('fr.error'); });
+          break;
+        }
         msg.textContent = t('fr.loading');
         h.online.addFriend(code)
           .then(f => { msg.textContent = t('fr.added', { name: f.name || t('fr.noname') }); fillFriends(); })
@@ -218,6 +252,7 @@ export function createMenu(h) {
       }
       case 'frdel': h.online.removeFriend(id).then(fillFriends).catch(() => {}); break;
       case 'visit': h.onVisit(id); break;
+      case 'adminview': h.onVisit(id, adminPass); break;
       case 'back': screen = 'main'; render(); break;
       case 'pickmap':
         selMap = el.dataset.v;

@@ -4849,7 +4849,7 @@ const menu = createMenu({
   sfx: n => audio.sfx(n),
   onResume: resumeFromMenu,
   onContinue: () => { if (pausedSpeed !== null) resumeFromMenu(); else startGame(); },
-  online: Online.onlineEnabled() ? { enabled: true, connect: () => Online.connect(settings.playerName, settings.privacy), addFriend: Online.addFriend, removeFriend: Online.removeFriend, listFriends: Online.listFriends, listPublic: Online.listPublic, presence: { get: Online.getPresence, subscribe: Online.onPresence } } : null,
+  online: Online.onlineEnabled() ? { enabled: true, connect: () => Online.connect(settings.playerName, settings.privacy), addFriend: Online.addFriend, removeFriend: Online.removeFriend, listFriends: Online.listFriends, listPublic: Online.listPublic, adminCheck: Online.adminCheck, profilesByIds: Online.profilesByIds, myProfile: Online.myProfile, presence: { get: Online.getPresence, subscribe: Online.onPresence } } : null,
   onVisit: visitCity,
   onNew: (name, map) => {
     Saves.clearVisit();
@@ -5226,8 +5226,8 @@ async function publishCity() {
   } catch (err) { console.warn('อัปโหลดเมืองไม่สำเร็จ', err); }
   publishBusy = false;
 }
-async function visitCity(id) {
-  const r = await Online.fetchCity(id).catch(() => null);
+async function visitCity(id, adminPass) {
+  const r = await Online.fetchCity(id, adminPass).catch(() => null);
   if (!r || !Array.isArray(r.data?.tiles) || r.data.tiles.length !== N * N) return toast(t('fr.cantview'));
   if (activeId) save();
   if (!Saves.setVisit({ ownerId: id, state: r.data, map: r.profile?.map || 'river', name: r.profile?.city_name || '', owner: r.profile?.name || '' })) return toast(t('fr.cantview'));

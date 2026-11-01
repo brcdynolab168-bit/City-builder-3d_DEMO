@@ -106,3 +106,29 @@ begin
 end $$;
 drop trigger if exists place_comments_rate on public.place_comments;
 create trigger place_comments_rate before insert on public.place_comments for each row execute function public.place_comments_rate();
+
+-- ---------------------------------------------------------------
+-- โหมดแอดมิน: ดูเมืองของใครก็ได้ (รวมเมืองที่ตั้งเป็นเฉพาะเพื่อน) โดยพิมพ์รหัสลับในช่องรหัสเพื่อน
+-- เก็บเฉพาะค่าแฮช SHA-256 ของรหัสไว้ที่เซิร์ฟเวอร์ ตารางนี้เปิด RLS ไว้และไม่มี policy จึงอ่านผ่าน API ไม่ได้
+-- เมืองที่ตั้งเป็น "ไม่ให้ใครดู" ถูกลบออกจากเซิร์ฟเวอร์อยู่แล้ว แอดมินจึงดูไม่ได้เช่นกัน
+-- เปลี่ยนรหัส: update public.admin_secret set hash = encode(digest('รหัสใหม่', 'sha256'), 'hex');
+-- ---------------------------------------------------------------
+create extension if not exists pgcrypto with schema extensions;
+create table if not exists public.admin_secret (hash text primary key);
+alter table public.admin_secret enable row level security;
+insert into public.admin_secret (hash) values ('ce2b42575de6f97f6706ad088c76f90ce69fe3d79b1b6931935bd5818293ffda') on conflict do nothing;
+
+create or replace function public.admin_ok(pass text) returns boolean
+language sql security definer set search_path = public, extensions stable as $$
+  select exists (select 1 from public.admin_secret where hash = encode(digest(pass, 'sha256'), 'hex'));
+$$;
+create or replace function public.admin_city(pass text, target uuid) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not public.admin_ok(pass) then raise exception 'denied'; end if;
+  return (select data from public.cities where id = target);
+end $$;
+revoke all on function public.admin_ok(text) from public, anon;
+revoke all on function public.admin_city(text, uuid) from public, anon;
+grant execute on function public.admin_ok(text) to authenticated;
+grant execute on function public.admin_city(text, uuid) to authenticated;

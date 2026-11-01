@@ -115,11 +115,11 @@ export async function listPublic(limit = 15) {
   return fail(await c.from('profiles').select('*').eq('privacy', 'public').neq('id', p.id).order('updated_at', { ascending: false }).limit(limit));
 }
 // ข้อมูลเมืองของผู้เล่น id (null = ไม่มีสิทธิ์ดู/ยังไม่เคยอัปโหลด)
-export async function fetchCity(id) {
+export async function fetchCity(id, adminPass) {
   await connect();
   const c = await client();
   const [city, prof] = await Promise.all([
-    c.from('cities').select('data').eq('id', id).maybeSingle(),
+    adminPass ? c.rpc('admin_city', { pass: adminPass, target: id }).then(r => (r.error ? r : { data: r.data ? { data: r.data } : null, error: null })) : c.from('cities').select('data').eq('id', id).maybeSingle(),
     c.from('profiles').select('*').eq('id', id).maybeSingle(),
   ]);
   const d = fail(city);
@@ -142,4 +142,19 @@ export async function deletePlaceComment(id) {
   await connect();
   const c = await client();
   fail(await c.from('place_comments').delete().eq('id', id));
+}
+
+// ---------- โหมดแอดมิน: รหัสลับตรวจที่เซิร์ฟเวอร์ (ฟังก์ชัน admin_ok / admin_city ใน supabase/schema.sql) ไม่ได้เก็บรหัสไว้ในเกม ----------
+export async function adminCheck(pass) {
+  await connect();
+  const c = await client();
+  const r = await c.rpc('admin_ok', { pass });
+  return !r.error && r.data === true;
+}
+// โปรไฟล์ของผู้เล่นที่ออนไลน์อยู่ตอนนี้ (ids มาจาก presence)
+export async function profilesByIds(ids) {
+  if (!ids.length) return [];
+  await connect();
+  const c = await client();
+  return fail(await c.from('profiles').select('*').in('id', ids.slice(0, 100)));
 }
