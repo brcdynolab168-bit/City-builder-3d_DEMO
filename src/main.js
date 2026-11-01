@@ -4635,13 +4635,14 @@ function setSetting(k, v) {
   }
   saveSettings();
 }
+if (Online.onlineEnabled()) Online.startPresence();
 const menu = createMenu({
   getActive: () => (activeId ? Saves.getSlot(activeId) : null),
   settings: { get: () => settings, set: setSetting },
   sfx: n => audio.sfx(n),
   onResume: resumeFromMenu,
   onContinue: () => { if (pausedSpeed !== null) resumeFromMenu(); else startGame(); },
-  online: Online.onlineEnabled() ? { enabled: true, connect: () => Online.connect(settings.playerName, settings.privacy), addFriend: Online.addFriend, removeFriend: Online.removeFriend, listFriends: Online.listFriends, listPublic: Online.listPublic } : null,
+  online: Online.onlineEnabled() ? { enabled: true, connect: () => Online.connect(settings.playerName, settings.privacy), addFriend: Online.addFriend, removeFriend: Online.removeFriend, listFriends: Online.listFriends, listPublic: Online.listPublic, presence: { get: Online.getPresence, subscribe: Online.onPresence } } : null,
   onVisit: visitCity,
   onNew: (name, map) => {
     Saves.clearVisit();

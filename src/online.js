@@ -33,10 +33,35 @@ export function connect(name, privacy) {
       if (!r.error) prof = r.data; else if (r.error.code !== '23505') throw r.error;
     }
     me = prof;
+    trackMe();
     return me;
   })().finally(() => { connecting = null; }));
 }
 export const myProfile = () => me;
+
+// ---------- ใครกำลังเล่นอยู่ (Supabase Realtime Presence: ไม่ต้องมีตารางเพิ่ม) ----------
+// ทุกแท็บที่เปิดเกมอยู่นับเป็น 1 คน (ผู้เล่นคนเดียวเปิดหลายแท็บก็นับแยกตามแท็บ แต่ถ้าล็อกอินแล้วจะนับตามตัวตน)
+let ch = null, presenceStarted = false;
+const presence = { count: 0, ids: new Set() };
+const presenceCbs = new Set();
+function trackMe() { if (ch && ch.state === 'joined') ch.track({ uid: me?.id || null }); }
+export function startPresence() {
+  if (presenceStarted || !onlineEnabled()) return;
+  presenceStarted = true;
+  client().then(c => {
+    const key = (crypto.randomUUID?.() || String(Math.random()).slice(2));
+    ch = c.channel('mini-city-presence', { config: { presence: { key } } });
+    ch.on('presence', { event: 'sync' }, () => {
+      const st = ch.presenceState(), ids = new Set(), anon = new Set();
+      for (const [k, arr] of Object.entries(st)) for (const m of arr) (m.uid ? ids : anon).add(m.uid || k);
+      presence.ids = ids; presence.count = ids.size + anon.size;
+      presenceCbs.forEach(f => { try { f(presence); } catch {} });
+    });
+    ch.subscribe(s => { if (s === 'SUBSCRIBED') trackMe(); });
+  }).catch(() => { presenceStarted = false; });
+}
+export const getPresence = () => presence;
+export function onPresence(fn) { presenceCbs.add(fn); return () => presenceCbs.delete(fn); }
 
 export async function updateProfile(fields) {
   const p = await connect();

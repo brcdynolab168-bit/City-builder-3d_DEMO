@@ -109,6 +109,7 @@ export function createMenu(h) {
   function friendsScreen() {
     return `
       <div class="mtitle">🌏 ${t('fr.title')}</div>
+      <div id="frOnline" class="mdesc"></div>
       <div class="msec"><h4>${t('fr.mycode')}</h4><div id="frMe" class="mdesc">${t('fr.loading')}</div></div>
       <div class="msec"><h4>${t('fr.add')}</h4>
         <label class="mfield"><span>${t('fr.code')}</span><input id="frCode" maxlength="8" placeholder="${esc(t('fr.codeHint'))}" style="text-transform:uppercase"></label>
@@ -120,14 +121,21 @@ export function createMenu(h) {
   }
   const cityRow = (f, mine) => `
     <div class="slot"><div class="si">
-      <b>${esc(f.name || t('fr.noname'))}</b>
+      <b>${esc(f.name || t('fr.noname'))} <i class="ondot" data-pid="${f.id}" title="${esc(t('fr.online'))}" style="display:none;color:#4cd964;font-style:normal;font-size:11px">● ${esc(t('fr.online'))}</i></b>
       <span>${esc(f.city_name || '-')} · ${mapName(f.map)} · ${t('fr.stats', { pop: (f.pop || 0).toLocaleString(), lv: f.level || 1 })}</span>
       <small>${t('load.updated', { t: fmtDate(Date.parse(f.updated_at)) })}${mine ? ' · ' + t(f.canView ? 'fr.open' : 'fr.closed') : ''}</small>
     </div><div class="sb">
       ${!mine || f.canView ? `<button class="mb primary" data-act="visit" data-id="${f.id}">${t('fr.visit')}</button>` : ''}
       ${mine ? `<button class="mb danger" data-act="frdel" data-id="${f.id}">${t('fr.remove')}</button>` : ''}
     </div></div>`;
+  let unsubPresence = null;
+  function paintPresence() {
+    const P = h.online.presence.get(), b = root.querySelector('#frOnline');
+    if (b) b.innerHTML = `<span style="color:#4cd964">●</span> ${esc(t('fr.onlineNow', { n: Math.max(1, P.count) }))}`;
+    root.querySelectorAll('[data-pid]').forEach(e => { e.style.display = P.ids.has(e.dataset.pid) ? '' : 'none'; });
+  }
   async function fillFriends() {
+    unsubPresence?.(); unsubPresence = h.online.presence.subscribe(paintPresence); paintPresence();
     const tok = ++frTok, O = h.online, q = id => root.querySelector('#' + id);
     try {
       const me = await O.connect();
@@ -137,6 +145,7 @@ export function createMenu(h) {
       if (tok !== frTok || !q('frList')) return;
       q('frList').innerHTML = list.length ? list.map(f => cityRow(f, true)).join('') : `<div class="empty">${t('fr.none')}</div>`;
       q('frPub').innerHTML = pub.length ? pub.map(f => cityRow(f, false)).join('') : `<div class="empty">${t('fr.nopub')}</div>`;
+      paintPresence();
     } catch (err) {
       if (tok === frTok && q('frMe')) q('frMe').textContent = t('fr.error') + ' (' + (err.message || err) + ')';
     }
