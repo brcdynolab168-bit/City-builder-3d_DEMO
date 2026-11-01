@@ -149,7 +149,8 @@ export async function adminCheck(pass) {
   await connect();
   const c = await client();
   const r = await c.rpc('admin_ok', { pass });
-  return !r.error && r.data === true;
+  if (r.error) throw new Error(r.error.code === 'PGRST202' ? 'admin-sql' : r.error.message);   // ฟังก์ชันยังไม่ถูกสร้างบนเซิร์ฟเวอร์ (ยังไม่ได้รัน SQL)
+  return r.data === true;
 }
 // โปรไฟล์ของผู้เล่นที่ออนไลน์อยู่ตอนนี้ (ids มาจาก presence)
 export async function profilesByIds(ids) {

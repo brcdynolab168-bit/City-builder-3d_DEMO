@@ -241,7 +241,7 @@ export function createMenu(h) {
         if (!code) break;
         if (code.length > 8) {   // รหัสเพื่อนยาวไม่เกิน 8 ตัว ที่ยาวกว่านั้นลองตรวจเป็นรหัสแอดมิน (ตรวจที่เซิร์ฟเวอร์)
           msg.textContent = t('fr.loading');
-          h.online.adminCheck(code).then(ok => { if (ok) { adminPass = code; screen = 'admin'; render(); } else msg.textContent = t('fr.notfound'); }).catch(() => { msg.textContent = t('fr.error'); });
+          h.online.adminCheck(code).then(ok => { if (ok) { adminPass = code; screen = 'admin'; render(); } else msg.textContent = t('fr.notfound'); }).catch(err => { msg.textContent = err.message === 'admin-sql' ? t('adm.nosql') : t('fr.error') + ' (' + (err.message || err) + ')'; });
           break;
         }
         msg.textContent = t('fr.loading');

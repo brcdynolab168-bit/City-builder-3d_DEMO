@@ -11,6 +11,7 @@ export const LANGS = [
 
 const D = {
   th: {
+    "adm.nosql": "ฟังก์ชันแอดมินยังไม่ได้ติดตั้งบนเซิร์ฟเวอร์: เปิด Supabase → SQL Editor แล้วรันส่วน \"โหมดแอดมิน\" ท้ายไฟล์ supabase/schema.sql",
     "mq.pop100.h": "สร้างถนน แล้ววางโซนที่อยู่อาศัยติดถนน ต้องมีทั้งโรงไฟฟ้าและโรงประปา (ใกล้แม่น้ำ/ทะเล) บ้านถึงจะโตขึ้น",
     "mq.pop500.h": "วางโซนที่อยู่อาศัยเพิ่ม ดับเบิลคลิกบ้านเพื่ออัปเกรดเป็นทาวน์เฮาส์/อพาร์ตเมนต์ (ต้องปลดล็อกระดับเมือง) วางสวนและโรงเรียนใกล้บ้านให้โตเร็วขึ้น",
     "mq.pop1500.h": "อัปเกรดบ้านเป็นอพาร์ตเมนต์/คอนโด วางงาน (พาณิชย์/อุตสาหกรรม) ให้พอกับคน และดูแลไฟ/น้ำให้เพียงพอ (ตัวเลขบนแถบบนต้องไม่เป็นสีแดง)",
@@ -565,6 +566,7 @@ const D = {
     'daylen': '1 วันในเกม = 5 นาที',
   },
   en: {
+    "adm.nosql": "The admin functions are not installed on the server yet: open Supabase → SQL Editor and run the \"admin mode\" part at the end of supabase/schema.sql",
     "mq.pop100.h": "Build roads, then zone residential next to them. You need both a power plant and a water plant (near a river/sea) for homes to grow",
     "mq.pop500.h": "Zone more housing. Double-click a house to upgrade it to a townhouse/apartment (needs the city level). Parks and schools nearby make homes grow faster",
     "mq.pop1500.h": "Upgrade homes to apartments/condos, provide enough jobs (commercial/industrial) and keep power & water sufficient (no red numbers in the top bar)",
@@ -1112,6 +1114,7 @@ const D = {
     'daylen': '1 in-game day = 5 minutes',
   },
   zh: {
+    "adm.nosql": "服务器上尚未安装管理员函数：请打开 Supabase → SQL Editor，运行 supabase/schema.sql 末尾的“管理员模式”部分",
     "mq.pop100.h": "先修路，再在路边划住宅区。必须同时有发电厂和水厂（靠近河流/海），住宅才会成长",
     "mq.pop500.h": "继续划住宅区。双击房屋可升级为联排屋/公寓（需要城市等级）。附近建公园和学校能让住宅成长更快",
     "mq.pop1500.h": "把住宅升级为公寓/高层，提供足够的工作岗位（商业/工业），并保证水电充足（顶部数字不要变红）",
