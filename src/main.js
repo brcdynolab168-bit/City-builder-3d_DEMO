@@ -548,9 +548,14 @@ const QUALITY = {
     rain: 7000, forest: 4000,
   },
   rtx: {
-    label: 'RTX', desc: 'RTX ON: เงาและแสงสมจริงสูงสุด (AO, ท้องฟ้า, แสงจันทร์, ไฟเรือง) กินการ์ดจอมาก',
+    label: 'สูงมาก', desc: 'สูงมาก: แสงเงาสมจริงสูงสุด (AO, ท้องฟ้า, แสงจันทร์, ไฟเรือง) กินการ์ดจอมาก',
     pixelRatio: 2, shadows: true, shadowSize: 4096, bloom: true, cars: 150, people: 160, pets: 40, details: 2,
     rain: 7000, forest: 4000, rtx: true,
+  },
+  ultra: {
+    label: 'อัลตร้า', desc: 'อัลตร้า: ทุกอย่างของสูงมาก + ภาพคมกว่า เงาละเอียดพิเศษ รถ คน สัตว์ และป่าหนาแน่นสุด สำหรับการ์ดจอแรงเท่านั้น',
+    pixelRatio: 2.5, shadows: true, shadowSize: 8192, bloom: true, cars: 220, people: 240, pets: 60, details: 2,
+    rain: 10000, forest: 6000, rtx: true,
   },
 };
 const settings = { quality: 'med', mode: 'trackpad', lang: 'th', master: 0.8, sfx: 0.8, amb: 0.8, traffic: 0.8, music: 0.35, mute: false, playerName: '', privacy: 'friends' };
@@ -2206,6 +2211,18 @@ const siteNetGeo = new THREE.PlaneGeometry(1, 1);
 const siteSph = new THREE.SphereGeometry(0.5, 8, 6);
 const smooth01 = v => { v = Math.max(0, Math.min(1, v)); return v * v * (3 - 2 * v); };
 
+// เวลาก่อสร้างจริง (วินาทีที่ความเร็ว 1x) ตั้งแต่เมืองระดับ 3: ใช้เวลาเป็นนาทีถึงชั่วโมง ไม่ให้เล่นง่ายเกินไป
+// อัปเกรดโซนระดับ 1/2/3 = 5/10/20 นาที, ของอื่นตามราคา: ถูก ≈ 6-10 นาที, 1,100 ≈ 21 นาที, 2,600 ≈ 44 นาที, 5,200 ≈ 1 ชม. 23 นาที
+// ระดับเมือง 4 และ 5 นานขึ้นอีก 1.25 / 1.5 เท่า (กดเร่งเกม 2x/3x ช่วยย่นเวลาได้)
+const GROW_RATE = [1, 1, 1, 0.6, 0.45, 0.35], LV_LONG = [1, 1, 1, 1, 1.25, 1.5];
+const lvIdx = () => Math.min(cityLevel(), GROW_RATE.length - 1);
+function buildSecs(t) {
+  const cs = t.cs, lv = lvIdx();
+  if (lv < 3) return cs.dur;
+  const V = variantOf(t);
+  const base = cs.to ? [0, 300, 600, 1200][cs.to] : 300 + 0.9 * (V?.cost || 300);
+  return base * LV_LONG[lv];
+}
 function startZoneBuild(t, x, z) {
   const to = t.lv + 1;
   t.cs = { p: 0, dur: [0, 38, 65, 95][to], to };
@@ -2324,7 +2341,7 @@ function animateConstruction(dt, time) {
     for (const e of constructing.values()) {
       const cs = e.t.cs;
       if (!cs) { done.push(e); continue; }
-      if (speed > 0 && !menu.isOpen) cs.p = Math.min(1, cs.p + dt * speed / cs.dur);
+      if (speed > 0 && !menu.isOpen) cs.p = Math.min(1, cs.p + dt * speed / buildSecs(e.t));
       if (cs.p >= 1) { done.push(e); continue; }
       const sg = meshes[e.i];
       if (sg) { _sp.center.copy(sg.position); _sp.radius = 3; if (!_fr.intersectsSphere(_sp)) continue; }
@@ -2909,6 +2926,7 @@ function tick() {
 
   let zoneN = 0;
   state.tiles.forEach(tt => { if (tt && ZONES.includes(tt.t)) zoneN++; });
+  const lvN = lvIdx();
   const siteCap = Math.min(12, 4 + Math.floor(zoneN / 30));
   for (let z = 0; z < N; z++) {
     for (let x = 0; x < N; x++) {
@@ -2925,6 +2943,7 @@ function tick() {
 
       let p = 0.012 + 0.05 * s.demand[t.t];
       if (t.t === 'res' && nearPark.has(i)) p += 0.015;
+      p *= GROW_RATE[lvN];
       if (Math.random() < p) { startZoneBuild(t, x, z); }
     }
   }
@@ -3875,7 +3894,7 @@ function placeDescribe(i) {
   const desc = hasKey(key + '.note') ? t(key + '.note') : t('pl.desc.' + tl.t);
   const rows = [[t('pl.r.cat'), t('tool.' + tl.t)]];
   if ((tl.fw || 1) * (tl.fd || 1) > 1) rows.push([t('pl.r.size'), `${tl.fw || 1}×${tl.fd || 1}`]);
-  if (tl.cs && !tl.cs.to) rows.push([t('pl.r.status'), t('pl.r.building')]);
+  if (tl.cs) { const left = Math.max(0, (1 - tl.cs.p) * buildSecs(tl) / Math.max(1, speed)); rows.push([t('pl.r.status'), t('pl.r.building') + ' · ' + t('pl.r.left', { n: left >= 3600 ? (left / 3600).toFixed(1) + ' ' + t('pl.r.hr') : Math.max(1, Math.round(left / 60)) + ' ' + t('pl.r.min') })]); }
   const pop = tl.t === 'res' ? (FV ? FV.pop : POP_PER[lv]) : 0;
   const jobs = FV?.jobs ?? (tl.t === 'com' ? JOBS_COM[lv] : tl.t === 'ind' ? JOBS_IND[lv] : V?.jobs) ?? 0;
   const pw = FV?.power ?? POWER_USE[tl.t]?.[lv] ?? V?.power ?? 0, wt = FV?.water ?? WATER_USE[tl.t]?.[lv] ?? V?.water ?? 0;
@@ -4608,8 +4627,9 @@ function applyQuality(key) {
   if (composer) { composer.setPixelRatio(ratio); composer.setSize(window.innerWidth, window.innerHeight); }
 
   sun.castShadow = q.shadows;
-  if (q.shadows && sun.shadow.mapSize.x !== q.shadowSize) {
-    sun.shadow.mapSize.set(q.shadowSize, q.shadowSize);
+  const shSize = Math.min(q.shadowSize, renderer.capabilities.maxTextureSize);   // การ์ดจอเก่าอาจรองรับไม่ถึง 8192
+  if (q.shadows && sun.shadow.mapSize.x !== shSize) {
+    sun.shadow.mapSize.set(shSize, shSize);
     if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
   }
   useBloom = q.bloom && !!composer;
