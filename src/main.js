@@ -186,12 +186,16 @@ const VARIANTS = {
     { k: 'street',  label: 'ถนน 2 เลน',         cost: 10, upkeep: 0.5 },
     { k: 'avenue',  label: 'ถนนสายหลัก 4 เลน',   cost: 28, upkeep: 1 },
     { k: 'highway', label: 'ทางหลวง',           cost: 50, upkeep: 1.6 },
+    { k: 'dirt',      label: 'ถนนลูกรัง',          cost: 3,  upkeep: 0.2 },
+    { k: 'boulevard', label: 'ถนนเกาะกลางสวน',      cost: 36, upkeep: 1.3 },
+    { k: 'roundabout', label: 'วงเวียน',            cost: 60, upkeep: 1, junction: 'round' },     // วางทับทางแยก 3 ทางขึ้นไป ไม่มีไฟจราจร รถไหลต่อเนื่อง
+    { k: 'overpass',  label: 'ทางแยกต่างระดับ',      cost: 260, upkeep: 3, junction: 'over' },     // วางทับทางแยก 4 ทาง: ถนนสายหลักข้ามสะพานเหนือถนนที่ตัด ไม่ต้องรอไฟ
   ],
 };
 const DEFAULT_V = { res: 'zone', com: 'zone', ind: 'zone', power: 'gas', water: 'plant', service: 'school', park: 'park', farm: 'rice', road: 'street' };
 // ปลดล็อกตามระดับเมือง (levels.js): ระดับ 1 สร้างได้เฉพาะของพื้นฐาน
 const UNLOCK_LV = {
-  'road:avenue': 2, 'road:highway': 3,
+  'road:avenue': 2, 'road:highway': 3, 'road:boulevard': 2, 'road:roundabout': 2, 'road:overpass': 3,
   'res:twin': 2, 'res:apt': 2, 'res:condo': 3, 'res:tower': 4, 'res:sky': 5,
   'com:game': 2, 'com:pet': 2, 'com:lotus': 2, 'com:market': 2, 'com:dealer': 2, 'com:gold': 2, 'com:parking': 2, 'com:ev': 2,
   'com:bank': 3, 'com:mall': 3, 'com:pub': 3, 'com:tuner': 3,
@@ -334,8 +338,8 @@ const isType = (x, z, t) => tileAt(x, z)?.t === t;
 const cityLevel = () => state.level || 1;
 
 // ---------- ประเภทถนน / เขตจำกัดความเร็ว ----------
-const ROAD_W = { soi: 0.56, street: 0.74, avenue: 0.88, highway: 0.96 };   // ความกว้างผิวแอสฟัลต์ (หน่วยช่อง)
-const ROAD_CAP = { soi: 0.6, street: 1, avenue: 1.8, highway: 2.4 };   // ความจุการจราจรต่อช่อง (ถนนใหญ่รับรถได้มากกว่า)
+const ROAD_W = { soi: 0.56, dirt: 0.5, street: 0.74, avenue: 0.88, boulevard: 0.92, highway: 0.96 };   // ความกว้างผิวแอสฟัลต์ (หน่วยช่อง)
+const ROAD_CAP = { soi: 0.6, dirt: 0.5, street: 1, avenue: 1.8, boulevard: 2.2, highway: 2.4 };   // ความจุการจราจรต่อช่อง (ถนนใหญ่รับรถได้มากกว่า)
 const ROAD_UPKEEP = Object.fromEntries(VARIANTS.road.map(v => [v.k, v.upkeep]));
 const roadKind = (x, z) => { const tl = tileAt(x, z); return tl?.t === 'road' ? (ROAD_W[tl.v] ? tl.v : 'street') : null; };   // เซฟเก่าไม่มี v = ถนน 2 เลน
 const isAccessRoad = (x, z) => { const k = roadKind(x, z); return !!k && k !== 'highway'; };              // ทางหลวงไม่ใช่ทางเข้าอาคาร
@@ -345,6 +349,8 @@ const LIMITS = {
   soi:     [30, 30, 30, 30, 30],
   street:  [30, 40, 50, 60, 60],
   avenue:  [40, 60, 60, 70, 80],
+  boulevard: [40, 50, 60, 60, 70],
+  dirt:    [20, 20, 20, 20, 30],
   highway: [80, 90, 90, 100, 110],
 };
 const SCHOOL_ZONE = new Set(['school', 'school_p', 'hospital', 'hospital_p', 'bu']);
@@ -648,7 +654,7 @@ const isJunction = (x, z) => isType(x, z, 'road') && roadArms(x, z) >= 3;
 
 // สถานะไฟของแนว axis ('x' | 'z') ที่ทางแยก (x,z): 'g' เขียว, 'y' เหลือง, 'r' แดง, null = ไม่มีไฟ
 function signalState(x, z, axis) {
-  if (!isJunction(x, z)) return null;
+  if (!isJunction(x, z) || tileAt(x, z)?.j) return null;   // วงเวียน/ทางแยกต่างระดับไม่มีไฟ
   const p = (sigClock + SIG_OFFSET[sigGroup(x, z)]) % SIG_CYCLE;
   const first = p < SIG_HALF;
   if ((axis === 'x') !== first) return 'r';
@@ -688,8 +694,9 @@ const agents = createAgents({
   tileType: (x, z) => { const tl = tileAt(x, z); if (tl?.t === 'part') return state.tiles[tl.m]?.t === 'park' ? 'park' : 'part'; return tl?.t ?? null; },
   groundY: tileY,
   signal: signalState,
-  roadKind,
+  roadKind: (x, z) => { const k = roadKind(x, z); return k === 'dirt' ? 'street' : k === 'boulevard' ? 'avenue' : k; },
   speedLimit: speedLimitAt,
+  overpassAt: (x, z) => { const tl = tileAt(x, z); return tl?.t === 'road' && tl.j === 'over' ? (tl.ax || 'x') : null; },   // ทิศของถนนที่ยกข้ามสะพาน
 });
 
 // ---------------------------------------------------------------
@@ -1637,6 +1644,9 @@ function buildWaterPlant(bg) {
 // อาคารแบบเลือกเอง (ร้านค้า ปั๊ม โรงเรียน โรงพยาบาล โรงไฟฟ้า/ประปาหลายขนาด ฯลฯ)
 // ---------------------------------------------------------------
 Object.assign(M, {
+  dirtRoad: std(0x8c6d47, { roughness: 1 }),
+  roadArc: Object.assign(M.road.clone(), { side: THREE.DoubleSide }),   // ผิวทางโค้ง (แถบโค้งไม่มีด้านหน้า/หลังตายตัว)
+  dirtArc: std(0x8c6d47, { roughness: 1, side: THREE.DoubleSide }),
   asphalt: std(0x3a3e44, { roughness: 0.95 }),
   white: std(0xf1efe8),
   red: std(0xc62828),
@@ -1985,6 +1995,7 @@ const incidents = [];   // เหตุขัดข้องที่ยัง�
 // ---------------------------------------------------------------
 const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const ROAD_TOP = 0.06;
+const OVER_H = 0.24;   // ความสูงยอดสะพานของทางแยกต่างระดับ (ต้องตรงกับ agents.js)
 
 function flatMesh(parent, mat, px, py, pz, sx, sz, ry = 0) {
   const m = new THREE.Mesh(planeGeo, mat);
@@ -2146,7 +2157,7 @@ function mergeStatic(g, skip) {
     g.add(mm);
     dead.push(...e.list);
   }
-  for (const o of dead) o.parent.remove(o);
+  for (const o of dead) { o.parent.remove(o); if (o.userData.ownGeo) o.geometry.dispose(); }
 }
 // ---------- รวมชิ้นส่วนนิ่งของหลายช่องเป็นก้อนใหญ่ (ลดจำนวนคำสั่งวาดจากหลักพันเหลือหลักสิบ) ----------
 // ช่องที่สร้างเสร็จแล้วมีชิ้นส่วนนิ่งรวมเป็นชิ้นต่อวัสดุอยู่แล้ว (mergeStatic) แต่ถนนและบ้านนับร้อยช่องยังวาดแยกกันทีละช่อง
@@ -2475,10 +2486,14 @@ function buildTile(x, z) {
     buildBigTile(g, x, z, t, ty);
   } else if (t.t === 'road') {
     // ทางเท้า (ทางหลวง = ไหล่ทาง) + ผิวแอสฟัลต์กว้างตามประเภทถนน + เส้นจราจร
-    const kind = roadKind(x, z), W = ROAD_W[kind], hw = W / 2, junc = isJunction(x, z);
-    put(g, boxGeo, kind === 'highway' ? M.shoulder : M.walk, 0, 0.02, 0, 0.98, 0.04, 0.98);
-    put(g, boxGeo, M.road, 0, 0.05, 0, W, 0.02, W);
+    const kind = roadKind(x, z), W = ROAD_W[kind], hw = W / 2, arms = roadArms(x, z), junc = arms >= 3;
+    if (t.j && ((t.j === 'round' && arms < 3) || (t.j === 'over' && arms < 4))) delete t.j;   // ถนนรอบข้างหายไป ทางแยกพิเศษก็กลับเป็นทางแยกธรรมดา
+    const J = t.j || null, RM = kind === 'dirt' ? M.dirtRoad : M.road, RA = kind === 'dirt' ? M.dirtArc : M.roadArc;
     const rd = (dx, dz) => isType(x + dx, z + dz, 'road');
+    // ทางโค้ง: ช่องที่ถนนหักมุมฉาก (มี 2 แขน คนละแกน) ปูผิวเป็นแนวโค้งแทนมุมตัด รถจะวิ่งตามแนวโค้งนี้ด้วย (ดู agents.js)
+    const corner = !J && arms === 2 && rd(1, 0) !== rd(-1, 0) && rd(0, 1) !== rd(0, -1);
+    put(g, boxGeo, kind === 'highway' ? M.shoulder : M.walk, 0, 0.02, 0, 0.98, 0.04, 0.98);
+    if (!corner && J !== 'round') put(g, boxGeo, RM, 0, 0.05, 0, W, 0.02, W);
     // เส้นบนผิวถนนตามแนวแกน (hx = แนว x) ช่วง a0..a1 จากกลางช่อง ห่างจากกลางถนน lat
     const mark = (mat, hx, a0, a1, lat, w) => {
       const c = (a0 + a1) / 2, l = Math.abs(a1 - a0);
@@ -2486,13 +2501,78 @@ function buildTile(x, z) {
     };
     const laneLat = kind === 'highway' ? 0.245 : 0.22;
     const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-    for (const [dx, dz] of dirs) {
+    // แถบผิวถนนโค้ง (วงกลม/ส่วนโค้ง) รอบจุด (cx,cz) รัศมี r0..r1 ตั้งแต่มุม a0 กวาด da
+    const arcMesh = (cx, cz, r0, r1, a0, da, n, mat) => {
+      const pos = [], uv = [], idxs = [];
+      for (let i = 0; i <= n; i++) {
+        const a = a0 + da * i / n, c = Math.cos(a), s = Math.sin(a);
+        for (const r of [r0, r1]) { pos.push(cx + r * c, 0.0605, cz + r * s); uv.push(cx + r * c + 0.5, cz + r * s + 0.5); }
+      }
+      for (let i = 0; i < n; i++) { const k = i * 2; idxs.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setIndex(idxs);
+      const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; m.userData.ownGeo = true; g.add(m);
+    };
+    // เส้น/ชิ้นเล็กวางตามแนวโค้ง: fn(px, pz, ry, len, i)
+    const alongArc = (cx, cz, r, a0, da, n, fn) => {
+      const sg = Math.sign(da);
+      for (let i = 0; i < n; i++) {
+        const a = a0 + da * (i + 0.5) / n, tx = -Math.sin(a) * sg, tz = Math.cos(a) * sg;
+        fn(cx + r * Math.cos(a), cz + r * Math.sin(a), Math.atan2(-tz, tx), r * Math.abs(da) / n * 1.06, i);
+      }
+    };
+    if (corner) {
+      const sx = rd(1, 0) ? 1 : -1, sz = rd(0, 1) ? 1 : -1, cx = 0.5 * sx, cz = 0.5 * sz;
+      const aA = Math.atan2(0, -sx), aB = Math.atan2(-sz, 0);
+      let da = aB - aA; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+      arcMesh(cx, cz, 0.5 - hw, 0.5 + hw, aA, da, 12, RA);
+      const NS = 12, laneLat = kind === 'highway' ? 0.245 : 0.22;
+      if (kind === 'street') alongArc(cx, cz, 0.5, aA, da, NS, (px, pz, ry, len, i) => { if (i % 2 === 0) put(g, boxGeo, M.line, px, 0.0615, pz, len, 0.003, 0.025, ry); });
+      else if (kind === 'avenue' || kind === 'boulevard') {
+        for (const o of [-0.014, 0.014]) alongArc(cx, cz, 0.5 + o, aA, da, NS, (px, pz, ry, len) => put(g, boxGeo, M.line, px, 0.0615, pz, len, 0.003, 0.01, ry));
+        for (const o of [-laneLat, laneLat]) alongArc(cx, cz, 0.5 + o, aA, da, NS, (px, pz, ry, len, i) => { if (i % 2 === 0) put(g, boxGeo, M.laneLine, px, 0.0615, pz, len, 0.003, 0.016, ry); });
+      } else if (kind === 'highway') {
+        alongArc(cx, cz, 0.5, aA, da, NS, (px, pz, ry, len) => put(g, boxGeo, M.barrier, px, 0.082, pz, len, 0.045, 0.03, ry));
+        for (const o of [-laneLat, laneLat]) alongArc(cx, cz, 0.5 + o, aA, da, NS, (px, pz, ry, len, i) => { if (i % 2 === 0) put(g, boxGeo, M.laneLine, px, 0.0615, pz, len, 0.003, 0.016, ry); });
+      }
+    } else if (J === 'round') {
+      // วงเวียน: ถนนวงกลมรอบเกาะกลางปลูกต้นไม้ แขนถนนต่อเข้าวง ไม่มีไฟจราจร
+      const ro = 0.36, ri = 0.17;
+      arcMesh(0, 0, ri, ro, 0, Math.PI * 2, 28, RA);
+      put(g, cylGeo, M.walk, 0, 0.064, 0, ri * 2 + 0.02, 0.03, ri * 2 + 0.02);
+      put(g, cylGeo, M.park, 0, 0.08, 0, ri * 2 - 0.02, 0.03, ri * 2 - 0.02);
+      addTree(g, 0, 0, 0.95, r);
+      for (let k = 0; k < 14; k++) { const a = (k / 14) * Math.PI * 2, rr = (ri + ro) / 2; put(g, boxGeo, M.laneLine, rr * Math.cos(a), 0.0615, rr * Math.sin(a), 0.07, 0.003, 0.016, -a - Math.PI / 2); }
+      for (const [dx, dz] of dirs) {
+        if (!rd(dx, dz)) continue;
+        const len = 0.5 - ro + 0.03, nw = Math.min(W, ROAD_W[roadKind(x + dx, z + dz)]), c = ro - 0.03 + len / 2;
+        if (dx !== 0) put(g, boxGeo, RM, dx * c, 0.05, 0, len, 0.02, nw); else put(g, boxGeo, RM, 0, 0.05, dz * c, nw, 0.02, len);
+      }
+    }
+    if (J === 'over') {
+      // ทางแยกต่างระดับ: ถนนแกน ax ยกเป็นสะพานโค้งข้ามถนนที่ตัด (ผิวสะพานเอียงลาดขึ้น-ลงภายในช่อง)
+      const dg = new THREE.Group(); dg.rotation.y = (t.ax || 'x') === 'x' ? 0 : Math.PI / 2; g.add(dg);
+      const H = OVER_H, NSEG = 10, DW = Math.min(W, 0.8);
+      for (let i = 0; i < NSEG; i++) {
+        const tc = -0.5 + (i + 0.5) / NSEG, h = H * (0.5 + 0.5 * Math.cos(2 * Math.PI * tc)), sl = Math.atan(-H * Math.PI * Math.sin(2 * Math.PI * tc));
+        const len = (1 / NSEG) / Math.cos(sl) * 1.08, by = 0.05 + h;
+        put(dg, boxGeo, M.concrete, tc, by, 0, len, 0.035, DW).rotation.z = sl;
+        put(dg, boxGeo, M.road, tc, by + 0.02, 0, len, 0.008, DW - 0.07).rotation.z = sl;
+        for (const sd of [-1, 1]) put(dg, boxGeo, M.metal, tc, by + 0.055, sd * (DW / 2 - 0.012), len, 0.04, 0.014).rotation.z = sl;
+        if (i % 2 === 0) put(dg, boxGeo, M.line, tc, by + 0.0255, 0, len * 0.6, 0.003, 0.02).rotation.z = sl;
+      }
+    }
+    for (const [dx, dz] of corner || J === 'round' ? [] : dirs) {
       if (!rd(dx, dz)) continue;
       const hx = dx !== 0, sg = dx || dz;
       const len = 0.5 - hw, nw = Math.min(W, ROAD_W[roadKind(x + dx, z + dz)]);   // ต่อกับถนนข้างเคียงด้วยความกว้างที่แคบกว่า
-      if (len > 0.004) { if (hx) put(g, boxGeo, M.road, dx * (hw + len / 2), 0.05, 0, len, 0.02, nw); else put(g, boxGeo, M.road, 0, 0.05, dz * (hw + len / 2), nw, 0.02, len); }
+      if (len > 0.004) { if (hx) put(g, boxGeo, RM, dx * (hw + len / 2), 0.05, 0, len, 0.02, nw); else put(g, boxGeo, RM, 0, 0.05, dz * (hw + len / 2), nw, 0.02, len); }
+      if (kind === 'boulevard' && !junc) put(g, boxGeo, M.park, hx ? sg * 0.25 : 0, 0.0625, hx ? 0 : sg * 0.25, hx ? 0.5 : 0.11, 0.012, hx ? 0.11 : 0.5);   // เกาะกลางสวน
       if (kind === 'street') mark(M.line, hx, sg * 0.29, sg * 0.47, 0, 0.025);                   // เส้นประเหลืองกลางถนน
-      else if (kind === 'avenue' && !junc) {
+      else if ((kind === 'avenue' || kind === 'boulevard') && !junc) {
         mark(M.line, hx, 0, sg * 0.5, -0.014, 0.01); mark(M.line, hx, 0, sg * 0.5, 0.014, 0.01);   // เส้นทึบคู่ห้ามแซงข้ามฝั่ง
         mark(M.laneLine, hx, sg * 0.29, sg * 0.47, laneLat, 0.016); mark(M.laneLine, hx, sg * 0.29, sg * 0.47, -laneLat, 0.016);
       } else if (kind === 'highway' && !junc) {
@@ -2502,9 +2582,10 @@ function buildTile(x, z) {
       }
     }
     const strX = rd(1, 0) && rd(-1, 0) && !rd(0, 1) && !rd(0, -1), strZ = rd(0, 1) && rd(0, -1) && !rd(1, 0) && !rd(-1, 0);
+    if (kind === 'boulevard' && (strX || strZ) && r < 0.8) addTree(g, 0, 0, 0.7 + r * 0.3, r);   // ต้นไม้บนเกาะกลาง
     if (strX || strZ) {
       if (kind === 'street') mark(M.line, strX, -0.09, 0.09, 0, 0.025);
-      else if (kind === 'avenue' || kind === 'highway') { mark(M.laneLine, strX, -0.09, 0.09, laneLat, 0.016); mark(M.laneLine, strX, -0.09, 0.09, -laneLat, 0.016); }
+      else if (kind === 'avenue' || kind === 'boulevard' || kind === 'highway') { mark(M.laneLine, strX, -0.09, 0.09, laneLat, 0.016); mark(M.laneLine, strX, -0.09, 0.09, -laneLat, 0.016); }
     }
     // เสาไฟถนน (ระดับกลางขึ้นไป)
     const details = QUALITY[qualityKey].details;
@@ -2514,9 +2595,9 @@ function buildTile(x, z) {
       put(g, boxGeo, M.lampGlow, sx * 0.45, 0.31, sz * 0.45, 0.05, 0.012, 0.035);
     }
     // ไฟจราจร + ทางม้าลายที่ทางแยก, เส้นหยุดและป้ายบนถนนที่ติดทางแยก
-    if (isJunction(x, z)) {
-      addCrosswalks(g, x, z);
-      addSignalHeads(g, x, z, details);
+    if (junc) {
+      if (J !== 'over') addCrosswalks(g, x, z);
+      if (!J) addSignalHeads(g, x, z, details);
     } else {
       addStopLines(g, x, z);
       if (details >= 1) addRoadSigns(g, x, z, r, r2);
@@ -2812,6 +2893,23 @@ function applyTool(x, z) {
     updateHUD();
     return;
   }
+  const JV = currentTool === 'road' ? VARIANTS.road.find(v => v.k === currentVar.road)?.junction : null;
+  if (JV) {   // วงเวียน/ทางแยกต่างระดับ: วางทับทางแยกที่มีอยู่แล้วเท่านั้น
+    if (!cur || cur.t !== 'road') { audio.sfx('error'); return toast(t('toast.junc')); }
+    const need = JV === 'over' ? 4 : 3;
+    if (roadArms(x, z) < need) { audio.sfx('error'); return toast(t(JV === 'over' ? 'toast.over' : 'toast.round')); }
+    if (cur.j === JV) return;
+    const VJ = VARIANTS.road.find(v => v.k === currentVar.road);
+    const rq = reqFailOf(VJ);
+    if (rq) { audio.sfx('error'); return toast(t(rq[0], rq[1])); }
+    if (state.money < VJ.cost) { audio.sfx('error'); return toast(t('toast.nomoney')); }
+    state.money -= VJ.cost; gainXp(buildXp(VJ.cost));
+    cur.j = JV;
+    if (JV === 'over') { const rank = k => ({ soi: 0, dirt: 0, street: 1, boulevard: 2, avenue: 2, highway: 3 }[k] ?? 1); cur.ax = Math.max(rank(roadKind(x + 1, z)), rank(roadKind(x - 1, z))) >= Math.max(rank(roadKind(x, z + 1)), rank(roadKind(x, z - 1))) ? 'x' : 'z'; }
+    countPlace('road');
+    audio.sfx('place'); refresh(x, z); updateHUD();
+    return;
+  }
   // วางถนนทับถนนต่างประเภท = เปลี่ยนประเภทถนน (จ่ายราคาถนนใหม่ ไม่ต้องรื้อก่อน)
   if (cur && currentTool === 'road' && cur.t === 'road' && roadKind(x, z) !== currentVar.road) {
     const rq = reqFailOf(VARIANTS.road.find(v => v.k === currentVar.road));
@@ -2893,7 +2991,7 @@ function computeStats() {
     if (t.t === 'res') { resL.push([i % N, Math.floor(i / N), POP_PER[lv]]); s.pop += POP_PER[lv]; s.powerUse += POWER_USE.res[lv]; s.waterUse += WATER_USE.res[lv]; }
     else if (t.t === 'com') { s.jobsCom += JOBS_COM[lv]; s.powerUse += POWER_USE.com[lv]; s.waterUse += WATER_USE.com[lv]; s.comLv += lv; }
     else if (t.t === 'ind') { if (lv) tradeP.push({ key: 'ind:lv' + lv }); s.jobsInd += JOBS_IND[lv]; s.powerUse += POWER_USE.ind[lv]; s.waterUse += WATER_USE.ind[lv]; s.indLv += lv; }
-    else if (t.t === 'road') { s.roads++; s.roadCap += ROAD_CAP[t.v || 'street'] ?? 1; s.roadUp += ROAD_UPKEEP[t.v] ?? 0.5; if (tileIsWater[i]) s.bridges++; if (isJunction(i % N, Math.floor(i / N))) s.junctions++; }
+    else if (t.t === 'road') { s.roads++; s.roadCap += (ROAD_CAP[t.v || 'street'] ?? 1) * (t.j === 'over' ? 2.2 : t.j === 'round' ? 1.4 : 1); if (t.j) s.roadUp += t.j === 'over' ? 3 : 1; s.roadUp += ROAD_UPKEEP[t.v] ?? 0.5; if (tileIsWater[i]) s.bridges++; if (!t.j && isJunction(i % N, Math.floor(i / N))) s.junctions++; }
     else if (t.t === 'park') { const PV = variantOf(t); s.parks += (t.fw || 1) * (t.fd || 1); s.waterUse += 1 + (t.fw ? t.fw * t.fd : 0); s.upkeep += PV?.upkeep ? PV.upkeep : 0; s.jobsCom += PV?.jobs || 0; }
     else if (t.t === 'power') { const V = variantOf(t), c = plantCap(t, i); s.plants++; s.powerCap += c; if (V.green) s.greenCap += c; s.upkeep += V.upkeep; }
     else if (t.t === 'water') { const V = variantOf(t); s.wplants++; s.waterCap += plantCap(t, i) * (V.k === 'well' ? 1 : 1 + 0.15 * weather.state.rain); s.upkeep += V.upkeep; } // ฝนตก น้ำดิบมากขึ้น (บ่อบาดาลไม่ขึ้นกับฝน)

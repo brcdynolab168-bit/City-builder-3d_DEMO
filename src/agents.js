@@ -32,7 +32,7 @@ const TURN_V = 0.5, UTURN_V = 0.25;   // ความเร็วเลี้ย
 const LANE_LAT = { soi: [0.12], street: [0.15], avenue: [0.32, 0.11], highway: [0.35, 0.14] };
 const latHit = (p, q) => Math.abs(p - q) < 0.14;   // อยู่เลนเดียวกัน (ตัวรถกว้าง ~0.15)
 
-export function createAgents({ scene, N, tileType, groundY = () => 0, signal = () => null, roadKind = () => 'street', speedLimit = () => 50 }) {
+export function createAgents({ scene, N, tileType, groundY = () => 0, signal = () => null, roadKind = () => 'street', speedLimit = () => 50, overpassAt = () => null }) {
   const root = new THREE.Group();
   root.name = 'agents';
   scene.add(root);
@@ -597,6 +597,13 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   }
 
   // เลือกทิศถัดไปที่ทางแยก (ชอบตรงไป ไม่ย้อนกลับ เว้นแต่ทางตัน)
+  // ช่องถนนที่หักมุมฉาก (2 แขนคนละแกน) = ช่องทางโค้ง ต้องตรงกับเงื่อนไขใน main.js
+  const isCornerTile = (x, z) => {
+    if (tileType(x, z) !== 'road') return false;
+    const E = tileType(x + 1, z) === 'road', W = tileType(x - 1, z) === 'road', S = tileType(x, z + 1) === 'road', Nn = tileType(x, z - 1) === 'road';
+    return E + W + S + Nn === 2 && E !== W && S !== Nn;
+  };
+  const OVER_H = 0.24;   // ต้องตรงกับ OVER_H ใน main.js
   function pickNext(kind, bx, bz, d) {
     const opts = [];
     for (const nd of DIRS) {
@@ -605,6 +612,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     }
     if (!opts.length) return [-d[0], -d[1]];
     const straight = opts.find(o => o[0] === d[0] && o[1] === d[1]);
+    if (straight && kind === 'car' && overpassAt(bx, bz)) return straight;   // ทางแยกต่างระดับเลี้ยวไม่ได้ (คนละระดับ)
     if (straight && Math.random() < 0.6) return straight;
     return opts[(Math.random() * opts.length) | 0];
   }
@@ -839,7 +847,31 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     const lz = (-a.d[0] * magA * (1 - b) + -a.n[0] * magB * b) * a.side;
     const px = a.x - N / 2 + 0.5 + a.d[0] * a.s + lx;
     const pz = a.z - N / 2 + 0.5 + a.d[1] * a.s + lz;
-    const yaw = angLerp(Math.atan2(a.d[0], a.d[1]), Math.atan2(a.n[0], a.n[1]), b);
+    let yaw = angLerp(Math.atan2(a.d[0], a.d[1]), Math.atan2(a.n[0], a.n[1]), b);
+    let px2 = px, pz2 = pz, lift = 0;
+    if (a.kind === 'car' && !a.crash) {
+      // ช่องที่ถนนหักมุมฉากปูผิวเป็นแนวโค้ง (รัศมี 0.5 รอบมุมช่อง) รถวิ่งตามแนวโค้งนั้น ไม่ตัดมุมผ่านกลางช่อง
+      const turning = (a.n[0] !== a.d[0] || a.n[1] !== a.d[1]) && !(a.n[0] === -a.d[0] && a.n[1] === -a.d[1]);
+      let arc = null;
+      if (turning && a.s >= 0.5 && isCornerTile(bx, bz)) arc = { tx: bx, tz: bz, dd: a.n, e: [-a.d[0], -a.d[1]], phi: (a.s - 0.5) * (Math.PI / 2) };
+      else if (a.s < 0.5 && isCornerTile(a.x, a.z)) {
+        const e = DIRS.find(o => (o[0] !== a.d[0] || o[1] !== a.d[1]) && tileType(a.x + o[0], a.z + o[1]) === 'road');
+        if (e && !(e[0] === a.d[0] && e[1] === a.d[1])) arc = { tx: a.x, tz: a.z, dd: a.d, e, phi: (0.5 + a.s) * (Math.PI / 2) };
+      }
+      if (arc) {
+        const { dd, e, phi } = arc, cs = Math.cos(phi), sn = Math.sin(phi);
+        const cx = arc.tx - N / 2 + 0.5 + 0.5 * (dd[0] + e[0]), cz = arc.tz - N / 2 + 0.5 + 0.5 * (dd[1] + e[1]);
+        const qx = cx + 0.5 * (-dd[0] * cs - e[0] * sn), qz = cz + 0.5 * (-dd[1] * cs - e[1] * sn);
+        const tx = 0.5 * (dd[0] * sn - e[0] * cs), tz = 0.5 * (dd[1] * sn - e[1] * cs), tl = Math.hypot(tx, tz) || 1;
+        const m = mag(a, arc.tx, arc.tz);
+        px2 = qx + (tz / tl) * m * a.side; pz2 = qz + (-tx / tl) * m * a.side;
+        yaw = Math.atan2(tx, tz);
+      }
+      // ทางแยกต่างระดับ: รถที่วิ่งตามแกนสะพานถูกยกตามโค้งสะพานภายในช่อง
+      const ax = a.d[0] !== 0 ? 'x' : 'z';
+      if (a.s < 0.5) { if (overpassAt(a.x, a.z) === ax) lift = OVER_H * (0.5 + 0.5 * Math.cos(2 * Math.PI * a.s)); }
+      else if (overpassAt(bx, bz) === ax) lift = OVER_H * (0.5 + 0.5 * Math.cos(2 * Math.PI * (a.s - 1)));
+    }
     let ground = 0.06;
     if (a.kind !== 'car') {
       const onRoad = a.s < 0.5 ? tileType(a.x, a.z) === 'road' : tileType(bx, bz) === 'road';
@@ -847,7 +879,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     }
     // ความสูงภูมิประเทศ: ไล่ระดับระหว่างกลางช่องปัจจุบันกับช่องถัดไป
     const gy = groundY(a.x, a.z) * (1 - a.s) + groundY(bx, bz) * a.s;
-    a.obj.position.set(px, gy + ground + a.bob, pz);
+    a.obj.position.set(px2, gy + ground + a.bob + lift, pz2);
     a.obj.rotation.y = yaw + (a.crash ? a.crash.yaw : 0);
     a.obj.rotation.z = a.crash ? a.crash.roll : 0;
     if (a.comply !== undefined && !a.crash) bodyMotion(a, b);
