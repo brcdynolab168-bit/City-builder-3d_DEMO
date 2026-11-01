@@ -4699,6 +4699,13 @@ function setRtx(on) {
       gtaoPass.updateGtaoMaterial({ radius: 0.45, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 16, distanceFallOff: 1, screenSpaceRadius: false });
       gtaoPass.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, radiusExponent: 1, rings: 2, samples: 16 });
       gtaoPass.blendIntensity = 1.0;
+      // ผ่านคำนวณ AO วาดฉากใหม่ด้วยวัสดุพิเศษ: ป้าย (Sprite) และของโปร่งใส (กระจก ตาข่ายนั่งร้าน คลื่นท้ายเรือ) จะกลายเป็นแผ่นดำเฉียงๆ บนจอ
+      // จึงซ่อนของพวกนี้ตอนคำนวณ AO เท่านั้น (ตอนวาดภาพจริงยังเห็นตามปกติ)
+      const ov = gtaoPass.overrideVisibility.bind(gtaoPass);
+      gtaoPass.overrideVisibility = function () {
+        ov();
+        scene.traverse(o => { if (o.isSprite || (o.isMesh && o.material && !Array.isArray(o.material) && o.material.transparent)) o.visible = false; });
+      };
       composer.insertPass(gtaoPass, 1);
     } catch (err) {
       console.warn('เปิด AO ไม่ได้ ข้ามไป:', err);
