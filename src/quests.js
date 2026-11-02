@@ -45,6 +45,9 @@ export const QUESTS = [
   { id: 'pop5000',  reward: { money: 35000, xp: 1500 }, prog: c => n(c.pop, 5000) },
   { id: 'lv5',      reward: { money: 40000, xp: 2500 }, prog: c => n(c.level, 5) },
   { id: 'airport',  reward: { money: 30000, xp: 1500 }, prog: built('service:airport') },
+  // --- เฉพาะแมปเชียงใหม่ ---
+  { id: 'cmAttract', map: 'chiangmai', reward: { money: 12000, xp: 700 }, prog: c => n(['service:doisuthep', 'service:nightbazaar', 'service:tapae'].filter(k => have(c, k) > 0).length, 3) },
+  { id: 'cmFest',    map: 'chiangmai', reward: { money: 15000, xp: 800 }, prog: c => n(c.cnt.fests || 0, 1) },
   { id: 'pop10000', reward: { money: 80000, xp: 3500 }, prog: c => n(c.pop, 10000) },
 ];
 

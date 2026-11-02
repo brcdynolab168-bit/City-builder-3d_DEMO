@@ -10,7 +10,7 @@ export const VEH_LEN = { cars: 0.36, bikes: 0.22, buses: 0.58, boats: 1.3, dogs:
 // หมวดที่ย่อ/ขยายตามความสูงแทนความยาว (คน)
 export const VEH_H = { cops: 0.165 };
 // ถ้าโมเดลหันหัวผิดทาง ให้ปรับค่านี้ (Math.PI = กลับหัว, ±Math.PI/2 = หันข้าง)
-export const VEH_YAW = { cars: 0, bikes: 0, buses: 0, boats: 0, dogs: 0, cats: 0, police: 0, taxis: 0, cops: 0, sports: 0 };
+export const VEH_YAW = { cars: 0, bikes: 0, buses: 0, boats: 0, dogs: 0, cats: 0, police: 0, taxis: Math.PI, cops: 0, sports: 0 };   // taxi.glb หันหัวรถไปทาง -Z (ไฟหน้าอยู่ฝั่ง -Z) ต้องหมุนกลับ
 
 const lib = { cars: [], bikes: [], buses: [], boats: [], dogs: [], cats: [], police: [], taxis: [], cops: [], sports: [] };
 export const VEH_RE = /^\.\/models\/(cars|bikes|buses|boats|dogs|cats|police|taxis|cops|sports)\/[^/]+\.glb$/i;

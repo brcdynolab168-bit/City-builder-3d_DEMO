@@ -174,6 +174,9 @@ const VARIANTS = {
     { k: 'drag',     label: 'สนามแข่งรถคลอง 5', cost: 3200, jobs: 30, power: 14, water: 6, upkeep: 22, tax: 30, note: '3×7 ช่อง สนามแข่งถูกกฎหมาย ลดรถซิ่งบนถนน' },
     { k: 'mosque',   label: 'มัสยิด',          cost: 1200, jobs: 6, power: 3, water: 4, upkeep: 8, note: '3×3 ช่อง' },
     { k: 'cemetery', label: 'สุสาน',           cost: 700,  jobs: 4, power: 1, water: 2, upkeep: 4, note: '2×2 ช่อง ที่ฝังศพ ญาติมาเยี่ยม' },
+    { k: 'doisuthep', label: 'วัดพระธาตุดอยสุเทพ', cost: 4800, jobs: 40, power: 14, water: 10, upkeep: 30, tax: 90, cmOnly: true, note: '3×3 ช่อง เฉพาะแมปเชียงใหม่ นักท่องเที่ยวแห่ไหว้พระธาตุ เก็บภาษีท่องเที่ยวสูง' },
+    { k: 'nightbazaar', label: 'ตลาดไนท์บาซาร์', cost: 2200, jobs: 60, power: 12, water: 6, upkeep: 20, tax: 70, cmOnly: true, note: '3×2 ช่อง เฉพาะแมปเชียงใหม่ ตลาดกลางคืนนักท่องเที่ยว คึกคักช่วงค่ำ' },
+    { k: 'tapae',    label: 'ประตูท่าแพ',          cost: 1800, jobs: 20, power: 6, water: 4, upkeep: 12, tax: 45, cmOnly: true, note: '3×2 ช่อง เฉพาะแมปเชียงใหม่ ประตูเมืองเก่า จุดถ่ายรูปยอดนิยม' },
     { k: 'concert',  label: 'หอคอนเสิร์ต',     cost: 3000, jobs: 50, power: 26, water: 8, upkeep: 30, tax: 45, note: '3×3 ช่อง จัดคอนเสิร์ตสุ่มให้เมือง ศิลปินมาแสดงแล้วคนแห่มาดู ขายบัตรสร้างรายได้' },
     { k: 'stadium',  label: 'สนามกีฬา',         cost: 4200, jobs: 90, power: 40, water: 18, upkeep: 40, tax: 60, note: '4×3 ช่อง จัดคอนเสิร์ตใหญ่ได้ ความจุสูงกว่าหอคอนเสิร์ต' },
     { k: 'airport',  label: 'สนามบิน',          cost: 9500, jobs: 220, power: 60, water: 20, upkeep: 90, tax: 140, note: '5×3 ช่อง นับเป็นสถานีขนส่งสินค้า 2 แห่ง และเก็บภาษีการท่องเที่ยว' },
@@ -188,6 +191,7 @@ const VARIANTS = {
     { k: 'highway', label: 'ทางหลวง',           cost: 50, upkeep: 1.6 },
     { k: 'dirt',      label: 'ถนนลูกรัง',          cost: 3,  upkeep: 0.2 },
     { k: 'boulevard', label: 'ถนนเกาะกลางสวน',      cost: 36, upkeep: 1.3 },
+    { k: 'oneway',   label: 'ถนนทางเดียว',         cost: 4,  upkeep: 0.1, oneway: true },       // คลิกช่องถนนเพื่อสลับทิศ หรือลากตามทิศที่ต้องการ
     { k: 'roundabout', label: 'วงเวียน',            cost: 60, upkeep: 1, junction: 'round' },     // วางทับทางแยก 3 ทางขึ้นไป ไม่มีไฟจราจร รถไหลต่อเนื่อง
     { k: 'overpass',  label: 'ทางแยกต่างระดับ',      cost: 260, upkeep: 3, junction: 'over' },     // วางทับทางแยก 4 ทาง: ถนนสายหลักข้ามสะพานเหนือถนนที่ตัด ไม่ต้องรอไฟ
   ],
@@ -195,7 +199,7 @@ const VARIANTS = {
 const DEFAULT_V = { res: 'zone', com: 'zone', ind: 'zone', power: 'gas', water: 'plant', service: 'school', park: 'park', farm: 'rice', road: 'street' };
 // ปลดล็อกตามระดับเมือง (levels.js): ระดับ 1 สร้างได้เฉพาะของพื้นฐาน
 const UNLOCK_LV = {
-  'road:avenue': 2, 'road:highway': 3, 'road:boulevard': 2, 'road:roundabout': 2, 'road:overpass': 3,
+  'road:avenue': 2, 'road:highway': 3, 'road:boulevard': 2, 'road:oneway': 2, 'road:roundabout': 2, 'road:overpass': 3,
   'res:twin': 2, 'res:apt': 2, 'res:condo': 3, 'res:tower': 4, 'res:sky': 5,
   'com:game': 2, 'com:pet': 2, 'com:lotus': 2, 'com:market': 2, 'com:dealer': 2, 'com:gold': 2, 'com:parking': 2, 'com:ev': 2,
   'com:bank': 3, 'com:mall': 3, 'com:pub': 3, 'com:tuner': 3,
@@ -205,7 +209,7 @@ const UNLOCK_LV = {
   'service:hospital': 2, 'service:police': 2, 'service:fire': 2, 'service:taxi': 2, 'service:grab': 2, 'service:pea': 2, 'service:pwa': 2,
   'service:temple': 2, 'service:mosque': 2, 'service:church': 2, 'service:cemetery': 2,
   'service:dohw': 3, 'service:school_p': 3, 'service:hospital_p': 3, 'service:bus': 3, 'service:freight': 3,
-  'service:bu': 4, 'service:metro': 4, 'service:drag': 4, 'service:concert': 3, 'service:stadium': 4, 'service:port': 4, 'service:airport': 5,
+  'service:bu': 4, 'service:metro': 4, 'service:drag': 4, 'service:concert': 3, 'service:nightbazaar': 2, 'service:tapae': 2, 'service:doisuthep': 3, 'service:stadium': 4, 'service:port': 4, 'service:airport': 5,
 };
 for (const [key, lv] of Object.entries(UNLOCK_LV)) { const [tool, k] = key.split(':'); const V = VARIANTS[tool].find(v => v.k === k); V.req = { ...V.req, lv }; }
 const currentVar = { ...DEFAULT_V };
@@ -243,6 +247,14 @@ function indReqText(V) {
   return a.length ? t('req.need', { list: a.join(' · ') }) : '';
 }
 const toolCost = tool => VARIANTS[tool]?.find(v => v.k === currentVar[tool])?.cost ?? TOOLS[tool].cost;
+// ---------- งบประมาณและนโยบายเมือง (ตั้งในแท็บ "งบประมาณ" ของแผงเมือง) ----------
+// งบกรม 40%-160%: ค่าดูแลสถานีของกรมนั้นขึ้นลงตามงบ และผลงานของกรมก็เช่นกัน (ตำรวจ/ดับเพลิง/โรงพยาบาล/โรงเรียน/ขนส่ง)
+// อัตราภาษี 60%-140%: รายได้ภาษีขึ้นลงตามอัตรา แต่ประชาชนพอใจน้อยลงและเมืองโตช้าลงเมื่อภาษีสูง
+const BUD_KEYS = ['tax', 'police', 'fire', 'health', 'edu', 'transit'];
+const BUD_OF = { police: 'police', fire: 'fire', hospital: 'health', school: 'edu', bus: 'transit', metro: 'transit' };   // แบบอาคารบริการ → งบกรม (เฉพาะของรัฐ)
+const LAWS = ['noTruck', 'curfew', 'calm', 'indInc', 'tourism'];
+function bud() { const b = (state.budget ||= {}); for (const k of BUD_KEYS) b[k] ??= 1; return b; }
+function law() { const l = (state.law ||= {}); for (const k of LAWS) l[k] ??= false; return l; }
 const ZONES = ['res', 'com', 'ind'];
 const toolLabel = k => t('tool.' + k);
 const toolTip = k => (hasKey('tip.' + k) ? t('tip.' + k) : '');
@@ -255,7 +267,8 @@ const JOBS_COM = [0, 6, 20, 60];
 const JOBS_IND = [0, 10, 28, 70];
 let carDemand = 0;   // จำนวนรถที่ต้องการวิ่ง (ใช้คิดรายได้ลานจอดรถ)
 const TRANSIT_ST = { bus: { R: 7, w: 0.12 }, taxi: { R: 5, w: 0.04 }, grab: { R: 5, w: 0.04 }, metro: { R: 9, w: 0.34 } };   // รัศมีบริการ(ช่อง)/น้ำหนักการดึงคนมาใช้ขนส่ง
-const TAX_GROUP = { concert: 'leisure', stadium: 'leisure', airport: 'transit', port: 'transit', honda: 'industry', toyota: 'industry', bmw: 'industry', shindengen: 'industry', keihin: 'industry', denso: 'industry', pub: 'leisure', tuner: 'leisure', drag: 'leisure', bank: 'finance', gold: 'finance', hospital_p: 'health', school_p: 'edu', bus: 'transit', taxi: 'transit', grab: 'transit' };
+const CM_ATTR = new Set(['doisuthep', 'nightbazaar', 'tapae']);   // สถานที่ท่องเที่ยวเชียงใหม่
+const TAX_GROUP = { doisuthep: 'leisure', nightbazaar: 'leisure', tapae: 'leisure', concert: 'leisure', stadium: 'leisure', airport: 'transit', port: 'transit', honda: 'industry', toyota: 'industry', bmw: 'industry', shindengen: 'industry', keihin: 'industry', denso: 'industry', pub: 'leisure', tuner: 'leisure', drag: 'leisure', bank: 'finance', gold: 'finance', hospital_p: 'health', school_p: 'edu', bus: 'transit', taxi: 'transit', grab: 'transit' };
 const POWER_USE = { res: [0, 2, 6, 14], com: [0, 3, 8, 20], ind: [0, 4, 12, 30] };
 const WATER_USE = { res: [0, 3, 9, 22], com: [0, 2, 6, 15], ind: [0, 4, 12, 28] };
 const POWER_CAP = 200;
@@ -370,9 +383,8 @@ function calcLimit(x, z) {
     else if (tl.t === 'ind' || tl.t === 'power' || tl.t === 'water') ind++;
   }
   const L = LIMITS[k];
-  if (school) return L[0];
-  if (res + com + ind < 3) return L[4];
-  return res >= com && res >= ind ? L[1] : com >= ind ? L[2] : L[3];
+  const v = school ? L[0] : res + com + ind < 3 ? L[4] : res >= com && res >= ind ? L[1] : com >= ind ? L[2] : L[3];
+  return state.law?.calm && k !== 'highway' ? Math.max(20, v - 10) : v;   // นโยบายลดความเร็วในเมือง -10 กม./ชม.
 }
 // คำนวณเขตความเร็วทั้งแผนที่ใหม่ คืนดัชนีช่องที่ค่าเปลี่ยน
 function recalcLimits() {
@@ -570,12 +582,12 @@ const QUALITY = {
   },
   med: {
     label: 'กลาง', desc: 'สมดุล: เงานุ่ม ไฟจราจร ป้าย ฝน ป่าไม้ รถ ผู้คน และสัตว์เลี้ยงพอเหมาะ',
-    pixelRatio: 1.5, shadows: true, shadowSize: 2048, bloom: false, cars: 60, people: 70, pets: 16, details: 1,
+    pixelRatio: 1.5, shadows: true, shadowSize: 2048, bloom: false, cars: 36, people: 36, pets: 8, details: 1, lod: { near: 16, hide: 44, shadow: 20 },
     rain: 3000, forest: 1800,
   },
   high: {
     label: 'สูง', desc: 'สมจริงสุด: เงาละเอียด แสงเรืองกลางคืน ฝนหนา ป่าเต็มภูเขา ไฟจราจรและป้ายครบ รถ คน หมา แมว จำนวนมาก',
-    pixelRatio: 2, shadows: true, shadowSize: 4096, bloom: true, cars: 150, people: 160, pets: 40, details: 2,
+    pixelRatio: 2, shadows: true, shadowSize: 4096, bloom: true, cars: 80, people: 80, pets: 18, details: 2, lod: { near: 20, hide: 54, shadow: 26 },
     rain: 7000, forest: 4000,
   },
   rtx: {
@@ -696,6 +708,7 @@ const agents = createAgents({
   signal: signalState,
   roadKind: (x, z) => { const k = roadKind(x, z); return k === 'dirt' ? 'street' : k === 'boulevard' ? 'avenue' : k; },
   speedLimit: speedLimitAt,
+  oneWayAt: (x, z) => { const tl = tileAt(x, z); return tl?.t === 'road' && tl.ow ? tl.ow : null; },   // [dx, dz] ทิศที่วิ่งได้ทิศเดียว
   overpassAt: (x, z) => { const tl = tileAt(x, z); return tl?.t === 'road' && tl.j === 'over' ? (tl.ax || 'x') : null; },   // ทิศของถนนที่ยกข้ามสะพาน
 });
 
@@ -2468,7 +2481,7 @@ function buildTile(x, z) {
 
   // ฐานรองใต้ช่อง ปิดช่องว่างบนพื้นลาด / เสาสะพานเมื่ออยู่เหนือน้ำ
   if (tileIsWater[i]) {
-    put(g, boxGeo, M.concrete, 0, -0.06, 0, 0.98, 0.12, 0.98); // พื้นสะพาน
+    put(g, boxGeo, M.concrete, 0, -0.06, 0, 1.0, 0.12, 1.0); // พื้นสะพาน
     const pl = ty + 0.5; // เสาลงถึงท้องน้ำ
     for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) put(g, cylGeo, M.concrete, sx * 0.38, -pl / 2, sz * 0.38, 0.1, pl, 0.1);
   } else {
@@ -2488,11 +2501,13 @@ function buildTile(x, z) {
     // ทางเท้า (ทางหลวง = ไหล่ทาง) + ผิวแอสฟัลต์กว้างตามประเภทถนน + เส้นจราจร
     const kind = roadKind(x, z), W = ROAD_W[kind], hw = W / 2, arms = roadArms(x, z), junc = arms >= 3;
     if (t.j && ((t.j === 'round' && arms < 3) || (t.j === 'over' && arms < 4))) delete t.j;   // ถนนรอบข้างหายไป ทางแยกพิเศษก็กลับเป็นทางแยกธรรมดา
+    if (t.ow && !(arms === 2 && !t.j)) delete t.ow;   // ทางเดียวมีได้เฉพาะช่องถนนที่มี 2 แขน (ตรงหรือโค้ง) และไม่ใช่ทางแยกพิเศษ
+    const OW = t.ow || null;
     const J = t.j || null, RM = kind === 'dirt' ? M.dirtRoad : M.road, RA = kind === 'dirt' ? M.dirtArc : M.roadArc;
     const rd = (dx, dz) => isType(x + dx, z + dz, 'road');
     // ทางโค้ง: ช่องที่ถนนหักมุมฉาก (มี 2 แขน คนละแกน) ปูผิวเป็นแนวโค้งแทนมุมตัด รถจะวิ่งตามแนวโค้งนี้ด้วย (ดู agents.js)
     const corner = !J && arms === 2 && rd(1, 0) !== rd(-1, 0) && rd(0, 1) !== rd(0, -1);
-    put(g, boxGeo, kind === 'highway' ? M.shoulder : M.walk, 0, 0.02, 0, 0.98, 0.04, 0.98);
+    put(g, boxGeo, kind === 'highway' ? M.shoulder : M.walk, 0, 0.02, 0, 1.0, 0.04, 1.0);   // เต็มช่อง (เดิม 0.98 เหลือร่องบางๆ ระหว่างช่อง)
     if (!corner && J !== 'round') put(g, boxGeo, RM, 0, 0.05, 0, W, 0.02, W);
     // เส้นบนผิวถนนตามแนวแกน (hx = แนว x) ช่วง a0..a1 จากกลางช่อง ห่างจากกลางถนน lat
     const mark = (mat, hx, a0, a1, lat, w) => {
@@ -2529,8 +2544,10 @@ function buildTile(x, z) {
       const aA = Math.atan2(0, -sx), aB = Math.atan2(-sz, 0);
       let da = aB - aA; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
       arcMesh(cx, cz, 0.5 - hw, 0.5 + hw, aA, da, 12, RA);
+      for (const [ex, ez] of [[sx, 0], [0, sz]]) put(g, boxGeo, RM, ex * 0.5, 0.0505, ez * 0.5, ex ? 0.016 : W, 0.019, ex ? W : 0.016);   // แผ่นเชื่อมปลายโค้งกับถนนช่องข้างเคียง
       const NS = 12, laneLat = kind === 'highway' ? 0.245 : 0.22;
-      if (kind === 'street') alongArc(cx, cz, 0.5, aA, da, NS, (px, pz, ry, len, i) => { if (i % 2 === 0) put(g, boxGeo, M.line, px, 0.0615, pz, len, 0.003, 0.025, ry); });
+      if (OW) { /* ทางเดียว: ไม่มีเส้นกลางถนน */ }
+      else if (kind === 'street') alongArc(cx, cz, 0.5, aA, da, NS, (px, pz, ry, len, i) => { if (i % 2 === 0) put(g, boxGeo, M.line, px, 0.0615, pz, len, 0.003, 0.025, ry); });
       else if (kind === 'avenue' || kind === 'boulevard') {
         for (const o of [-0.014, 0.014]) alongArc(cx, cz, 0.5 + o, aA, da, NS, (px, pz, ry, len) => put(g, boxGeo, M.line, px, 0.0615, pz, len, 0.003, 0.01, ry));
         for (const o of [-laneLat, laneLat]) alongArc(cx, cz, 0.5 + o, aA, da, NS, (px, pz, ry, len, i) => { if (i % 2 === 0) put(g, boxGeo, M.laneLine, px, 0.0615, pz, len, 0.003, 0.016, ry); });
@@ -2548,7 +2565,7 @@ function buildTile(x, z) {
       for (let k = 0; k < 14; k++) { const a = (k / 14) * Math.PI * 2, rr = (ri + ro) / 2; put(g, boxGeo, M.laneLine, rr * Math.cos(a), 0.0615, rr * Math.sin(a), 0.07, 0.003, 0.016, -a - Math.PI / 2); }
       for (const [dx, dz] of dirs) {
         if (!rd(dx, dz)) continue;
-        const len = 0.5 - ro + 0.03, nw = Math.min(W, ROAD_W[roadKind(x + dx, z + dz)]), c = ro - 0.03 + len / 2;
+        const len = 0.5 - ro + 0.03 + 0.012, nw = Math.min(W, ROAD_W[roadKind(x + dx, z + dz)]), c = ro - 0.03 + len / 2 - 0.006;
         if (dx !== 0) put(g, boxGeo, RM, dx * c, 0.05, 0, len, 0.02, nw); else put(g, boxGeo, RM, 0, 0.05, dz * c, nw, 0.02, len);
       }
     }
@@ -2569,9 +2586,10 @@ function buildTile(x, z) {
       if (!rd(dx, dz)) continue;
       const hx = dx !== 0, sg = dx || dz;
       const len = 0.5 - hw, nw = Math.min(W, ROAD_W[roadKind(x + dx, z + dz)]);   // ต่อกับถนนข้างเคียงด้วยความกว้างที่แคบกว่า
-      if (len > 0.004) { if (hx) put(g, boxGeo, RM, dx * (hw + len / 2), 0.05, 0, len, 0.02, nw); else put(g, boxGeo, RM, 0, 0.05, dz * (hw + len / 2), nw, 0.02, len); }
+      if (len > 0.004) { const ol = len + 0.012, oc = hw + len / 2 + 0.006; if (hx) put(g, boxGeo, RM, dx * oc, 0.05, 0, ol, 0.02, nw); else put(g, boxGeo, RM, 0, 0.05, dz * oc, nw, 0.02, ol); }
       if (kind === 'boulevard' && !junc) put(g, boxGeo, M.park, hx ? sg * 0.25 : 0, 0.0625, hx ? 0 : sg * 0.25, hx ? 0.5 : 0.11, 0.012, hx ? 0.11 : 0.5);   // เกาะกลางสวน
-      if (kind === 'street') mark(M.line, hx, sg * 0.29, sg * 0.47, 0, 0.025);                   // เส้นประเหลืองกลางถนน
+      if (OW) { if (kind !== 'soi' && kind !== 'dirt') mark(M.laneLine, hx, sg * 0.29, sg * 0.47, 0, 0.016); }   // ทางเดียว: เส้นประขาวแบ่งเลน ไม่มีเส้นเหลือง
+      else if (kind === 'street') mark(M.line, hx, sg * 0.29, sg * 0.47, 0, 0.025);                   // เส้นประเหลืองกลางถนน
       else if ((kind === 'avenue' || kind === 'boulevard') && !junc) {
         mark(M.line, hx, 0, sg * 0.5, -0.014, 0.01); mark(M.line, hx, 0, sg * 0.5, 0.014, 0.01);   // เส้นทึบคู่ห้ามแซงข้ามฝั่ง
         mark(M.laneLine, hx, sg * 0.29, sg * 0.47, laneLat, 0.016); mark(M.laneLine, hx, sg * 0.29, sg * 0.47, -laneLat, 0.016);
@@ -2584,8 +2602,15 @@ function buildTile(x, z) {
     const strX = rd(1, 0) && rd(-1, 0) && !rd(0, 1) && !rd(0, -1), strZ = rd(0, 1) && rd(0, -1) && !rd(1, 0) && !rd(-1, 0);
     if (kind === 'boulevard' && (strX || strZ) && r < 0.8) addTree(g, 0, 0, 0.7 + r * 0.3, r);   // ต้นไม้บนเกาะกลาง
     if (strX || strZ) {
-      if (kind === 'street') mark(M.line, strX, -0.09, 0.09, 0, 0.025);
+      if (OW) { if (kind !== 'soi' && kind !== 'dirt') mark(M.laneLine, strX, -0.09, 0.09, 0, 0.016); }
+      else if (kind === 'street') mark(M.line, strX, -0.09, 0.09, 0, 0.025);
       else if (kind === 'avenue' || kind === 'boulevard' || kind === 'highway') { mark(M.laneLine, strX, -0.09, 0.09, laneLat, 0.016); mark(M.laneLine, strX, -0.09, 0.09, -laneLat, 0.016); }
+    }
+    if (OW) {   // ลูกศรบอกทิศทางเดียว (ช่องโค้งวางลูกศรไว้ที่ครึ่งช่องฝั่งทางออก)
+      const ar = new THREE.Group(), off = corner ? 0.28 : 0;
+      ar.position.set(OW[0] * off, 0.0618, OW[1] * off); ar.rotation.y = Math.atan2(-OW[1], OW[0]); g.add(ar);
+      put(ar, boxGeo, M.laneLine, 0, 0, 0, 0.26, 0.003, 0.045);
+      for (const sd of [-1, 1]) put(ar, boxGeo, M.laneLine, 0.105, 0, sd * 0.04, 0.12, 0.003, 0.04, sd * 0.75);
     }
     // เสาไฟถนน (ระดับกลางขึ้นไป)
     const details = QUALITY[qualityKey].details;
@@ -2782,6 +2807,7 @@ function evalBig(tool, x, z) {
     for (let dz = 0; dz < R.fd; dz++) for (let dx = 0; dx < R.fw; dx++) if (nearWater(R.x0 + dx, R.z0 + dz, 1)) wet = true;
     if (!wet) reason = 'toast.hydro';
   }
+  if (!reason && tool === 'service' && VARIANTS.service.find(v => v.k === currentVar.service)?.cmOnly && MAP_ID !== 'chiangmai') reason = 'toast.cmonly';
   if (!reason && tool === 'service' && currentVar.service === 'port') {   // ท่าเรือต้องติดแม่น้ำ/ทะเล
     let wet = false;
     for (let dz = -1; dz <= R.fd && !wet; dz++) for (let dx = -1; dx <= R.fw; dx++) if (nearWater(R.x0 + dx, R.z0 + dz, 1)) { wet = true; break; }
@@ -2853,6 +2879,7 @@ function buildCost(tool, x, z) {
   return toolCost(tool);
 }
 
+let owPrev = null;   // ช่องล่าสุดที่ลากวางทางเดียว (ใช้หาทิศจากการลาก)
 function countPlace(tool) { const c = cnt(); c.placed++; (c.tool ||= {})[tool] = (c.tool[tool] || 0) + 1; }
 function applyTool(x, z) {
   if (VISIT || currentTool === 'select' || !inBounds(x, z)) return;
@@ -2893,7 +2920,32 @@ function applyTool(x, z) {
     updateHUD();
     return;
   }
-  const JV = currentTool === 'road' ? VARIANTS.road.find(v => v.k === currentVar.road)?.junction : null;
+  const SV = currentTool === 'road' ? VARIANTS.road.find(v => v.k === currentVar.road) : null;
+  if (SV?.oneway) {   // ถนนทางเดียว: คลิกช่องถนน (2 แขน) เพื่อสลับทิศ หรือลากต่อกันเพื่อตั้งทิศตามการลาก
+    if (!cur || cur.t !== 'road' || cur.j) { audio.sfx('error'); return toast(t('toast.ow')); }
+    const arms = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dz]) => isType(x + dx, z + dz, 'road'));
+    if (arms.length !== 2) { audio.sfx('error'); return toast(t('toast.ow')); }
+    const rq = reqFailOf(SV);
+    if (rq) { audio.sfx('error'); return toast(t(rq[0], rq[1])); }
+    const now = performance.now(), pv = owPrev;
+    owPrev = { x, z, at: now };
+    let dir = null;
+    if (pv && now - pv.at < 1500 && Math.abs(x - pv.x) + Math.abs(z - pv.z) === 1) {   // ลากต่อจากช่องก่อนหน้า
+      dir = [x - pv.x, z - pv.z];
+      const pt = tileAt(pv.x, pv.z);
+      if (pt?.t === 'road' && !pt.j && [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dz]) => isType(pv.x + dx, pv.z + dz, 'road')).length === 2) {
+        if (!pt.ow || pt.ow[0] !== dir[0] || pt.ow[1] !== dir[1]) { if (state.money >= SV.cost) { if (!pt.ow) state.money -= SV.cost; pt.ow = dir; refresh(pv.x, pv.z); } }
+      }
+      if (!arms.some(a => a[0] === dir[0] && a[1] === dir[1])) dir = null;
+    }
+    if (!dir) { const i = cur.ow ? arms.findIndex(a => a[0] === cur.ow[0] && a[1] === cur.ow[1]) : -1; dir = i + 1 < arms.length ? arms[i + 1] : null; }   // สลับ: ทิศ A → ทิศ B → ปิด
+    if (!dir) { delete cur.ow; audio.sfx('road'); refresh(x, z); updateHUD(); return; }
+    if (!cur.ow) { if (state.money < SV.cost) { audio.sfx('error'); return toast(t('toast.nomoney')); } state.money -= SV.cost; }
+    cur.ow = dir;
+    audio.sfx('road'); refresh(x, z); updateHUD();
+    return;
+  }
+  const JV = currentTool === 'road' ? SV?.junction : null;
   if (JV) {   // วงเวียน/ทางแยกต่างระดับ: วางทับทางแยกที่มีอยู่แล้วเท่านั้น
     if (!cur || cur.t !== 'road') { audio.sfx('error'); return toast(t('toast.junc')); }
     const need = JV === 'over' ? 4 : 3;
@@ -2967,9 +3019,10 @@ let lastMood = 70;   // ความพอใจล่าสุด (อัปเ
 function computeStats() {
   const s = {
     pop: 0, jobsCom: 0, jobsInd: 0, powerCap: 0, powerUse: 0, waterCap: 0, waterUse: 0,
-    roads: 0, roadCap: 0, roadUp: 0, bridges: 0, parks: 0, plants: 0, wplants: 0, comLv: 0, indLv: 0, junctions: 0, upkeep: 0,
+    dept: { police: 0, fire: 0, health: 0, edu: 0, transit: 0 }, roads: 0, roadCap: 0, roadUp: 0, bridges: 0, parks: 0, plants: 0, wplants: 0, comLv: 0, indLv: 0, junctions: 0, upkeep: 0,
     extraTax: { finance: 0, health: 0, edu: 0, transit: 0, leisure: 0, industry: 0, parking: 0 }, skillSupply: 0, skillNeed: 0, skillFill: 1,
   };
+  const B = bud(), LAW = law();
   const brands = [], resL = [], stL = [], pkL = [], tradeP = [];
   s.greenCap = 0;
   state.tiles.forEach((t, i) => {
@@ -2984,14 +3037,16 @@ function computeStats() {
       if (t.t === 'res') resL.push([i % N, Math.floor(i / N), FV.pop]);
       if (t.t === 'service' && TRANSIT_ST[t.v]) stL.push([i % N, Math.floor(i / N), t.v, t.fw || 1, t.fd || 1]);
       if (t.t === 'com' && t.v === 'parking') pkL.push([i % N, Math.floor(i / N)]);
-      s.powerUse += FV.power; s.waterUse += FV.water; s.upkeep += FV.upkeep || 0;
-      if (FV.tax && t.t !== 'ind') s.extraTax[TAX_GROUP[t.v] || 'finance'] += FV.tax;
+      s.powerUse += FV.power; s.waterUse += FV.water;
+      const bk = t.t === 'service' ? BUD_OF[t.v] : null, uk = (FV.upkeep || 0) * (bk ? B[bk] : 1);   // ค่าดูแลสถานีของรัฐขึ้นลงตามงบของกรม
+      s.upkeep += uk; if (bk) s.dept[bk] += uk;
+      if (FV.tax && t.t !== 'ind') s.extraTax[TAX_GROUP[t.v] || 'finance'] += FV.tax * (CM_ATTR.has(t.v) ? tourismK() : 1);
       return;
     }
     if (t.t === 'res') { resL.push([i % N, Math.floor(i / N), POP_PER[lv]]); s.pop += POP_PER[lv]; s.powerUse += POWER_USE.res[lv]; s.waterUse += WATER_USE.res[lv]; }
     else if (t.t === 'com') { s.jobsCom += JOBS_COM[lv]; s.powerUse += POWER_USE.com[lv]; s.waterUse += WATER_USE.com[lv]; s.comLv += lv; }
     else if (t.t === 'ind') { if (lv) tradeP.push({ key: 'ind:lv' + lv }); s.jobsInd += JOBS_IND[lv]; s.powerUse += POWER_USE.ind[lv]; s.waterUse += WATER_USE.ind[lv]; s.indLv += lv; }
-    else if (t.t === 'road') { s.roads++; s.roadCap += (ROAD_CAP[t.v || 'street'] ?? 1) * (t.j === 'over' ? 2.2 : t.j === 'round' ? 1.4 : 1); if (t.j) s.roadUp += t.j === 'over' ? 3 : 1; s.roadUp += ROAD_UPKEEP[t.v] ?? 0.5; if (tileIsWater[i]) s.bridges++; if (!t.j && isJunction(i % N, Math.floor(i / N))) s.junctions++; }
+    else if (t.t === 'road') { s.roads++; s.roadCap += (ROAD_CAP[t.v || 'street'] ?? 1) * (t.j === 'over' ? 2.2 : t.j === 'round' ? 1.4 : 1) * (t.ow ? 1.3 : 1); if (t.j) s.roadUp += t.j === 'over' ? 3 : 1; s.roadUp += ROAD_UPKEEP[t.v] ?? 0.5; if (tileIsWater[i]) s.bridges++; if (!t.j && isJunction(i % N, Math.floor(i / N))) s.junctions++; }
     else if (t.t === 'park') { const PV = variantOf(t); s.parks += (t.fw || 1) * (t.fd || 1); s.waterUse += 1 + (t.fw ? t.fw * t.fd : 0); s.upkeep += PV?.upkeep ? PV.upkeep : 0; s.jobsCom += PV?.jobs || 0; }
     else if (t.t === 'power') { const V = variantOf(t), c = plantCap(t, i); s.plants++; s.powerCap += c; if (V.green) s.greenCap += c; s.upkeep += V.upkeep; }
     else if (t.t === 'water') { const V = variantOf(t); s.wplants++; s.waterCap += plantCap(t, i) * (V.k === 'well' ? 1 : 1 + 0.15 * weather.state.rain); s.upkeep += V.upkeep; } // ฝนตก น้ำดิบมากขึ้น (บ่อบาดาลไม่ขึ้นกับฝน)
@@ -3032,7 +3087,7 @@ function computeStats() {
       let c = 1;
       for (const st of stL) {
         const D = TRANSIT_ST[st[2]], pr = 1 - Math.hypot(rx + 0.5 - (st[0] + st[3] / 2), rz + 0.5 - (st[1] + st[4] / 2)) / D.R;
-        if (pr > 0) c *= 1 - Math.min(0.9, D.w * pr * (st.pr ? 1.35 : 1));
+        if (pr > 0) c *= 1 - Math.min(0.9, D.w * B.transit * pr * (st.pr ? 1.35 : 1));   // งบขนส่งมาก = บริการหนาแน่นดึงคนมาใช้มากขึ้น
       }
       sum += rp * (1 - c);
     }
@@ -3063,25 +3118,30 @@ function computeStats() {
   // ไฟ/น้ำไม่พอ: โรงงาน ฟาร์ม และร้านค้าผลิต/ขายได้น้อยลงตามสัดส่วน (ต่ำสุด 40%) ไม่ใช่แค่ตัวเลขแดงบนแถบบน
   s.utilK = clamp(Math.min(s.powerUse > 0 ? s.powerCap / s.powerUse : 1, s.waterUse > 0 ? s.waterCap / s.waterUse : 1), 0.4, 1);
   for (const p of tradeP) p.mul = (p.mul ?? 1) * s.utilK;
-  s.trade = trade(tradeP, ccache.freight);
+  s.trade = trade(tradeP, ccache.freight * (LAW.noTruck ? 0.7 : 1));   // ห้ามรถบรรทุกเข้าเมือง: ขนส่งสินค้าได้น้อยลง
   s.extraTax.industry = Math.max(0, s.extraTax.industry - s.trade.extraCost * 0.1);   // ไม่มีสถานี: วัตถุดิบแพง กำไรโรงงานลด
   // ภาษีแยกประเภท (รวมกันเท่ากับสูตรเดิม + ภาษีพิเศษของธุรกิจใหม่)
   s.taxes = {
-    land: s.pop * 0.2 * (1 - 0.05 * (pol2.greenCut || 0)), pit: s.pop * 0.25, vat: s.jobsCom * 0.5 * (state.day % 7 >= 5 ? 1.15 : 1) * (dayEventNow() === 'market' ? 1.25 : 1), corp: s.jobsCom * 0.4 + s.jobsInd * 0.5, ind: s.jobsInd * 0.3 * (state.day % 7 >= 5 ? 0.8 : 1),
+    land: s.pop * 0.2 * (1 - 0.05 * (pol2.greenCut || 0)), pit: s.pop * 0.25, vat: s.jobsCom * 0.5 * (state.day % 7 >= 5 ? 1.15 : 1) * (dayEventNow() === 'market' ? 1.25 : 1) * (festivalNow() ? 1.3 : 1), corp: s.jobsCom * 0.4 + s.jobsInd * 0.5, ind: s.jobsInd * 0.3 * (state.day % 7 >= 5 ? 0.8 : 1),
     vehicle: s.pop * 0.025 * (1 - s.evShare * 0.25 * (pol2.evCut || 0)), export: s.trade.income, finance: s.extraTax.finance, health: s.extraTax.health, edu: s.extraTax.edu, transit: s.extraTax.transit, leisure: s.extraTax.leisure, industry: s.extraTax.industry, parking: s.extraTax.parking,
   };
   // รายได้ต้องสัมพันธ์กับเศรษฐกิจจริง: ธุรกิจเสียรายได้เมื่อไฟ/น้ำขาด, ภาษีเงินได้ลดเมื่อคนตกงาน, ร้านค้ามากเกินลูกค้าขายได้น้อยลง
   for (const k of ['vat', 'corp', 'ind', 'export']) s.taxes[k] *= s.utilK;
   s.taxes.pit *= 0.5 + 0.5 * clamp(s.jobs / Math.max(1, s.pop * 0.5), 0, 1);
   s.taxes.vat *= clamp(s.pop / Math.max(1, s.jobsCom * 3), 0.4, 1);
+  // อัตราภาษี + นโยบาย: ภาษีเมือง 5 ประเภทคูณอัตรา, ส่งเสริมอุตสาหกรรมลดภาษีโรงงาน, เคอร์ฟิวลดรายได้กลางคืน
+  for (const k of ['land', 'pit', 'vat', 'corp', 'ind']) s.taxes[k] *= B.tax;
+  if (LAW.indInc) { s.taxes.ind *= 0.7; s.taxes.corp *= 0.85; }
+  if (LAW.curfew) s.taxes.leisure = (s.taxes.leisure || 0) * 0.85;
   s.income = Object.values(s.taxes).reduce((a, b) => a + b, 0);
-  s.expense = s.roadUp + s.bridges * 1.5 + s.upkeep + s.parks * 2 + s.junctions * 0.5 + (s.incidentCost || 0);
+  s.policyCost = LAW.tourism ? 60 * cityLevel() : 0;   // งบโปรโมตท่องเที่ยวต่อวัน
+  s.expense = s.roadUp + s.bridges * 1.5 + s.upkeep + s.parks * 2 + s.junctions * 0.5 + (s.incidentCost || 0) + s.policyCost;
   s.net = s.income - s.expense;
   const workD = clamp((s.pop + 20 - s.jobs) / 90, 0, 1);
   s.demand = {
-    res: clamp((s.jobs + 25 - s.pop) / 90, 0, 1) * clamp(0.5 + lastMood / 100, 0.6, 1.3),   // คนอยากย้ายเข้าเมืองที่ประชาชนพอใจ
-    com: workD,
-    ind: workD * 0.8,
+    res: clamp((s.jobs + 25 - s.pop) / 90, 0, 1) * clamp(0.5 + lastMood / 100, 0.6, 1.3) * clamp(1 - 0.5 * (B.tax - 1), 0.6, 1.3),   // คนอยากย้ายเข้าเมืองที่ประชาชนพอใจและภาษีไม่แพง
+    com: workD * clamp(1 - 0.4 * (B.tax - 1), 0.6, 1.25),
+    ind: workD * 0.8 * (LAW.indInc ? 1.35 : 1) * clamp(1 - 0.4 * (B.tax - 1), 0.6, 1.25),
   };
   return s;
 }
@@ -3179,7 +3239,7 @@ const later = (sec, fn) => { const at = curAt; sched.push({ t: sec, fn: at ? () 
 const roadAt = (x, z) => (Math.random() < 0.5 ? rowName(z) : colName(x));
 
 function civicCounts() {
-  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, pea: 0, pwa: 0, dohw: 0, gold: [], flammable: [], parking: 0, metro: 0, honda: 0, toyota: 0, bmw: 0, shindengen: 0, keihin: 0, denso: 0, temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0, ev: 0, freight: 0, cafe: 0, pharmacy: 0, game: 0, pet: 0 };
+  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, pea: 0, pwa: 0, dohw: 0, gold: [], flammable: [], parking: 0, metro: 0, honda: 0, toyota: 0, bmw: 0, shindengen: 0, keihin: 0, denso: 0, temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0, ev: 0, freight: 0, doisuthep: 0, nightbazaar: 0, tapae: 0, concert: 0, stadium: 0, airport: 0, port: 0, cafe: 0, pharmacy: 0, game: 0, pet: 0 };
   state.tiles.forEach((tl, i) => {
     if (!tl || tl.t === 'part' || (tl.cs && !tl.cs.to)) return;
     if (tl.t === 'service') c[tl.v] = (c[tl.v] || 0) + 1;
@@ -3195,8 +3255,8 @@ function civicCounts() {
 }
 let ccache = civicCounts();
 const cover = (n, pop, per) => (pop <= 0 ? (n > 0 ? 1 : 0) : clamp(n * per / pop, 0, 1));
-const policeCover = (pop = audioStats.pop) => cover(ccache.police, pop, 2500);
-const fireCover = (pop = audioStats.pop) => cover(ccache.fire, pop, 3000);
+const policeCover = (pop = audioStats.pop) => cover(ccache.police * bud().police, pop, 2500);   // ตำรวจมีกำลังตามงบ
+const fireCover = (pop = audioStats.pop) => cover(ccache.fire * bud().fire, pop, 3000);
 
 function civicSnapshot() {
   const s = computeStats();
@@ -3211,11 +3271,14 @@ function civicSnapshot() {
   const ac = agents.counts();
   const nd = calcNeeds({
     pop: s.pop, powerUse: s.powerUse, powerCap: s.powerCap, waterUse: s.waterUse, waterCap: s.waterCap,
-    jobs: s.jobs, workers: demo.workers, hospitals: cc.hospital + 0.6 * cc.hospital_p + 0.08 * cc.pharmacy, schools: cc.school + 0.7 * cc.school_p, universities: cc.bu, transit: cc.bus * 2 + cc.taxi + cc.grab,
-    police: cc.police, fire: cc.fire, parks: cc.parks + 3 * cc.game, roads: s.roadCap * 7.8, liveCars: Math.round(carDemand), kids: demo.child + demo.youth,   // ใช้ความต้องการรถจริง ไม่ใช่รถที่วาดบนจอ (ไม่งั้นกราฟิกต่ำ = รถติดน้อยลงเอง)
+    jobs: s.jobs, workers: demo.workers, hospitals: cc.hospital * bud().health + 0.6 * cc.hospital_p + 0.08 * cc.pharmacy, schools: cc.school * bud().edu + 0.7 * cc.school_p, universities: cc.bu, transit: cc.bus * 2 * bud().transit + cc.taxi + cc.grab,
+    police: cc.police * bud().police, fire: cc.fire * bud().fire, parks: cc.parks + 3 * cc.game, roads: s.roadCap * 7.8, liveCars: Math.round(carDemand), kids: demo.child + demo.youth,   // ใช้ความต้องการรถจริง ไม่ใช่รถที่วาดบนจอ (ไม่งั้นกราฟิกต่ำ = รถติดน้อยลงเอง)
     green: s.green, chargers: cc.ev, evCars: Math.round(carDemand * s.evShare), shops: s.jobsCom,
     cemeteries: cc.cemetery || 0, temples: cc.temple + cc.mosque + cc.church,
   });
+  // ภาษีสูง/นโยบายเข้มงวดทำให้ประชาชนพอใจลดลง ภาษีต่ำพอใจขึ้น
+  const LW = law();
+  nd.mood = clamp(Math.round(nd.mood + (1 - bud().tax) * 30 + (LW.noTruck ? 3 : 0) + (LW.calm ? 2 : 0) - (LW.curfew ? 3 : 0)), 0, 100);
   return { s, demo, cc, ac, nd };
 }
 
@@ -3297,7 +3360,7 @@ function endConcert(cancel) {
   const tl = state.tiles[L.at], x = L.at % N, z = (L.at / N) | 0, A = ACTS[L.act], p = { act: t('act.' + L.act) };
   if (cancel || !tl || tl.t !== 'service') { addNews('warn', ['concert.cancel', p]); return; }
   // ฝนตกคนไปน้อยลง วันหยุดคนไปมากขึ้น (สัมพันธ์กับจำนวนคนเดินที่ลดตามฝน)
-  const pop = computeStats().pop, att = Math.round(Math.min(CONCERT_CAP[tl.v] || 1000, (pop * 0.35 * A.pull + 30) * (1 - 0.45 * weather.state.rain) * (state.day % 7 >= 5 ? 1.2 : 1)));
+  const pop = computeStats().pop, att = Math.round(Math.min(CONCERT_CAP[tl.v] || 1000, (pop * 0.35 * A.pull + 30) * (1 - 0.45 * weather.state.rain) * (state.day % 7 >= 5 ? 1.2 : 1) * (law().tourism ? 1.2 : 1)));
   const money = Math.round(att * A.price * 0.6);
   state.money += money; gainXp(Math.round(money / 40));
   C.held++; cnt().concerts++;
@@ -3326,6 +3389,50 @@ function tickConcert() {
     else if (h >= 22 || state.day !== L.day) endConcert(false);
   }
 }
+// ---------- เทศกาลยี่เป็ง/ลอยกระทง (เฉพาะแมปเชียงใหม่): ทุก 30 วัน วันที่ 24-26 ของรอบ มีโคมลอยกลางคืน นักท่องเที่ยวล้น รายได้เพิ่ม ----------
+const festivalNow = () => MAP_ID === 'chiangmai' && !VISIT && state.day % 30 >= 24 && state.day % 30 <= 26;
+const tourismK = () => (festivalNow() ? 1.6 : 1) * (law().tourism ? 1.25 : 1) * (state.day % 7 >= 5 ? 1.15 : 1) * (1 - 0.3 * weather.state.rain);   // ตัวคูณรายได้ท่องเที่ยว
+function festivalDay() {
+  if (MAP_ID !== 'chiangmai' || VISIT) return;
+  const F = (state.fest ||= { ann: -1, start: -1, end: -1 }), c = state.day % 30;
+  if (c === 22 && F.ann !== state.day) { F.ann = state.day; addNews('good', ['cmf.announce', {}]); toast(t('cmf.announce')); }
+  if (c === 24 && F.start !== state.day) { F.start = state.day; addNews('good', ['cmf.start', {}]); toast(t('cmf.start')); audio.sfx('place'); }
+  if (c === 27 && F.end !== state.day - 1 && F.start >= 0 && state.day - F.start <= 4) {   // ปิดงาน: คิดรายได้รวมของเทศกาล
+    F.end = state.day - 1;
+    const s = computeStats(), at = ccache.doisuthep + ccache.nightbazaar + ccache.tapae;
+    const n = Math.round(s.pop * 0.5 + at * 400), money = Math.round(n * 6 * (1 + 0.3 * at));
+    state.money += money; gainXp(Math.round(money / 40)); cnt().fests = (cnt().fests || 0) + 1;
+    addNews('good', ['cmf.end', { n: fmt(n), money: '$' + fmt(money) }]);
+    toast(t('cmf.end', { n: fmt(n), money: '$' + fmt(money) }));
+  }
+}
+// โคมลอยยี่เป็ง: จุดแสงสีส้มลอยขึ้นฟ้ายามค่ำคืนช่วงเทศกาล
+const lanterns = (() => {
+  const CNT = 160, pos = new Float32Array(CNT * 3), seed = new Float32Array(CNT);
+  const rnd = mulberry32(777);
+  for (let i = 0; i < CNT; i++) { pos[i * 3] = (rnd() - 0.5) * N * 0.7; pos[i * 3 + 1] = rnd() * 22; pos[i * 3 + 2] = (rnd() - 0.5) * N * 0.7; seed[i] = rnd(); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const tex = canvasTex(64, 64, (g, w, h) => { const gr = g.createRadialGradient(w / 2, h / 2, 2, w / 2, h / 2, w / 2); gr.addColorStop(0, 'rgba(255,230,160,1)'); gr.addColorStop(0.35, 'rgba(255,160,60,.75)'); gr.addColorStop(1, 'rgba(255,120,20,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); });
+  const mat = new THREE.PointsMaterial({ map: tex, size: 0.7, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: 0 });
+  const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; pts.visible = false; scene.add(pts);
+  return {
+    update(dt, on) {
+      const target = on ? 0.95 : 0;
+      mat.opacity += (target - mat.opacity) * Math.min(1, dt * 0.8);
+      pts.visible = mat.opacity > 0.02;
+      if (!pts.visible) return;
+      const a = geo.attributes.position, w = weather.windVec();
+      for (let i = 0; i < CNT; i++) {
+        a.array[i * 3 + 1] += dt * (0.5 + seed[i] * 0.7);
+        a.array[i * 3] += dt * (0.25 + w.x * 0.6) + Math.sin(performance.now() / 1500 + seed[i] * 20) * dt * 0.15;
+        a.array[i * 3 + 2] += dt * (0.1 + w.z * 0.6);
+        if (a.array[i * 3 + 1] > 26) { a.array[i * 3 + 1] = 0.5; a.array[i * 3] = (Math.random() - 0.5) * N * 0.7; a.array[i * 3 + 2] = (Math.random() - 0.5) * N * 0.7; }
+      }
+      a.needsUpdate = true;
+    },
+  };
+})();
+
 // ---------- เหตุการณ์วันหยุด (เสาร์-อาทิตย์): ตลาดนัด งานวัด ดนตรีในสวน ----------
 function pickDayEvent() {
   if (VISIT || state.day % 7 < 5) return;
@@ -3351,6 +3458,7 @@ function onNewDay() {
   if (n > 0) { gainXp(n); toast(t('xp.day', { n: fmt(n) })); }
   scheduleConcert();
   pickDayEvent();
+  festivalDay();
   newDaily();
 }
 function checkLevelUp() {
@@ -3402,6 +3510,7 @@ const VENUE = {   // base = น้ำหนักพื้นฐาน, cat = �
   'com:tuner': { base: 0.4, cat: 'other', time: 'eve' }, 'com:fishing': { base: 0.4, cat: 'shop', time: 'morning' }, 'com:zone': { base: 0.6, cat: 'shop', time: 'day' },
   'com:parking': { base: 0.5, cat: 'other', time: 'day' }, 'service:metro': { base: 1.6, cat: 'transit', time: 'rush' }, 'service:bus': { base: 0.7, cat: 'transit', time: 'rush' },
   'service:cemetery': { base: 0.4, cat: 'worship', time: 'morning' },
+  'service:doisuthep': { base: 1.3, cat: 'worship', time: 'day' }, 'service:nightbazaar': { base: 1.4, cat: 'shop', time: 'night' }, 'service:tapae': { base: 1.0, cat: 'fun', time: 'day' },
   'service:concert': { base: 1.0, cat: 'fun', time: 'concert' }, 'service:stadium': { base: 0.8, cat: 'fun', time: 'concert' },
   'com:cafe': { base: 1.1, cat: 'food', time: 'morning' }, 'com:pharmacy': { base: 0.8, cat: 'health', time: 'day' },
   'com:game': { base: 0.9, cat: 'fun', time: 'eve' }, 'com:pet': { base: 0.7, cat: 'shop', time: 'day' },   // ญาติไปเยี่ยมหลุมช่วงเช้า
@@ -3429,6 +3538,8 @@ function venueW(key, hr, rel, v) {
     default: m = 1;
   }
   if (V.time === 'temple' && dayEventNow() === 'fair') m *= 3;   // งานวัด
+  if (law().curfew && (V.time === 'night' || V.time === 'eve')) m *= 0.5;   // เคอร์ฟิว: ร้าน/ที่เที่ยวกลางคืนคนน้อยลง
+  if (CM_ATTR.has(key.slice(8)) && festivalNow()) m *= 2.5;   // เทศกาลยี่เป็ง: นักท่องเที่ยวล้นสถานที่ท่องเที่ยว
   return Math.max(0, V.base * m);
 }
 const venueObjs = new Map();   // key 'x,z' -> อ็อบเจกต์สถานที่ (คงตัวเดิมไว้ ให้ตัวละครอ้างอิงได้ต่อเนื่อง)
@@ -3874,7 +3985,7 @@ function cityEvents(s) {
   flags.pack--;
   if (flags.pack <= 0 && pop > 300 && snap && snap.ac.car >= 8) {
     const racePull = (1 + 0.7 * Math.min(3, ccache.tuner)) * (ccache.drag > 0 ? 0.45 : 1);   // ร้านแต่งรถดึงคนซิ่ง สนามคลอง 5 ดึงไปแข่งในสนาม
-    if (Math.random() < 0.004 * racePull * (1 + 1.8 * nightLevel) * (1 - 0.6 * policeCover(pop))) { if (agents.startRacePack(Math.random() < 0.55 ? 'bike' : 'car')) flags.pack = 120; }
+    if (Math.random() < 0.004 * racePull * (law().curfew ? 0.4 : 1) * (1 + 1.8 * nightLevel) * (1 - 0.6 * policeCover(pop))) { if (agents.startRacePack(Math.random() < 0.55 ? 'bike' : 'car')) flags.pack = 120; }
   }
 
   // งานแข่งแดร็กที่สนามคลอง 5: สุ่มวันจัดงาน (~40%) เริ่มช่วงเย็น มีผู้ชม รถต่อคิวแข่งจริง และจุดพลุ
@@ -3919,7 +4030,7 @@ function cityEvents(s) {
 
   // ปล้นร้านทอง/ธนาคาร
   for (const gi of ccache.gold) {
-    if (Math.random() < 0.0011 * (1 - 0.75 * policeCover(pop))) {
+    if (Math.random() < 0.0011 * (law().curfew ? 0.5 : 1) * (1 - 0.75 * policeCover(pop))) {
       ST().crimes++;
       const gx = gi % N, gz = Math.floor(gi / N), road = roadAt(gx, gz);
       curAt = { x: gx, z: gz };
@@ -4221,6 +4332,7 @@ document.body.appendChild(questPanel);
   document.getElementById('rail')?.appendChild(btn);
 }
 let questOpen = false;
+const QL = () => QUESTS.filter(q => !q.map || q.map === MAP_ID);   // ภารกิจเฉพาะแมปแสดงเฉพาะแมปนั้น
 function questCtx() {
   const vc = {};
   state.tiles.forEach(tl => { if (tl && tl.t !== 'part' && !(tl.cs && !tl.cs.to) && tl.v) vc[tl.t + ':' + tl.v] = (vc[tl.t + ':' + tl.v] || 0) + 1; });
@@ -4249,19 +4361,19 @@ function renderQuests() {
   if (!questOpen) return;
   const C = questCtx(), done = (state.quests ||= { done: {} }).done;
   if (!state.daily || state.daily.day !== state.day) newDaily();
-  const rows = QUESTS.map(q => ({ q, p: q.prog(C), d: !!done[q.id] }));
+  const rows = QL().map(q => ({ q, p: q.prog(C), d: !!done[q.id] }));
   const nDone = rows.filter(r => r.d).length;
   const dRows = dailyRows(C);
   questPanel.innerHTML = `<h3>📅 ${escH(t('mq.daily'))}<span>${escH(t('dow.' + (state.day % 7)))} · ${escH(t('mq.dailyNote'))}</span></h3>`
     + dRows.map(({ d, goal, cur, done: dn, reward }) => `<div class="q${dn ? ' done' : ''}"><b>${dn ? '✓ ' : ''}${escH(t('md.' + d.id, { n: goal }))}</b><div class="qb"><u style="width:${100 * cur / goal}%"></u></div><div class="qr"><span>${fmt(cur)} / ${fmt(goal)}</span><span>${dn ? escH(t('mq.done')) : '+' + money(reward.money) + ' · +' + reward.xp + ' XP'}</span></div></div>`).join('')
-    + `<h3 style="margin-top:12px">🎯 ${escH(t('mq.title'))}<span>${nDone}/${QUESTS.length}</span></h3>`
+    + `<h3 style="margin-top:12px">🎯 ${escH(t('mq.title'))}<span>${nDone}/${QL().length}</span></h3>`
     + rows.sort((a, b) => a.d - b.d).map(({ q, p, d }) => `<div class="q${d ? ' done' : ''}"><b>${d ? '✓ ' : ''}${escH(t('mq.' + q.id))}</b><i>${escH(t('mq.' + q.id + '.d'))}</i>${d ? '' : `<em class="qh"><b>${escH(t('mq.how'))}</b> ${escH(t('mq.' + q.id + '.h'))}</em>`}<div class="qb"><u style="width:${100 * p[0] / p[1]}%"></u></div><div class="qr"><span>${fmt(p[0])} / ${fmt(p[1])}</span><span>${d ? escH(t('mq.done')) : '+' + money(q.reward.money) + ' · +' + q.reward.xp + ' XP'}</span></div></div>`).join('');
 }
 let questT = 0;
 function checkQuests() {
   if (VISIT) return;
   const C = questCtx(), done = (state.quests ||= { done: {} }).done;
-  for (const q of QUESTS) {
+  for (const q of QL()) {
     if (done[q.id]) continue;
     const [cur, goal] = q.prog(C);
     if (cur < goal) continue;
@@ -4458,6 +4570,18 @@ function tabUtil(P, D) {
       + `<div class="dim">${escH(t('pol.tip'))}</div>`)
     + `<div class="dim">${escH(t('ut.weather', { t: Math.round(tempC), r: Math.round(weather.state.rain * 100) }))}</div>`;
 }
+function tabBudget(P) {
+  const { s } = P, B = bud(), LW = law();
+  const pc = v => Math.round(100 * v) + '%';
+  const step = (k, label, val) => `<div class="kv"><span>${escH(label)}</span><b><button class="rf" data-bud="${k}:-1">−</button> ${pc(val)} <button class="rf" data-bud="${k}:1">+</button></b></div>`;
+  const cov = { police: policeCover(s.pop), fire: fireCover(s.pop) };
+  const dept = [['police', t('bud.police'), cov.police, t('bud.cov')], ['fire', t('bud.fire'), cov.fire, t('bud.cov')], ['health', t('bud.health'), null, ''], ['edu', t('bud.edu'), null, ''], ['transit', t('bud.transit'), null, '']];
+  const taxNote = t('bud.taxnote', { inc: pc(B.tax), mood: (B.tax <= 1 ? '+' : '') + Math.round((1 - B.tax) * 30), grow: Math.round((1 - clamp(1 - 0.5 * (B.tax - 1), 0.6, 1.3)) * -100) + '%' });
+  return sec(t('bud.tax'), step('tax', t('bud.taxrate'), B.tax) + `<div class="dim">${escH(taxNote)}</div>` + kv(t('fin.income'), `<span style="color:#66bb6a">+${fmt(s.income)}</span>`))
+    + sec(t('bud.depts'), dept.map(([k, label, c, covLbl]) => step(k, label, B[k]) + `<div class="dim">${escH(t('bud.cost', { n: fmt(s.dept[k] * ECON) }))}${c !== null ? ' · ' + escH(covLbl) + ' ' + pc(c) : ''} — ${escH(t('bud.' + k + '.d'))}</div>`).join(''))
+    + sec(t('bud.laws'), LAWS.map(k => `<div class="kv"><span><b>${escH(t('law.' + k))}</b><br><small class="dim">${escH(t('law.' + k + '.d'))}</small></span><b><button class="rf" data-law="${k}" style="min-width:52px;${LW[k] ? 'background:#2e7d32;color:#fff' : ''}">${escH(t(LW[k] ? 'law.on' : 'law.off'))}</button></b></div>`).join('') + (s.policyCost ? `<div class="dim">${escH(t('law.cost', { n: fmt(s.policyCost * ECON) }))}</div>` : ''))
+    + `<div class="dim">${escH(t('bud.tip'))}</div>`;
+}
 function tabFin(P, D) {
   const { s } = P;
   const inc = Object.entries(s.taxes).map(([k, v]) => ['tax.' + k, v, k]);
@@ -4508,12 +4632,12 @@ function tabReg() {
     + (causes.length ? sec(t('reg.byCause'), causes.map(k => bar(t('reg.cause.' + k), 100 * sh(k) / tot, k === 'old' || k === 'illness' ? '#90a4ae' : '#e57373', fmt(sh(k)))).join('')) : '')
     + `<div class="ptabs sub">${['all', 'birth', 'death'].map(k => `<button data-reg="${k}" class="rf ${k === regFilter ? 'on' : ''}">${escH(t('reg.filter.' + k))}</button>`).join('')}</div>${rows}`;
 }
-const TABS = ['overview', 'pop', 'places', 'transport', 'trade', 'reg', 'util', 'fin', 'bld', 'news'];
+const TABS = ['overview', 'pop', 'places', 'transport', 'trade', 'reg', 'util', 'fin', 'budget', 'bld', 'news'];
 function renderPop() {
   if (!popPanel || !popOpen) return;
   const keep = popPanel.querySelector('.pbody')?.scrollTop || 0;
   const P = civicSnapshot(), D = cityDetail();
-  const body = { overview: tabOverview, pop: tabPop, places: tabPlaces, transport: tabTransport, trade: tabTrade, reg: tabReg, util: tabUtil, fin: tabFin, bld: tabBld, news: tabNews }[popTab](P, D);
+  const body = { overview: tabOverview, pop: tabPop, places: tabPlaces, transport: tabTransport, trade: tabTrade, reg: tabReg, util: tabUtil, fin: tabFin, budget: tabBudget, bld: tabBld, news: tabNews }[popTab](P, D);
   popPanel.innerHTML = `
     <div class="dh"><b>${escH(t('city.title'))}</b><small>${escH(t('side.drag'))}</small><button class="x" id="popClose">${ICON.close}</button></div>
     <div class="ptabs">${TABS.map(k => `<button data-tab="${k}" class="${k === popTab ? 'on' : ''}">${escH(t('tab.' + k))}</button>`).join('')}</div>
@@ -4521,6 +4645,8 @@ function renderPop() {
   popPanel.querySelector('#popClose').onclick = () => setPopOpen(false);
   popPanel.querySelectorAll('.ptabs button[data-tab]').forEach(b => { b.onclick = () => { popTab = b.dataset.tab; renderPop(); }; });
   popPanel.querySelectorAll('button[data-pol]').forEach(b => { b.onclick = () => { const [k, d] = b.dataset.pol.split(':'), p = (state.policy ||= { parkFee: 2, fare: 1 }); p[k] = clamp((p[k] || 0) + +d, 0, { parkFee: 6, fare: 4, evCut: 3, greenCut: 3 }[k]); audio.sfx('select'); renderPop(); }; });
+  popPanel.querySelectorAll('button[data-bud]').forEach(b => { b.onclick = () => { if (VISIT) return; const [k, d] = b.dataset.bud.split(':'), B = bud(); const lo = k === 'tax' ? 0.6 : 0.4, hi = k === 'tax' ? 1.4 : 1.6; B[k] = Math.round(clamp(B[k] + 0.1 * +d, lo, hi) * 10) / 10; audio.sfx('select'); renderPop(); }; });
+  popPanel.querySelectorAll('button[data-law]').forEach(b => { b.onclick = () => { if (VISIT) return; const L = law(), k = b.dataset.law; L[k] = !L[k]; audio.sfx('select'); if (k === 'calm') { limitsDirty = true; for (const i of recalcLimits()) buildTile(i % N, (i / N) | 0); } renderPop(); }; });
   popPanel.querySelectorAll('button[data-reg]').forEach(b => { b.onclick = () => { regFilter = b.dataset.reg; renderPop(); }; });
   popPanel.querySelector('.pbody').scrollTop = keep;
 }
@@ -4648,7 +4774,7 @@ function showFly(k) {
   clearTimeout(flyTimer);
   if (flyTool !== k || !fly.classList.contains('show')) {
     flyTool = k;
-    fly.innerHTML = `<div class="ft">${toolLabel(k)}</div>` + VARIANTS[k].map(v =>
+    fly.innerHTML = `<div class="ft">${toolLabel(k)}</div>` + VARIANTS[k].filter(v => !v.cmOnly || MAP_ID === 'chiangmai').map(v =>
       `<button class="fi${currentVar[k] === v.k ? ' on' : ''}" data-k="${v.k}"><span class="fn">${vLabel(k, v)}</span><span class="fc">$${v.cost.toLocaleString()}</span><span class="fs">${variantStats(k, v)}</span></button>`
     ).join('');
   }
@@ -5035,6 +5161,7 @@ function applyQuality(key) {
   useBloom = q.bloom && !!composer;
   setRtx(!!q.rtx && !!composer);
   forest.setCount(q.forest);
+  agents.setLod(q.lod || {});
   weather.setRainCap(q.rain);
   lastTargetsAt = 0; // คำนวณจำนวนรถ/คนใหม่ทันที
 
@@ -5107,15 +5234,15 @@ function updateAgentTargets() {
 
   // รถส่วนตัวเพิ่มตามประชากรและงาน (เมืองใหญ่รถติด) ส่วนขนส่งสาธารณะ (carCut) หักออกตามสัดส่วนเสมอ แม้ถึงเพดานกราฟิกแล้วก็ยังเห็นผล
   const cars = (s.pop * 0.16 + (s.jobsCom * 0.08 + s.jobsInd * 0.12) * (weekend ? 0.45 : 1) + Math.min(6, s.roads * 0.12)) * rush * (0.25 + 0.75 * awake);
-  const people = (s.pop * 0.16 + s.jobs * 0.04 + s.parks * 1.5 * (weekend ? 1.8 : 1) + Math.min(4, s.roads * 0.08)) * (weekend ? 1.2 : 1) * ({ market: 1.25, fair: 1.2, music: 1.2 }[dayEventNow()] || 1) * awake * rainy;
+  const people = (s.pop * 0.16 + s.jobs * 0.04 + s.parks * 1.5 * (weekend ? 1.8 : 1) + Math.min(4, s.roads * 0.08)) * (weekend ? 1.2 : 1) * ({ market: 1.25, fair: 1.2, music: 1.2 }[dayEventNow()] || 1) * (festivalNow() ? 1.5 : 1) * (1 + 0.1 * Math.min(4, ccache.doisuthep + ccache.nightbazaar + ccache.tapae)) * awake * rainy;
   const petMul = 1 + 0.2 * Math.min(3, ccache.pet);   // มีร้านอุปกรณ์สัตว์เลี้ยง คนเลี้ยงหมาแมวมากขึ้น
   const dogs = s.pop * 0.02 * (0.4 + 0.6 * awake) * rainy * petMul;
   const cats = petMul * s.pop * 0.015 * (0.4 + 0.6 * awake) * (1 - 0.5 * W.rain);
-  const transitCut = (1 - (s.carCut || 0)) * (state.concert?.live ? 1.25 : 1);   // คอนเสิร์ตกำลังแสดง รถไปที่งานเยอะ
+  const transitCut = (1 - (s.carCut || 0)) * (state.concert?.live ? 1.25 : 1) * (festivalNow() ? 1.15 : 1);   // คอนเสิร์ตกำลังแสดง รถไปที่งานเยอะ
   carDemand = cars * transitCut;
   agents.setTargets({
     bus: Math.min(ccache.bus * 3, 9), taxi: Math.min(ccache.taxi * 4, 12), grab: Math.min(ccache.grab * 5, 12),
-    cargo: ccache.freight ? Math.min(8, 2 + Math.round(s.trade.units * s.trade.cov / 150)) : 0, ev: s.evShare,
+    cargo: ccache.freight && !law().noTruck ? Math.min(8, 2 + Math.round(s.trade.units * s.trade.cov / 150)) : 0, ev: s.evShare,
     car: Math.round(Math.min(cars, q.cars * 1.25) * transitCut),
     person: Math.min(Math.round(people), q.people),
     dog: Math.min(Math.round(dogs), Math.ceil(q.pets * 0.55)),
@@ -5352,7 +5479,7 @@ function frame(now) {
   if (lastTargetsAt <= 0) { lastTargetsAt = 1; safe(updateAgentTargets); }
   _pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _fr.setFromProjectionMatrix(_pv);
   if (tilesCullDirty || !_pvLast.equals(_pv)) { _pvLast.copy(_pv); tilesCullDirty = false; cullTiles(); }
-  agents.update(dt, night, speed, { rain: weather.state.rain, dark: lampLevel, hospital: ccache.hospital + ccache.hospital_p > 0, police: policeCover(), accidentRate: 1 - 0.3 * policeCover(), drunk: ccache.pub > 0 ? clamp(nightLevel * 1.2, 0, 1) * Math.min(1, 0.4 + 0.3 * ccache.pub) * (agents.checkpointActive() ? 0.3 : 1) : 0, cam: camera.position, frustum: _fr });
+  agents.update(dt, night, speed, { rain: weather.state.rain, dark: lampLevel, hospital: ccache.hospital + ccache.hospital_p > 0, police: policeCover(), accidentRate: (1 - 0.3 * policeCover()) * (law().calm ? 0.75 : 1), drunk: ccache.pub > 0 ? clamp(nightLevel * 1.2, 0, 1) * Math.min(1, 0.4 + 0.3 * ccache.pub) * (agents.checkpointActive() ? 0.3 : 1) : 0, cam: camera.position, frustum: _fr });
   for (const ev of agents.takeEvents()) onAgentEvent(ev);
   animateFires(performance.now() / 1000);
   animateIncidents(performance.now() / 1000);
@@ -5386,6 +5513,7 @@ function frame(now) {
   // เสียง: ยิ่งซูมเข้าใกล้ ยิ่งได้ยินรายละเอียดชัด
   audioStatsT -= dt;
   if (audioStatsT <= 0) { audioStatsT = 0.5; safe(refreshAudioStats); }
+  lanterns.update(dt, festivalNow() && nightLevel > 0.35);
   levelT -= dt;
   if (levelT <= 0) { levelT = 3; safe(checkLevelUp); }
   questT -= dt;

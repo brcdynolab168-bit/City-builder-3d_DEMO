@@ -14,6 +14,7 @@ export const FOOT = {
   'com:mall': [3, 2], 'com:market': [2, 2], 'com:dealer': [2, 1], 'com:fishing': [1, 1],
   'com:parking': [2, 1], 'service:metro': [2, 1], 'ind:honda': [3, 3], 'ind:toyota': [4, 3], 'ind:bmw': [3, 3], 'ind:shindengen': [2, 2], 'ind:keihin': [2, 2], 'ind:denso': [3, 2],
   'power:wind': [1, 1], 'power:hydro': [2, 1], 'power:bio': [2, 1], 'water:well': [1, 1], 'com:ev': [1, 1], 'service:freight': [3, 2], 'service:cemetery': [2, 2], 'com:cafe': [1, 1], 'com:game': [1, 1], 'com:pharmacy': [1, 1], 'com:pet': [1, 1],
+  'service:doisuthep': [3, 3], 'service:nightbazaar': [3, 2], 'service:tapae': [3, 2],
   'service:concert': [3, 3], 'service:stadium': [4, 3], 'service:airport': [5, 3], 'service:port': [4, 2],
   'farm:fish': [3, 2], 'farm:cricket': [2, 2], 'farm:rice': [3, 2], 'farm:crop': [2, 2], 'farm:barn': [3, 2], 'farm:orchard': [2, 2],
   'park:plaza': [2, 2], 'park:play': [1, 1], 'park:sports': [2, 2], 'park:garden': [3, 3],
@@ -1411,6 +1412,85 @@ export function createBig(c) {
     lamp(bg, -1.8, 0.8, 0.3); lamp(bg, 1.9, 0.0, 0.3);
   }
 
+  // =============================================================
+  // วัดพระธาตุดอยสุเทพ (3×3): ลานชั้นบันได พญานาคทอดตามบันได เจดีย์ทองคำ วิหารหลังคาซ้อนชั้น
+  // =============================================================
+  function doisuthep(bg) {
+    ground(bg, 3, 3, M.walk);
+    for (let k = 0; k < 4; k++) put(bg, boxGeo, k % 2 ? band(0xe9dfc8) : band(0xf5eedd), 0, y0 + 0.03 + k * 0.05, -0.2 - k * 0.02, 2.5 - k * 0.38, 0.06, 1.9 - k * 0.32);   // ลานชั้นบนเขา
+    // บันไดพญานาคด้านหน้า
+    for (let k = 0; k < 9; k++) put(bg, boxGeo, band(0xd8cdb4), 0, y0 + 0.012 + k * 0.022, 1.3 - k * 0.12, 0.5, 0.025, 0.13);
+    for (const sx of [-1, 1]) for (let k = 0; k < 9; k++) put(bg, icoGeo, k % 3 === 0 ? band(0xffc107) : band(sx > 0 ? 0x1e88e5 : 0x43a047), sx * 0.31, y0 + 0.04 + k * 0.022, 1.3 - k * 0.12, 0.09, 0.07, 0.11);
+    for (const sx of [-1, 1]) { put(bg, icoGeo, band(0x2e7d32), sx * 0.31, y0 + 0.27, 0.26, 0.12, 0.1, 0.14); put(bg, boxGeo, band(0xffc107), sx * 0.31, y0 + 0.3, 0.2, 0.03, 0.05, 0.06); }
+    // เจดีย์ทองคำ
+    const gy = y0 + 0.24;
+    put(bg, boxGeo, MT.gold, 0, gy + 0.03, -0.35, 0.5, 0.06, 0.5);
+    put(bg, boxGeo, MT.gold, 0, gy + 0.09, -0.35, 0.38, 0.06, 0.38);
+    put(bg, cylGeo, MT.gold, 0, gy + 0.2, -0.35, 0.26, 0.16, 0.26);
+    put(bg, coneGeo, MT.gold, 0, gy + 0.43, -0.35, 0.22, 0.32, 0.22);
+    put(bg, cylGeo, MT.gold, 0, gy + 0.62, -0.35, 0.05, 0.12, 0.05);
+    put(bg, coneGeo, MT.gold, 0, gy + 0.72, -0.35, 0.04, 0.12, 0.04);
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { put(bg, coneGeo, MT.gold, sx * 0.38, gy + 0.1, -0.35 + sz * 0.38, 0.1, 0.22, 0.1); put(bg, boxGeo, MT.gold, sx * 0.38, gy + 0.02, -0.35 + sz * 0.38, 0.12, 0.04, 0.12); }   // เจดีย์บริวาร
+    // วิหารหลังคาซ้อนชั้นแบบล้านนา
+    put(bg, boxGeo, band(0xf3ead2), -0.95, y0 + 0.2, -0.3, 0.5, 0.2, 0.7);
+    put(bg, gableGeo(0.62, 0.8, 0.14), band(0xb71c1c), -0.95, y0 + 0.3, -0.3, 1, 1, 1);
+    put(bg, gableGeo(0.52, 0.7, 0.1), band(0xc62828), -0.95, y0 + 0.4, -0.3, 1, 1, 1);
+    put(bg, boxGeo, MT.gold, -0.95, y0 + 0.5, -0.3, 0.04, 0.02, 0.8);
+    for (const z of [-0.55, -0.05]) put(bg, cylGeo, band(0x7b1f1f), -0.7, y0 + 0.1, z, 0.04, 0.2, 0.04);
+    signAt(bg, t('sign.doisuthep'), '#8d6e00', '#ffffff', 0, y0 + 0.07, 1.46, 1.1, 0.1, 30);
+    for (const [x, z] of [[1.2, 0.8], [-1.3, 0.9], [1.25, -1.1]]) tree(bg, x, z, 1.4, 0.5);
+    for (const x of [-0.55, 0.55]) lamp(bg, x, 1.3, 0.22);
+  }
+
+  // =============================================================
+  // ตลาดไนท์บาซาร์ (3×2): ถนนคนเดินมีซุ้มขายของสองฝั่ง ผ้าใบหลากสี โคมไฟ ป้ายประตู
+  // =============================================================
+  function nightbazaar(bg) {
+    ground(bg, 3, 2, M.walk);
+    put(bg, boxGeo, M.asphalt, 0, y0 + 0.012, 0.02, 2.8, 0.012, 0.62);                                  // ถนนคนเดิน
+    const COL = [0xe53935, 0x1e88e5, 0x43a047, 0xfb8c00, 0x8e24aa, 0xfdd835];
+    for (const z of [-0.55, 0.6]) for (let k = 0; k < 7; k++) {
+      const x = -1.2 + k * 0.4, c = COL[(k + (z > 0 ? 3 : 0)) % COL.length];
+      put(bg, boxGeo, MT.wood, x, y0 + 0.05, z, 0.3, 0.1, 0.22);                                       // โต๊ะ/ร้าน
+      put(bg, gableGeo(0.34, 0.26, 0.07), band(c), x, y0 + 0.15, z, 1, 1, 1, Math.PI / 2);              // หลังคาผ้าใบ
+      for (const sx of [-1, 1]) put(bg, cylGeo, MT.woodDark, x + sx * 0.14, y0 + 0.08, z + (z > 0 ? 0.1 : -0.1), 0.012, 0.16, 0.012);
+      put(bg, icoGeo, band(0xffd54f), x, y0 + 0.14, z + (z > 0 ? 0.12 : -0.12), 0.045, 0.045, 0.045);   // โคมไฟแขวน
+    }
+    put(bg, boxGeo, M.metal, 0, y0 + 0.3, 0.02, 2.8, 0.012, 0.012);                                      // สายไฟประดับกลางถนน
+    for (let k = 0; k < 14; k++) put(bg, icoGeo, k % 2 ? MT.neonPink : MT.neonCyan, -1.3 + k * 0.2, y0 + 0.285, 0.02, 0.035, 0.035, 0.035);
+    for (const sx of [-1, 1]) put(bg, boxGeo, band(0xb71c1c), sx * 1.38, y0 + 0.22, 0.02, 0.07, 0.44, 0.07);   // ซุ้มประตูแบบล้านนา
+    put(bg, boxGeo, band(0xb71c1c), 0, y0 + 0.44, 0.02, 2.84, 0.06, 0.1);
+    signAt(bg, t('sign.nightbazaar'), '#4a148c', '#ffe082', 0, y0 + 0.4, 0.08, 1.6, 0.14, 28);
+    lamp(bg, -1.45, 0.9, 0.26); lamp(bg, 1.45, 0.9, 0.26);
+  }
+
+  // =============================================================
+  // ประตูท่าแพ (3×2): กำแพงอิฐ ประตูโค้ง ซี่เสมาบนกำแพง หลังคาซ้อนชั้นแบบล้านนา ลานหน้าประตู
+  // =============================================================
+  function tapae(bg) {
+    ground(bg, 3, 2, M.walk);
+    const BR = band(0xb5533c), BR2 = band(0x9c4631);
+    put(bg, boxGeo, M.asphalt, 0, y0 + 0.012, 0.55, 2.9, 0.012, 0.7);                                     // ลานหน้าประตู
+    for (const sx of [-1, 1]) {
+      put(bg, boxGeo, BR, sx * 1.05, y0 + 0.17, -0.35, 0.85, 0.34, 0.4);                                   // กำแพงสองข้าง
+      for (let k = 0; k < 5; k++) put(bg, boxGeo, BR2, sx * (0.68 + k * 0.17), y0 + 0.37, -0.35, 0.1, 0.07, 0.42);   // ซี่เสมา
+    }
+    put(bg, boxGeo, BR, 0, y0 + 0.3, -0.35, 0.9, 0.6, 0.5);                                               // ตัวประตู
+    put(bg, boxGeo, band(0x1e1a17), 0, y0 + 0.14, -0.1, 0.34, 0.28, 0.02);                                // ช่องประตู
+    put(bg, domeGeo, band(0x1e1a17), 0, y0 + 0.28, -0.1, 0.34, 0.1, 0.04);
+    put(bg, boxGeo, MT.woodDark, -0.09, y0 + 0.13, -0.095, 0.15, 0.26, 0.02); put(bg, boxGeo, MT.woodDark, 0.09, y0 + 0.13, -0.095, 0.15, 0.26, 0.02);
+    for (let k = 0; k < 6; k++) put(bg, boxGeo, BR2, -0.36 + k * 0.144, y0 + 0.64, -0.35, 0.08, 0.07, 0.52);   // ซี่เสมาบนตัวประตู
+    // หลังคาซ้อนชั้นเหนือประตู
+    put(bg, boxGeo, MT.wood, 0, y0 + 0.7, -0.35, 0.7, 0.1, 0.42);
+    put(bg, gableGeo(0.62, 0.72, 0.13), MT.slate, 0, y0 + 0.75, -0.35, 1, 1, 1, Math.PI / 2);
+    put(bg, gableGeo(0.44, 0.52, 0.1), MT.slate, 0, y0 + 0.86, -0.35, 1, 1, 1, Math.PI / 2);
+    put(bg, boxGeo, MT.gold, 0, y0 + 0.97, -0.35, 0.03, 0.04, 0.54);
+    signAt(bg, t('sign.tapae'), '#5d4037', '#ffe0b2', 0, y0 + 0.5, -0.095, 0.7, 0.1, 28);
+    for (const [x, z] of [[-1.3, 0.5], [1.3, 0.5]]) { tree(bg, x, z, 1.2, 0.3); }
+    for (const x of [-0.7, 0.7]) lamp(bg, x, 0.85, 0.26);
+    miniCar(bg, 0.9, 0.55, Math.PI / 2, band(0xd32f2f), 1);   // รถตุ๊กตุ๊กจอดหน้าประตู
+  }
+
   function freight(bg) {
     ground(bg, 3, 2, M.asphalt);
     put(bg, boxGeo, MT.wall, -0.9, y0 + 0.22, -0.4, 1.1, 0.44, 1.0);                     // โกดังสินค้า
@@ -1476,7 +1556,7 @@ export function createBig(c) {
 
   const MAP = {
     'service:cemetery': cemetery, 'com:cafe': cafe, 'com:game': gameShop, 'com:pharmacy': pharmacy, 'com:pet': petShop,
-    'power:wind': wind, 'power:hydro': hydro, 'power:bio': bio, 'water:well': well, 'com:ev': evStation, 'service:freight': freight, 'service:concert': concert, 'service:stadium': stadium, 'service:airport': airport, 'service:port': port,
+    'power:wind': wind, 'power:hydro': hydro, 'power:bio': bio, 'water:well': well, 'com:ev': evStation, 'service:freight': freight, 'service:concert': concert, 'service:doisuthep': doisuthep, 'service:nightbazaar': nightbazaar, 'service:tapae': tapae, 'service:stadium': stadium, 'service:airport': airport, 'service:port': port,
     'com:parking': parking, 'service:metro': metro,
     'ind:honda': honda, 'ind:toyota': toyota, 'ind:bmw': bmw, 'ind:shindengen': shindengen, 'ind:keihin': keihin, 'ind:denso': denso,
     'service:hospital_p': bg => hospital(bg, true), 'service:school_p': bg => school(bg, true), 'com:bank': bank,

@@ -32,7 +32,7 @@ const TURN_V = 0.5, UTURN_V = 0.25;   // ความเร็วเลี้ย
 const LANE_LAT = { soi: [0.12], street: [0.15], avenue: [0.32, 0.11], highway: [0.35, 0.14] };
 const latHit = (p, q) => Math.abs(p - q) < 0.14;   // อยู่เลนเดียวกัน (ตัวรถกว้าง ~0.15)
 
-export function createAgents({ scene, N, tileType, groundY = () => 0, signal = () => null, roadKind = () => 'street', speedLimit = () => 50, overpassAt = () => null }) {
+export function createAgents({ scene, N, tileType, groundY = () => 0, signal = () => null, roadKind = () => 'street', speedLimit = () => 50, overpassAt = () => null, oneWayAt = () => null }) {
   const root = new THREE.Group();
   root.name = 'agents';
   scene.add(root);
@@ -581,6 +581,14 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     return t === 'park' || (t === 'road' && roadKind(x, z) !== 'highway');   // คนเดินบนทางหลวงไม่ได้
   };
 
+  // ย้ายจากช่อง (x,z) ไปทิศ d ได้ไหม: ปลายทางต้องเดินได้ และห้ามวิ่งสวนทิศถนนทางเดียว (ทั้งช่องที่ออกและช่องที่เข้า)
+  const canStep = (kind, x, z, d) => {
+    if (!walkable(kind, x + d[0], z + d[1])) return false;
+    if (kind !== 'car') return true;
+    const w0 = oneWayAt(x, z); if (w0 && w0[0] === -d[0] && w0[1] === -d[1]) return false;
+    const w1 = oneWayAt(x + d[0], z + d[1]); if (w1 && w1[0] === -d[0] && w1[1] === -d[1]) return false;
+    return true;
+  };
   let dirty = true;
   const lists = { car: [], walker: [] };
   function rebuildLists() {
@@ -608,7 +616,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     const opts = [];
     for (const nd of DIRS) {
       if (nd[0] === -d[0] && nd[1] === -d[1]) continue;
-      if (walkable(kind, bx + nd[0], bz + nd[1])) opts.push(nd);
+      if (canStep(kind, bx, bz, nd)) opts.push(nd);
     }
     if (!opts.length) return [-d[0], -d[1]];
     const straight = opts.find(o => o[0] === d[0] && o[1] === d[1]);
@@ -688,7 +696,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     if (!list.length) return null;
     for (let tries = 0; tries < 12; tries++) {
       const [x, z] = list[(Math.random() * list.length) | 0];
-      const opts = DIRS.filter(([dx, dz]) => walkable(kind, x + dx, z + dz));
+      const opts = DIRS.filter(([dx, dz]) => canStep(kind, x, z, [dx, dz]));
       if (!opts.length) continue;
       const d = opts[(Math.random() * opts.length) | 0];
       // รถเกิดใหม่ต้องไม่ซ้อนคันอื่น: ช่องนี้และช่องข้างหน้าต้องว่าง
@@ -934,7 +942,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       if (d >= 18) continue;
       for (const [dx, dz] of DIRS) {
         const nx = x + dx, nz = z + dz;
-        if (!walkable('car', nx, nz) || dist.has(key(nx, nz))) continue;
+        if (!walkable('car', nx, nz) || dist.has(key(nx, nz)) || !canStep('car', nx, nz, [-dx, -dz])) continue;
         dist.set(key(nx, nz), d + 1); prev.set(key(nx, nz), key(x, z)); q.push([nx, nz]);
       }
     }
@@ -1360,7 +1368,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     }
   }
 
-  const SHADOW2 = 30 * 30;   // เกินระยะนี้ไม่วาดเงาของรถ/คน
+  let SHADOW2 = 30 * 30;   // เกินระยะนี้ไม่วาดเงาของรถ/คน (ปรับตามระดับกราฟิกผ่าน setLod)
   function setAgentShadow(a, on) {
     a.obj.traverse(o => {
       if (!o.isMesh) return;
@@ -1368,7 +1376,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       o.castShadow = on && o.userData.cs;
     });
   }
-  const NEAR2 = 24 * 24, HIDE2 = 62 * 62; // เกณฑ์ระยะ LOD ของคน/สัตว์เลี้ยง (หน่วยช่อง ยกกำลังสอง)
+  let NEAR2 = 24 * 24, HIDE2 = 62 * 62; // เกณฑ์ระยะ LOD ของคน/สัตว์เลี้ยง (หน่วยช่อง ยกกำลังสอง)
 
 
   // ---------- ด่านตรวจสุ่ม (ตำรวจตั้งด่านชั่วคราวบนถนนตรง รถผ่านช้าลง) ----------
@@ -1726,6 +1734,8 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
 
   return {
     // จำนวนเป้าหมายแต่ละชนิด (ผู้เรียกคำนวณจากประชากร/เวลา/อากาศ)
+    // ระยะ LOD ตามระดับกราฟิก: ใกล้ = ละเอียด, ไกลกว่า hide = ซ่อน, ไกลกว่า shadow = ไม่วาดเงา
+    setLod({ near = 24, hide = 62, shadow = 30 } = {}) { NEAR2 = near * near; HIDE2 = hide * hide; SHADOW2 = shadow * shadow; },
     setTargets({ car = 0, person = 0, dog = 0, cat = 0, bus = 0, taxi = 0, grab = 0, cargo = 0, ev = 0 }) {
       targets = { car, person, dog, cat, bus, taxi, grab, cargo };
       evShare = ev;
@@ -1739,6 +1749,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     startCheckpoint, endCheckpoint, checkpointActive: () => !!checkpoint, checkpointAge: () => (checkpoint ? checkpoint.t : 0),
     racers() { let n = 0, b = 0; for (const a of agents.car) if (a.racer && !a.crash) { n++; if (a.isBike) b++; } return { n, bike: b }; },
     update,
+    debugCars: () => agents.car,
     // ทดสอบ/สั่งให้เกิดอุบัติเหตุทันที
     triggerAccident() { return startAccident(); },
     takeEvents() { return events.splice(0, events.length); },
