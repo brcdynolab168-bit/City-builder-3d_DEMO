@@ -123,7 +123,7 @@ export function createBig(c) {
     }
   };
   const tree = (bg, x, z, s, k) => addTree(bg, x, z, s, k);
-  const ground = (bg, W, D, mat, y = y0) => put(bg, boxGeo, mat, 0, y - 0.005, 0, W - 0.04, 0.03, D - 0.04);
+  const ground = (bg, W, D, mat, y = y0) => put(bg, boxGeo, mat, 0, y - 0.005, 0, W - 0.002, 0.03, D - 0.002);
   const fence = (bg, x1, z1, x2, z2, mat = MT.wood) => {
     const dx = x2 - x1, dz = z2 - z1, len = Math.hypot(dx, dz);
     put(bg, boxGeo, mat, (x1 + x2) / 2, y0 + 0.05, (z1 + z2) / 2, len, 0.012, 0.012, Math.atan2(-dz, dx));

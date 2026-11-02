@@ -2486,7 +2486,7 @@ function buildTile(x, z) {
     for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) put(g, cylGeo, M.concrete, sx * 0.38, -pl / 2, sz * 0.38, 0.1, pl, 0.1);
   } else {
     const ph = Math.max(0.06, ty - tileMinH[i] + 0.08);
-    put(g, boxGeo, M.plinth, 0, -ph / 2 + 0.005, 0, 0.99, ph, 0.99);
+    put(g, boxGeo, M.plinth, 0, -ph / 2 + 0.005, 0, 1.0, ph, 1.0);
   }
   addEdgeGuard(g, x, z, ty, t.t === 'road');
   const baseCount = g.children.length;
@@ -2628,25 +2628,25 @@ function buildTile(x, z) {
       if (details >= 1) addRoadSigns(g, x, z, r, r2);
     }
   } else if (t.t === 'water') {
-    put(g, boxGeo, M.walk, 0, 0.015, 0, 0.96, 0.03, 0.96);
+    put(g, boxGeo, M.walk, 0, 0.015, 0, 1.0, 0.03, 1.0);
     const bg = new THREE.Group();
     bg.rotation.y = facing(x, z, r);
     g.add(bg);
     buildVariant(bg, 'water', t.v || DEFAULT_V.water, r, r2);
   } else if (t.t === 'service') {
-    put(g, boxGeo, M.walk, 0, 0.015, 0, 0.96, 0.03, 0.96);
+    put(g, boxGeo, M.walk, 0, 0.015, 0, 1.0, 0.03, 1.0);
     const bg = new THREE.Group();
     bg.rotation.y = facing(x, z, r);
     g.add(bg);
     buildVariant(bg, 'service', t.v || DEFAULT_V.service, r, r2);
   } else if (ZONES.includes(t.t) && fixedVariant(t)) {
-    put(g, boxGeo, M.walk, 0, 0.015, 0, 0.96, 0.03, 0.96);
+    put(g, boxGeo, M.walk, 0, 0.015, 0, 1.0, 0.03, 1.0);
     const bg = new THREE.Group();
     bg.rotation.y = facing(x, z, r);
     g.add(bg);
     buildVariant(bg, t.t, t.v, r, r2);
   } else if (ZONES.includes(t.t)) {
-    put(g, boxGeo, M.zone[t.t], 0, 0.015, 0, 0.94, 0.03, 0.94);
+    put(g, boxGeo, M.zone[t.t], 0, 0.015, 0, 1.0, 0.03, 1.0);
     const lv = t.cs?.to ?? t.lv;
     if (lv > 0) {
       const mdl = getModel(t.t, lv, r);
@@ -2663,7 +2663,7 @@ function buildTile(x, z) {
       }
     }
   } else if (t.t === 'power') {
-    put(g, boxGeo, M.walk, 0, 0.015, 0, 0.96, 0.03, 0.96);
+    put(g, boxGeo, M.walk, 0, 0.015, 0, 1.0, 0.03, 1.0);
     const pm = (t.v && t.v !== 'gas') ? null : getModel('power', 0, r);
     if (pm) {
       const c = pm.clone(true);
@@ -2677,7 +2677,7 @@ function buildTile(x, z) {
       buildVariant(bg, 'power', t.v || DEFAULT_V.power, r, r2);
     }
   } else if (t.t === 'park') {
-    put(g, boxGeo, M.park, 0, 0.02, 0, 0.96, 0.04, 0.96);
+    put(g, boxGeo, M.park, 0, 0.02, 0, 1.0, 0.04, 1.0);
     put(g, boxGeo, M.path, 0, 0.042, 0, 0.12, 0.006, 0.96);
     put(g, boxGeo, M.path, 0, 0.042, 0, 0.96, 0.006, 0.12);
     if (r2 > 0.65) put(g, cylGeo, M.water, 0.24, 0.043, -0.24, 0.3, 0.006, 0.3);
