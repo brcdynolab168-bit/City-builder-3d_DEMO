@@ -32,7 +32,7 @@ const TURN_V = 0.5, UTURN_V = 0.25;   // ความเร็วเลี้ย
 const LANE_LAT = { soi: [0.12], street: [0.15], avenue: [0.32, 0.11], highway: [0.35, 0.14] };
 const latHit = (p, q) => Math.abs(p - q) < 0.14;   // อยู่เลนเดียวกัน (ตัวรถกว้าง ~0.15)
 
-export function createAgents({ scene, N, tileType, groundY = () => 0, signal = () => null, roadKind = () => 'street', speedLimit = () => 50, overpassAt = () => null, oneWayAt = () => null, overLiftAt = () => 0 }) {
+export function createAgents({ scene, N, tileType, groundY = () => 0, signal = () => null, roadKind = () => 'street', speedLimit = () => 50, overpassAt = () => null, oneWayAt = () => null, overLiftAt = () => 0, unsignaledAt = () => false }) {
   const root = new THREE.Group();
   root.name = 'agents';
   scene.add(root);
@@ -1835,6 +1835,24 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
         if (need > B_MAX * 0.8) continue;              // แดงแต่เบรกไม่ทันแล้ว
         follow(dist, 0);
         break;
+      }
+    }
+    // แยกที่ไม่มีไฟ: ให้ทางรถที่มาจากทางขวา (ขับชิดซ้าย) และรถที่อยู่กลางแยกแล้ว รอนานเกิน 2.5 วินาทีไปได้ กันสี่แยกติดตาย
+    if (a.s >= 0.5) a.waitJ = 0;
+    else if (a.s > 0.08 && !a.racer) {
+      const Bx = a.x + a.d[0], Bz = a.z + a.d[1];
+      if (unsignaledAt(Bx, Bz) && !(a.waitJ > 2.5)) {
+        let must = false;
+        for (const o of agents.car) {
+          if (o === a || o.crash || o.dead) continue;
+          const dot = o.d[0] * a.d[0] + o.d[1] * a.d[1];
+          if (dot !== 0) continue;                                   // เฉพาะรถที่วิ่งตัดผ่าน
+          if (o.x === Bx && o.z === Bz && o.s < 0.6) { must = true; break; }   // อยู่กลางแยกแล้ว
+          if (o.d[0] === a.d[1] && o.d[1] === -a.d[0]) {           // วิ่งมาจากทางขวาของเรา: อยู่ช่องก่อนแยกและใกล้ถึงแล้ว
+            if (o.x + o.d[0] === Bx && o.z + o.d[1] === Bz && o.s > 0.3) { must = true; break; }
+          }
+        }
+        if (must) { follow(Math.max(0.03, 0.5 - a.s - 0.03), 0); a.waitJ = (a.waitJ || 0) + sdt; }
       }
     }
     // เลี้ยวขวาต้องให้ทาง: เข้าแยกถึงขอบช่องแล้วยังไม่ได้ออกตัว ให้หยุดรอที่ขอบจนรถสวนที่จะมาถึงแยกภายใน ~2.4 วินาทีผ่านไป

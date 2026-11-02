@@ -11,6 +11,16 @@ export const LANGS = [
 
 const D = {
   th: {
+    "v.road.signal": "ไฟจราจร (เปิด/ปิด)",
+    "v.road.signal.note": "คลิกที่ทางแยกเพื่อเปิด/ปิดไฟจราจรของแยกนั้น (ติดตั้งไฟ $40 ปิดฟรี) แยกที่ปิดไฟรถจะให้ทางกันเอง (ให้ทางรถที่มาจากทางขวา) ตั้งค่าทั้งเมืองได้ที่แท็บ \"งบประมาณ\"",
+    "toast.sig": "คลิกที่ทางแยก (ถนนต่อกัน 3 ทางขึ้นไป) เพื่อเปิด/ปิดไฟจราจร",
+    "toast.sig.on": "ติดตั้งไฟจราจรที่แยกนี้แล้ว",
+    "toast.sig.off": "ปิดไฟจราจรที่แยกนี้แล้ว รถจะให้ทางกันเอง",
+    "bud.sig": "ไฟจราจร",
+    "bud.sig.all": "ทุกแยก",
+    "bud.sig.major": "เฉพาะแยกใหญ่",
+    "bud.sig.none": "ไม่มีไฟ",
+    "bud.sig.d": "ทุกแยก = มีไฟทุกทางแยก · เฉพาะแยกใหญ่ = สี่แยกและแยกที่ติดถนนสายหลัก · ไม่มีไฟ = ปิดทั้งเมือง (รถให้ทางกันเอง ติดน้อยลงในเมืองเล็ก แต่เสี่ยงเกิดอุบัติเหตุในเมืองใหญ่) แยกที่คุณตั้งเองด้วยเครื่องมือไฟจราจรจะไม่เปลี่ยนตามโหมดนี้",
     "ph.open": "โหมดภาพถ่าย (P)",
     "ph.time": "เวลา",
     "ph.snap": "บันทึกภาพ",
@@ -771,6 +781,16 @@ const D = {
     'daylen': '1 วันในเกม = 5 นาที',
   },
   en: {
+    "v.road.signal": "Traffic signals (on/off)",
+    "v.road.signal.note": "Click a junction to turn its signals on/off (installing costs $40, switching off is free). Unsignalled junctions make cars give way to traffic from the right. City-wide setting is in the Budget tab",
+    "toast.sig": "Click a junction (3 or more road arms) to switch its signals",
+    "toast.sig.on": "Signals installed at this junction",
+    "toast.sig.off": "Signals switched off here; cars will give way to each other",
+    "bud.sig": "Traffic signals",
+    "bud.sig.all": "All junctions",
+    "bud.sig.major": "Major only",
+    "bud.sig.none": "None",
+    "bud.sig.d": "All = every junction · Major = 4-way crossings and junctions on main roads · None = no signals city-wide (cars give way to each other; flows well in small towns but risky in big cities). Junctions you set yourself with the signal tool ignore this setting",
     
     "v.park.fishspot": "Waterside fishing spot",
     "v.park.fishspot.note": "3×2 tiles, must touch water and a road. Free fishing for citizens at dawn and dusk, busier at weekends, and it keeps people happy",
@@ -1517,6 +1537,16 @@ const D = {
     'daylen': '1 in-game day = 5 minutes',
   },
   zh: {
+    "v.road.signal": "红绿灯（开/关）",
+    "v.road.signal.note": "点击路口开关该路口的红绿灯（安装 $40，关闭免费）。关闭红绿灯的路口车辆会礼让右侧来车。全城设置见“预算”页",
+    "toast.sig": "点击路口（3 个及以上方向）来开关红绿灯",
+    "toast.sig.on": "已在此路口安装红绿灯",
+    "toast.sig.off": "已关闭此路口红绿灯，车辆将互相礼让",
+    "bud.sig": "红绿灯",
+    "bud.sig.all": "所有路口",
+    "bud.sig.major": "仅主要路口",
+    "bud.sig.none": "无灯",
+    "bud.sig.d": "所有路口 = 每个路口都有灯 · 仅主要路口 = 十字路口和主干道路口 · 无灯 = 全城关闭（车辆互相礼让，小城市更顺畅，大城市有风险）。用红绿灯工具单独设置的路口不受此设置影响",
     
     "v.park.fishspot": "水边钓鱼场",
     "v.park.fishspot.note": "3×2 格，必须临水且临路。市民在清晨和傍晚免费钓鱼，周末更热闹，能提升满意度",

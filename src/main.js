@@ -193,6 +193,7 @@ const VARIANTS = {
     { k: 'dirt',      label: 'ถนนลูกรัง',          cost: 3,  upkeep: 0.2 },
     { k: 'boulevard', label: 'ถนนเกาะกลางสวน',      cost: 36, upkeep: 1.3 },
     { k: 'oneway',   label: 'ถนนทางเดียว',         cost: 4,  upkeep: 0.1, oneway: true },       // คลิกช่องถนนเพื่อสลับทิศ หรือลากตามทิศที่ต้องการ
+    { k: 'signal',   label: 'ไฟจราจร เปิด/ปิด',     cost: 40, upkeep: 0, signal: true },      // คลิกที่ทางแยกเพื่อสลับไฟ
     { k: 'roundabout', label: 'วงเวียน',            cost: 60, upkeep: 1, junction: 'round' },     // วางทับทางแยก 3 ทางขึ้นไป ไม่มีไฟจราจร รถไหลต่อเนื่อง
     { k: 'overpass',  label: 'ทางแยกต่างระดับ',      cost: 420, upkeep: 5, junction: 'over' },     // วางทับทางแยก 4 ทาง: ถนนสายหลักข้ามสะพานเหนือถนนที่ตัด ไม่ต้องรอไฟ
   ],
@@ -664,10 +665,24 @@ function roadArms(x, z) {
   return n;
 }
 const isJunction = (x, z) => isType(x, z, 'road') && roadArms(x, z) >= 3;
+// ไฟจราจรที่แยกนี้เปิดอยู่ไหม: ผู้เล่นตั้งเองรายแยก (sg true/false) มาก่อน ถ้าไม่ได้ตั้งใช้โหมดทั้งเมือง
+//   all = ทุกแยก, major = เฉพาะสี่แยกและแยกที่มีถนนสายหลัก, none = ไม่มีไฟเลย (วงเวียน/ทางต่างระดับไม่มีไฟอยู่แล้ว)
+const isMajorRoad = k => k === 'avenue' || k === 'boulevard' || k === 'highway';
+function signalOn(x, z) {
+  const tl = tileAt(x, z);
+  if (!tl || tl.t !== 'road' || tl.j || roadArms(x, z) < 3) return false;
+  if (tl.sg === true) return true;
+  if (tl.sg === false) return false;
+  const m = state.sigMode || 'all';
+  if (m === 'all') return true;
+  if (m === 'none') return false;
+  if (roadArms(x, z) >= 4 || isMajorRoad(roadKind(x, z))) return true;
+  return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => isType(x + dx, z + dz, 'road') && isMajorRoad(roadKind(x + dx, z + dz)));
+}
 
 // สถานะไฟของแนว axis ('x' | 'z') ที่ทางแยก (x,z): 'g' เขียว, 'y' เหลือง, 'r' แดง, null = ไม่มีไฟ
 function signalState(x, z, axis) {
-  if (!isJunction(x, z) || tileAt(x, z)?.j) return null;   // วงเวียน/ทางแยกต่างระดับไม่มีไฟ
+  if (!signalOn(x, z)) return null;   // วงเวียน/ทางแยกต่างระดับ/แยกที่ปิดไฟ ไม่มีไฟ
   const p = (sigClock + SIG_OFFSET[sigGroup(x, z)]) % SIG_CYCLE;
   const first = p < SIG_HALF;
   if ((axis === 'x') !== first) return 'r';
@@ -709,6 +724,7 @@ const agents = createAgents({
   signal: signalState,
   roadKind: (x, z) => { const k = roadKind(x, z); return k === 'dirt' ? 'street' : k === 'boulevard' ? 'avenue' : k; },
   speedLimit: speedLimitAt,
+  unsignaledAt: (x, z) => { const tl = tileAt(x, z); return !!tl && tl.t === 'road' && !tl.j && roadArms(x, z) >= 3 && !signalOn(x, z); },
   oneWayAt: (x, z) => { const tl = tileAt(x, z); return tl?.t === 'road' && tl.ow ? tl.ow : null; },   // [dx, dz] ทิศที่วิ่งได้ทิศเดียว
   overLiftAt: (cx, cz, ax) => overLiftAt(cx, cz, ax),   // ห่อไว้เพราะ overLiftAt ประกาศหลังจุดนี้
   overpassAt: (x, z) => { const tl = tileAt(x, z); return tl?.t === 'road' && tl.j === 'over' ? (tl.ax || 'x') : null; },   // ทิศของถนนที่ยกข้ามสะพาน
@@ -2185,7 +2201,7 @@ function addCrosswalks(g, x, z) {
 function addStopLines(g, x, z) {
   const hw = ROAD_W[roadKind(x, z)] / 2, c = hw / 2 + 0.01, w = hw - 0.03;
   for (const [dx, dz] of DIRS4) {
-    if (!isJunction(x + dx, z + dz)) continue;
+    if (!signalOn(x + dx, z + dz)) continue;   // แยกที่ไม่มีไฟไม่มีเส้นหยุด
     if (dx !== 0) put(g, boxGeo, M.stopLine, dx * 0.465, ROAD_TOP + 0.003, -dx * c, 0.03, 0.004, w);
     else put(g, boxGeo, M.stopLine, dz * c, ROAD_TOP + 0.003, dz * 0.465, w, 0.004, 0.03);
   }
@@ -2751,7 +2767,7 @@ function buildTile(x, z) {
     // ไฟจราจร + ทางม้าลายที่ทางแยก, เส้นหยุดและป้ายบนถนนที่ติดทางแยก
     if (junc) {
       if (J !== 'over') addCrosswalks(g, x, z);
-      if (!J) addSignalHeads(g, x, z, details);
+      if (!J && signalOn(x, z)) addSignalHeads(g, x, z, details);
     } else {
       addStopLines(g, x, z);
       if (details >= 1) addRoadSigns(g, x, z, r, r2);
@@ -3088,6 +3104,13 @@ function applyTool(x, z) {
     if (!dir) { delete cur.ow; audio.sfx('road'); refresh(x, z); updateHUD(); return; }
     if (!cur.ow) { if (state.money < SV.cost) { audio.sfx('error'); return toast(t('toast.nomoney')); } state.money -= SV.cost; }
     cur.ow = dir;
+    audio.sfx('road'); refresh(x, z); updateHUD();
+    return;
+  }
+  if (SV?.signal) {   // ไฟจราจร: คลิกที่ทางแยกเพื่อเปิด/ปิดไฟของแยกนั้น (ติดตั้งไฟ $40 ปิดฟรี)
+    if (!cur || cur.t !== 'road' || cur.j || roadArms(x, z) < 3) { audio.sfx('error'); return toast(t('toast.sig')); }
+    if (signalOn(x, z)) { cur.sg = false; toast(t('toast.sig.off')); }
+    else { if (state.money < SV.cost) { audio.sfx('error'); return toast(t('toast.nomoney')); } state.money -= SV.cost; cur.sg = true; toast(t('toast.sig.on')); }
     audio.sfx('road'); refresh(x, z); updateHUD();
     return;
   }
@@ -4731,6 +4754,7 @@ function tabBudget(P) {
   const taxNote = t('bud.taxnote', { inc: pc(B.tax), mood: (B.tax <= 1 ? '+' : '') + Math.round((1 - B.tax) * 30), grow: Math.round((1 - clamp(1 - 0.5 * (B.tax - 1), 0.6, 1.3)) * -100) + '%' });
   return sec(t('bud.tax'), step('tax', t('bud.taxrate'), B.tax) + `<div class="dim">${escH(taxNote)}</div>` + kv(t('fin.income'), `<span style="color:#66bb6a">+${fmt(s.income)}</span>`))
     + sec(t('bud.depts'), dept.map(([k, label, c, covLbl]) => step(k, label, B[k]) + `<div class="dim">${escH(t('bud.cost', { n: fmt(s.dept[k] * ECON) }))}${c !== null ? ' · ' + escH(covLbl) + ' ' + pc(c) : ''} — ${escH(t('bud.' + k + '.d'))}</div>`).join(''))
+    + sec(t('bud.sig'), ['all', 'major', 'none'].map(m => `<button class="rf" data-sig="${m}" style="margin:2px 3px 2px 0;${(state.sigMode || 'all') === m ? 'background:#2e7d32;color:#fff' : ''}">${escH(t('bud.sig.' + m))}</button>`).join('') + `<div class="dim">${escH(t('bud.sig.d'))}</div>`)
     + sec(t('bud.laws'), LAWS.map(k => `<div class="kv"><span><b>${escH(t('law.' + k))}</b><br><small class="dim">${escH(t('law.' + k + '.d'))}</small></span><b><button class="rf" data-law="${k}" style="min-width:52px;${LW[k] ? 'background:#2e7d32;color:#fff' : ''}">${escH(t(LW[k] ? 'law.on' : 'law.off'))}</button></b></div>`).join('') + (s.policyCost ? `<div class="dim">${escH(t('law.cost', { n: fmt(s.policyCost * ECON) }))}</div>` : ''))
     + `<div class="dim">${escH(t('bud.tip'))}</div>`;
 }
@@ -4798,6 +4822,13 @@ function renderPop() {
   popPanel.querySelectorAll('.ptabs button[data-tab]').forEach(b => { b.onclick = () => { popTab = b.dataset.tab; renderPop(); }; });
   popPanel.querySelectorAll('button[data-pol]').forEach(b => { b.onclick = () => { const [k, d] = b.dataset.pol.split(':'), p = (state.policy ||= { parkFee: 2, fare: 1 }); p[k] = clamp((p[k] || 0) + +d, 0, { parkFee: 6, fare: 4, evCut: 3, greenCut: 3 }[k]); audio.sfx('select'); renderPop(); }; });
   popPanel.querySelectorAll('button[data-bud]').forEach(b => { b.onclick = () => { if (VISIT) return; const [k, d] = b.dataset.bud.split(':'), B = bud(); const lo = k === 'tax' ? 0.6 : 0.4, hi = k === 'tax' ? 1.4 : 1.6; B[k] = Math.round(clamp(B[k] + 0.1 * +d, lo, hi) * 10) / 10; audio.sfx('select'); renderPop(); }; });
+  popPanel.querySelectorAll('button[data-sig]').forEach(b => { b.onclick = () => {
+    if (VISIT) return;
+    state.sigMode = b.dataset.sig; audio.sfx('select');
+    for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) { const tl = state.tiles[z * N + x]; if (tl?.t === 'road' && !tl.j && roadArms(x, z) >= 3) buildTile(x, z); }   // สร้างแยกใหม่ให้ตรงกับโหมด
+    for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) if (isType(x, z, 'road') && !isJunction(x, z)) { let near = false; for (const [dx, dz] of DIRS4) if (isJunction(x + dx, z + dz)) near = true; if (near) buildTile(x, z); }   // เส้นหยุดบนช่องติดแยก
+    agents.invalidate(); renderPop();
+  }; });
   popPanel.querySelectorAll('button[data-law]').forEach(b => { b.onclick = () => { if (VISIT) return; const L = law(), k = b.dataset.law; L[k] = !L[k]; audio.sfx('select'); if (k === 'calm') { limitsDirty = true; for (const i of recalcLimits()) buildTile(i % N, (i / N) | 0); } renderPop(); }; });
   popPanel.querySelectorAll('button[data-reg]').forEach(b => { b.onclick = () => { regFilter = b.dataset.reg; renderPop(); }; });
   popPanel.querySelector('.pbody').scrollTop = keep;
