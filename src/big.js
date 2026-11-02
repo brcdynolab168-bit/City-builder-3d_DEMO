@@ -1217,20 +1217,29 @@ export function createBig(c) {
   }
   function metro(bg) {
     ground(bg, 2, 1, M.concrete);
-    for (const sx of [-0.7, 0.7]) put(bg, boxGeo, band(0xcfd4d8), sx, y0 + 0.26, 0, 0.11, 0.52, 0.11);          // เสาทางยกระดับ
-    put(bg, boxGeo, band(0xb9bfc4), 0, y0 + 0.54, 0, 2.0, 0.05, 0.36);                                          // ตัวราง
-    for (const sz of [-0.07, 0.07]) put(bg, boxGeo, band(0x6b7278), 0, y0 + 0.58, sz, 2.0, 0.012, 0.012);
-    put(bg, boxGeo, band(0xe8f0f6), 0, y0 + 0.68, 0, 1.2, 0.14, 0.2);                                          // ขบวนรถ
-    put(bg, boxGeo, MT.glass, 0, y0 + 0.69, 0.102, 1.1, 0.05, 0.006);
-    put(bg, boxGeo, band(0x2e9c4d), 0, y0 + 0.63, 0.102, 1.2, 0.03, 0.006);
-    put(bg, boxGeo, band(0x9fb0bd), 0, y0 + 0.82, 0, 1.4, 0.03, 0.46);                                          // หลังคาชานชาลา
-    for (const sx of [-0.62, 0.62]) put(bg, boxGeo, band(0x9fb0bd), sx, y0 + 0.7, 0.2, 0.02, 0.24, 0.02);
-    put(bg, boxGeo, band(0xdfe6ec), -0.72, y0 + 0.14, 0.3, 0.4, 0.28, 0.3);                                     // ทางขึ้น/ห้องจำหน่ายตั๋ว
-    put(bg, boxGeo, MT.glass, -0.72, y0 + 0.14, 0.452, 0.34, 0.2, 0.008);
-    put(bg, boxGeo, band(0x2e9c4d), -0.72, y0 + 0.3, 0.3, 0.44, 0.03, 0.34);
-    put(bg, boxGeo, band(0xcfd4d8), -0.3, y0 + 0.28, 0.3, 0.5, 0.025, 0.1).rotation.z = 0.55;                    // บันไดขึ้นชานชาลา
-    signAt(bg, t('sign.metro'), '#2e9c4d', '#ffffff', 0.45, y0 + 0.36, 0.43, 0.8, 0.12, 36);
-    put(bg, boxGeo, band(0x2e9c4d), 0.45, y0 + 0.36, 0.41, 0.84, 0.15, 0.03);
+    put(bg, boxGeo, band(0xc9ced2), 0, y0 + 0.006, 0, 1.94, 0.012, 0.9);                                       // ลานทางเท้าหน้าสถานี
+    const BL = 0x1a4b9c;
+    for (const sx of [-0.56, 0.56]) {   // ทางลงสถานี 2 จุด: โพรงมืด บันไดลงใต้ดิน ราว หลังคากระจกทรงโค้ง
+      put(bg, boxGeo, band(0x0c0f12), sx, y0 + 0.014, 0.02, 0.4, 0.012, 0.56);                                  // ปากทางลง (ดำ = ลึกลงไป)
+      for (let k = 0; k < 7; k++) put(bg, boxGeo, band(k % 2 ? 0x5e676f : 0x3d444a), sx, y0 + 0.022, -0.23 + k * 0.07, 0.34, 0.006, 0.05);   // ขั้นบันไดทอดลงไป
+      for (const sd of [-1, 1]) {
+        put(bg, boxGeo, band(0x8e969c), sx + sd * 0.2, y0 + 0.05, 0.02, 0.014, 0.06, 0.56);                      // ราวข้างบันได
+        put(bg, boxGeo, band(0x37474f), sx + sd * 0.2, y0 + 0.11, 0.3, 0.016, 0.2, 0.016);                      // เสาหลังคา ด้านหน้า
+        put(bg, boxGeo, band(0x37474f), sx + sd * 0.2, y0 + 0.11, -0.28, 0.016, 0.2, 0.016);                    // เสาหลังคา ด้านใน
+      }
+      put(bg, boxGeo, MT.glass, sx, y0 + 0.215, 0.01, 0.44, 0.014, 0.66);                                       // หลังคากระจก
+      put(bg, boxGeo, band(BL), sx, y0 + 0.228, 0.01, 0.46, 0.012, 0.68);                                       // กรอบหลังคาสีน้ำเงิน
+      for (const sd of [-1, 1]) put(bg, boxGeo, MT.glass, sx + sd * 0.215, y0 + 0.12, -0.28, 0.006, 0.18, 0.1); // ผนังกระจกด้านใน
+    }
+    // ป้ายเสาสถานี (ทรงเสาตั้ง) สีน้ำเงิน มีชื่อ และปล่องระบายอากาศ ลิฟต์สำหรับผู้พิการ
+    put(bg, boxGeo, band(0x37474f), 0, y0 + 0.22, 0.32, 0.02, 0.44, 0.02);
+    put(bg, boxGeo, band(BL), 0, y0 + 0.42, 0.32, 0.46, 0.15, 0.03);
+    signAt(bg, t('sign.metro'), '#1a4b9c', '#ffffff', 0, y0 + 0.42, 0.337, 0.44, 0.13, 19);
+    put(bg, boxGeo, band(0xb0bec5), 0.0, y0 + 0.09, -0.3, 0.2, 0.18, 0.2);                                       // ปล่องระบายอากาศ
+    for (let k = 0; k < 4; k++) put(bg, boxGeo, band(0x78909c), 0.0, y0 + 0.05 + k * 0.035, -0.198, 0.17, 0.014, 0.004);
+    put(bg, boxGeo, MT.glass, 0.88, y0 + 0.14, 0.14, 0.15, 0.28, 0.15);                                           // ลิฟต์กระจก
+    put(bg, boxGeo, band(BL), 0.88, y0 + 0.285, 0.14, 0.17, 0.014, 0.17);
+    for (const x of [-0.9, 0.9]) lamp(bg, x, -0.4, 0.24);
   }
 
   // ----- พลังงานสะอาด / น้ำบาดาล / EV / ขนส่งสินค้า -----

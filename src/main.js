@@ -79,7 +79,7 @@ const VARIANTS = {
     { k: 'apt',   label: 'อพาร์ตเมนต์',     cost: 480,  pop: 36, power: 8,  water: 11 },
     { k: 'condo', label: 'คอนโด',           cost: 1000, pop: 90, power: 16, water: 25 },
     { k: 'tower', label: 'ตึกสูง',           cost: 1800, pop: 170, power: 30, water: 44, req: { pop: 900 },             note: 'ตึกสูง 14–20 ชั้น (1×1) หรืออัปเกรดจากคอนโดด้วยการดับเบิลคลิก' },
-    { k: 'sky',   label: 'ตึกระฟ้า',         cost: 4200, pop: 330, power: 56, water: 80, req: { pop: 2500, metro: 1 },    note: 'ตึกระฟ้า 26–38 ชั้น (1×1) ต้องมีสถานีรถไฟฟ้ารองรับ' },
+    { k: 'sky',   label: 'ตึกระฟ้า',         cost: 4200, pop: 330, power: 56, water: 80, req: { pop: 2500, metro: 1 },    note: 'ตึกระฟ้า 26–38 ชั้น (1×1) ต้องมีสถานีรถไฟฟ้าใต้ดินรองรับ' },
   ],
   com: [
     { k: 'zone',  label: 'โซนพาณิชย์ (โตเอง)', cost: 30, note: 'ร้านค้า/สำนักงาน โตเองตามความต้องการ' },
@@ -166,7 +166,7 @@ const VARIANTS = {
     { k: 'pea',      label: 'การไฟฟ้า',       cost: 1200, jobs: 24, power: 10, water: 6, upkeep: 20, note: '2×2 ช่อง ส่งช่างซ่อมไฟดับ' },
     { k: 'pwa',      label: 'การประปา',        cost: 1200, jobs: 24, power: 8, water: 4, upkeep: 20, note: '2×2 ช่อง ส่งช่างซ่อมท่อแตก' },
     { k: 'dohw',     label: 'กรมทางหลวง',      cost: 1300, jobs: 28, power: 8, water: 6, upkeep: 22, note: '2×2 ช่อง ส่งทีมซ่อมถนนพัง' },
-    { k: 'metro',    label: 'สถานีรถไฟฟ้า',  cost: 2400, jobs: 30, power: 20, water: 4, upkeep: 35, note: '2×1 ช่อง ลดรถบนถนน ต้องอยู่ใกล้บ้าน (รัศมี ~9 ช่อง) ลานจอดรถใกล้สถานีช่วยเพิ่มผู้โดยสาร' },
+    { k: 'metro',    label: 'สถานีรถไฟฟ้าใต้ดิน',  cost: 2400, jobs: 30, power: 20, water: 4, upkeep: 35, note: '2×1 ช่อง ลดรถบนถนน ต้องอยู่ใกล้บ้าน (รัศมี ~9 ช่อง) ลานจอดรถใกล้สถานีช่วยเพิ่มผู้โดยสาร' },
     { k: 'bus',      label: 'อู่รถเมล์',       cost: 1400, jobs: 30, power: 6, water: 6, upkeep: 20, tax: 12, note: '3×2 ช่อง มีรถเมล์วิ่ง ลดรถติด' },
     { k: 'taxi',     label: 'อู่แท็กซี่',      cost: 800,  jobs: 14, power: 3, water: 3, upkeep: 8, tax: 10, note: '2×2 ช่อง มีแท็กซี่วิ่ง' },
     { k: 'grab',     label: 'จุดรวมแกร็บ',    cost: 600,  jobs: 10, power: 3, water: 2, upkeep: 6, tax: 8, note: '2×1 ช่อง รถและมอไซค์แกร็บ' },
