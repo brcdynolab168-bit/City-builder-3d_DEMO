@@ -427,6 +427,63 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   }
 
   // ---------- คน: 28 แบบ (ทรงผม เสื้อผ้า กระเป๋า หมวก) ----------
+  // ตุ๊กตุ๊ก: 3 ล้อ หลังคาผ้าใบ สีเหลือง-แดง
+  function makeTuktuk() {
+    let G = busCache.tuk;
+    if (!G) {
+      const b = [], l = [];
+      const col = pick([0xf9c80e, 0xe53935, 0x43a047, 0x1e88e5]);
+      b.push(part(boxGeo, col, 0, 0.065, -0.02, 0.12, 0.07, 0.22));
+      b.push(part(boxGeo, col, 0, 0.1, 0.1, 0.1, 0.05, 0.08));
+      b.push(part(boxGeo, 0x14202c, 0, 0.115, 0.145, 0.09, 0.03, 0.004));
+      b.push(part(boxGeo, 0x263238, 0, 0.17, -0.04, 0.13, 0.014, 0.25));
+      for (const sx of [-1, 1]) for (const sz of [-0.08, 0.06]) b.push(part(boxGeo, 0x37474f, sx * 0.058, 0.125, sz, 0.006, 0.07, 0.006));
+      for (const sx of [-1, 1]) b.push(part(cylGeo, 0x161616, sx * 0.07, 0.03, -0.09, 0.06, 0.026, 0.06, 0, 0, Math.PI / 2));
+      b.push(part(cylGeo, 0x161616, 0, 0.03, 0.15, 0.06, 0.024, 0.06, 0, 0, Math.PI / 2));
+      l.push(part(boxGeo, 0xfff6d8, 0, 0.07, 0.15, 0.03, 0.02, 0.006), part(boxGeo, 0xdd2a1a, 0, 0.07, -0.132, 0.06, 0.016, 0.006));
+      G = busCache.tuk = { body: merge(b), lamps: merge(l) };
+    }
+    const g = new THREE.Group(), lamps = mesh(G.lamps, M.lamp, false);
+    g.add(mesh(G.body, M.vc), lamps);
+    return { obj: g, headMesh: lamps, tailMesh: lamps };
+  }
+  // สองแถวเชียงใหม่: กระบะดัดแปลง หลังคาคลุม สีแดง มีม้านั่งยาวสองข้าง
+  function makeSongthaew() {
+    let G = busCache.song;
+    if (!G) {
+      const b = [], l = [];
+      b.push(part(boxGeo, 0xc62828, 0, 0.075, 0.06, 0.15, 0.08, 0.32));              // ตัวถังส่วนห้องโดยสาร
+      b.push(part(boxGeo, 0xc62828, 0, 0.1, 0.2, 0.15, 0.06, 0.1));                  // ห้องคนขับ
+      b.push(part(boxGeo, 0x14202c, 0, 0.12, 0.252, 0.13, 0.034, 0.004));
+      b.push(part(boxGeo, 0xefefef, 0, 0.165, -0.02, 0.155, 0.014, 0.4));            // หลังคาขาว
+      for (const sx of [-1, 1]) { b.push(part(boxGeo, 0x14202c, sx * 0.076, 0.115, -0.02, 0.004, 0.04, 0.3)); b.push(part(boxGeo, 0x8d6e63, sx * 0.05, 0.075, -0.02, 0.02, 0.012, 0.3)); }
+      for (const sz of [-0.12, 0.17]) for (const sx of [-1, 1]) b.push(part(cylGeo, 0x161616, sx * 0.08, 0.03, sz, 0.062, 0.026, 0.062, 0, 0, Math.PI / 2));
+      l.push(part(boxGeo, 0xfff6d8, -0.05, 0.06, 0.256, 0.03, 0.016, 0.006), part(boxGeo, 0xfff6d8, 0.05, 0.06, 0.256, 0.03, 0.016, 0.006), part(boxGeo, 0xdd2a1a, -0.05, 0.06, -0.19, 0.03, 0.016, 0.006), part(boxGeo, 0xdd2a1a, 0.05, 0.06, -0.19, 0.03, 0.016, 0.006));
+      G = busCache.song = { body: merge(b), lamps: merge(l) };
+    }
+    const g = new THREE.Group(), lamps = mesh(G.lamps, M.lamp, false);
+    g.add(mesh(G.body, M.vc), lamps);
+    return { obj: g, headMesh: lamps, tailMesh: lamps };
+  }
+  // รถเมล์สองชั้น (แดง)
+  function makeDoubleDecker() {
+    let G = busCache.dd;
+    if (!G) {
+      const b = [], l = [];
+      b.push(part(boxGeo, 0xd32f2f, 0, 0.085, 0, 0.15, 0.1, 0.58));
+      b.push(part(boxGeo, 0xe53935, 0, 0.17, -0.02, 0.15, 0.07, 0.5));
+      b.push(part(boxGeo, 0x14202c, 0, 0.115, 0, 0.152, 0.03, 0.5));
+      b.push(part(boxGeo, 0x14202c, 0, 0.175, -0.02, 0.152, 0.03, 0.46));
+      b.push(part(boxGeo, 0xb71c1c, 0, 0.21, -0.02, 0.15, 0.012, 0.5));
+      b.push(part(boxGeo, 0x14202c, 0, 0.12, 0.292, 0.13, 0.05, 0.004));
+      for (const sz of [-0.2, 0.2]) for (const sx of [-1, 1]) b.push(part(cylGeo, 0x161616, sx * 0.076, 0.03, sz, 0.06, 0.024, 0.06, 0, 0, Math.PI / 2));
+      l.push(part(boxGeo, 0xfff6d8, -0.05, 0.05, 0.292, 0.03, 0.016, 0.006), part(boxGeo, 0xfff6d8, 0.05, 0.05, 0.292, 0.03, 0.016, 0.006), part(boxGeo, 0xdd2a1a, -0.05, 0.05, -0.292, 0.03, 0.016, 0.006), part(boxGeo, 0xdd2a1a, 0.05, 0.05, -0.292, 0.03, 0.016, 0.006));
+      G = busCache.dd = { body: merge(b), lamps: merge(l) };
+    }
+    const g = new THREE.Group(), lamps = mesh(G.lamps, M.lamp, false);
+    g.add(mesh(G.body, M.vc), lamps);
+    return { obj: g, headMesh: lamps, tailMesh: lamps };
+  }
   const SKIN = [0xf1c9a5, 0xd9a47c, 0xb07a52, 0x7a4e32, 0xe8b894];
   const HAIR = [0x1b1410, 0x3a2a1c, 0x6b4a2b, 0x9a9a9a, 0x0e0e0e];
   const CLOTH = [0xd9534f, 0x3b82c4, 0xf0ad4e, 0x5cb85c, 0xeeeeee, 0x7e57c2, 0x2f3e4e, 0xff8fab, 0x1f8a70, 0xf2d03b];
@@ -437,10 +494,11 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     const R = rng(i + 7);
     const pk = a => a[Math.floor(R() * a.length)];
     const skin = pk(SKIN), hair = pk(HAIR), cloth = pk(CLOTH), pants = pk(PANTS);
-    const female = R() < 0.45, dress = female && R() < 0.5, longSleeve = R() < 0.35;
+    const female = i === 28 ? false : R() < 0.45, dress = female && R() < 0.5, longSleeve = R() < 0.35;
     const shoe = pk([0x1a1a1a, 0xf0f0f0, 0x5b3a1e]);
-    const school = R() < 0.1;
-    const shirt = school ? 0xf4f4f4 : cloth, bottom = school ? 0x1f2f5a : pants;
+    const kind = i === 28 ? 'monk' : i === 29 ? 'student' : i === 30 ? 'office' : null;   // 28 แบบแรกสุ่ม, 28-30 = พระ นักเรียน พนักงาน
+    const school = kind === 'student' || (!kind && R() < 0.1);
+    const shirt = kind === 'monk' ? 0xe08a1e : kind === 'office' ? pk([0xf4f4f4, 0xcfe3f5]) : school ? 0xf4f4f4 : cloth, bottom = kind === 'monk' ? 0xe08a1e : kind === 'office' ? 0x1f1f24 : school ? 0x1f2f5a : pants;
     const body = [];
     body.push(part(boxGeo, bottom, 0, 0.076, 0, 0.04, 0.016, 0.024));                    // สะโพก
     body.push(part(boxGeo, shirt, 0, 0.108, 0, 0.046, 0.052, 0.026));                    // ลำตัว
@@ -451,12 +509,14 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     body.push(part(sphGeo, skin, 0, 0.152, 0, 0.032, 0.036, 0.034));                     // หัว
     body.push(part(sphGeo, 0x222222, 0.007, 0.153, 0.016, 0.005, 0.005, 0.004), part(sphGeo, 0x222222, -0.007, 0.153, 0.016, 0.005, 0.005, 0.004));
     const hs = R();
-    if (hs < 0.4) body.push(part(sphGeo, hair, 0, 0.16, -0.003, 0.036, 0.028, 0.038));  // ผมสั้น
+    if (kind === 'monk') { /* ศีรษะโกน */ }
+    else if (hs < 0.4) body.push(part(sphGeo, hair, 0, 0.16, -0.003, 0.036, 0.028, 0.038));  // ผมสั้น
     else if (hs < 0.75) { body.push(part(sphGeo, hair, 0, 0.16, -0.003, 0.037, 0.03, 0.04)); body.push(part(boxGeo, hair, 0, 0.142, -0.016, 0.032, 0.05, 0.012)); } // ผมยาว
     else body.push(part(sphGeo, hair, 0, 0.162, -0.002, 0.036, 0.022, 0.037));
-    if (R() < 0.18) { body.push(part(coneGeo, pk([0xc0392b, 0xf1c40f, 0x2c3e50]), 0, 0.178, 0, 0.05, 0.026, 0.05)); }       // หมวก
-    if (R() < 0.3) body.push(part(boxGeo, pk([0x2f3e4e, 0xc0392b, 0x1f8a70]), 0, 0.108, -0.02, 0.034, 0.042, 0.014));       // เป้
-    else if (R() < 0.3) body.push(part(boxGeo, 0x6b4a2b, 0.034, 0.085, 0.004, 0.012, 0.022, 0.026));                     // กระเป๋าถือ
+    if (kind === 'office') body.push(part(boxGeo, 0xb71c1c, 0, 0.115, 0.014, 0.008, 0.035, 0.004));   // เนคไท
+    if (!kind && R() < 0.18) { body.push(part(coneGeo, pk([0xc0392b, 0xf1c40f, 0x2c3e50]), 0, 0.178, 0, 0.05, 0.026, 0.05)); }       // หมวก
+    if (kind === 'student' || (!kind && R() < 0.3)) body.push(part(boxGeo, pk([0x2f3e4e, 0xc0392b, 0x1f8a70]), 0, 0.108, -0.02, 0.034, 0.042, 0.014));       // เป้
+    else if (!kind && R() < 0.3) body.push(part(boxGeo, 0x6b4a2b, 0.034, 0.085, 0.004, 0.012, 0.022, 0.026));                     // กระเป๋าถือ
     const leg = merge([
       part(boxGeo, bottom, 0, -0.017, 0, 0.017, 0.036, 0.02),
       part(boxGeo, dress ? skin : bottom, 0, -0.05, 0.001, 0.014, 0.034, 0.017),
@@ -475,7 +535,8 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     return r;
   }
   function makePerson() {
-    const G = personGeos(Math.floor(Math.random() * 28));
+    const rr = Math.random();   // 2.5% พระ, 6% นักเรียน, 6% พนักงานออฟฟิศ
+    const G = personGeos(rr < 0.025 ? 28 : rr < 0.085 ? 29 : rr < 0.145 ? 30 : Math.floor(Math.random() * 28));
     const g = new THREE.Group();
     const bodyM = mesh(G.body, M.vc, false);
     g.add(bodyM);
@@ -612,6 +673,8 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   // ป้ายรถเมล์: ช่องถนนตรง (ไม่ใช่ทางแยก/ทางหลวง) ที่ข้างทางมีอาคาร กระจายห่างกันด้วยค่าแฮช แต่ละป้ายจำว่าอาคารอยู่ฝั่งไหน
   const isBld = t => t === 'res' || t === 'com' || t === 'service' || t === 'part';
   const stops = new Map();
+  const waiters = new Map();   // key ป้าย -> { list: [{ obj, st, t, from }], back }
+  const boardQ = [];           // รถที่เริ่มจอดรับที่ป้ายนั้น
   let stopMesh = null;
   const stopMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
   function curbSide(x, z) {   // คืน [sx, sz] ทิศของอาคารข้างทาง หรือ null ถ้าไม่ใช่ช่องถนนตรงที่มีอาคารข้าง
@@ -626,6 +689,8 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   function rebuildStops() {
     stops.clear();
     if (stopMesh) { root.remove(stopMesh); stopMesh.geometry.dispose(); stopMesh = null; }
+    for (const w of waiters.values()) for (const p of w.list) root.remove(p.obj);
+    waiters.clear();
     const geos = [];
     for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
       if (hashXZ(x, z) > 0.17) continue;
@@ -643,8 +708,53 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       geos.push(part(boxGeo, 0x8d6e63, wx - side[0] * 0.03, gy + 0.035, wz - side[1] * 0.03, alongX ? 0.2 : 0.03, 0.02, alongX ? 0.03 : 0.2));   // ม้านั่ง
       geos.push(part(boxGeo, 0x1565c0, wx + (alongX ? 0.19 : 0), gy + 0.115, wz + (alongX ? 0 : 0.19), 0.04, 0.05, 0.04));          // ป้ายสีน้ำเงิน
       geos.push(part(boxGeo, 0x37474f, wx + (alongX ? 0.19 : 0), gy + 0.05, wz + (alongX ? 0 : 0.19), 0.01, 0.1, 0.01));
+      // คนยืนรอในศาลา 1-3 คน (โมเดลชิ้นเดียว ไม่ขยับ จนกว่ารถจะมาจอด)
+      const wl = [], cnt = 1 + ((hashXZ(x + 5, z + 9) * 3) | 0);
+      for (let k = 0; k < cnt; k++) {
+        const pm = makePerson();
+        for (const lp of pm.lodParts) lp.visible = false;
+        pm.full.visible = true;
+        const off = (k - (cnt - 1) / 2) * 0.075;
+        pm.obj.position.set(wx + (alongX ? off : 0), gy + 0.045, wz + (alongX ? 0 : off));
+        pm.obj.rotation.y = Math.atan2(-side[0], -side[1]);
+        root.add(pm.obj);
+        wl.push({ obj: pm.obj, st: 'wait', t: 0, hx: pm.obj.position.x, hy: pm.obj.position.y, hz: pm.obj.position.z });
+      }
+      waiters.set(x * 4096 + z, { list: wl, back: 0 });
     }
     if (geos.length) { stopMesh = new THREE.Mesh(merge(geos), stopMat); stopMesh.castShadow = false; stopMesh.receiveShadow = true; root.add(stopMesh); }
+  }
+  // คนรอที่ป้าย: เมื่อรถจอดรับ คนที่รออยู่เดินเข้าหารถแล้วหายไป (ขึ้นรถ) จากนั้นรอสักครู่แล้วมีคนใหม่มายืนรอ กลางคืนไม่มีคนรอ
+  function updateWaiters(sdt, night) {
+    while (boardQ.length) {
+      const e = boardQ.pop(), W = waiters.get(e.key);
+      if (!W) continue;
+      for (const p of W.list) if (p.st === 'wait') { p.st = 'walk'; p.t = 0; p.bus = e.bus; p.fx = p.obj.position.x; p.fz = p.obj.position.z; }
+      W.back = 14 + Math.random() * 14;
+    }
+    if (!waiters.size || sdt <= 0) return;
+    const show = night < 0.75;
+    for (const W of waiters.values()) {
+      let anyGone = false;
+      for (const p of W.list) {
+        if (p.st === 'walk') {
+          p.t += sdt / 1.3;
+          const b = p.bus;
+          if (!b || b.dead) { p.st = 'gone'; p.obj.visible = false; continue; }
+          const k = Math.min(1, p.t), e = k * k * (3 - 2 * k);
+          p.obj.position.x = p.fx + (b.obj.position.x - p.fx) * e;
+          p.obj.position.z = p.fz + (b.obj.position.z - p.fz) * e;
+          p.obj.rotation.y = Math.atan2(b.obj.position.x - p.fx, b.obj.position.z - p.fz);
+          if (p.t >= 1) { p.st = 'gone'; p.obj.visible = false; boardings++; }
+        }
+        if (p.st === 'gone') anyGone = true;
+        else if (p.st === 'wait') p.obj.visible = show;
+      }
+      if (anyGone && W.back > 0) {
+        W.back -= sdt;
+        if (W.back <= 0) for (const p of W.list) if (p.st === 'gone') { p.st = 'wait'; p.obj.position.set(p.hx, p.hy, p.hz); p.obj.visible = show; }
+      }
+    }
   }
   // รถขยะจอดหน้าบ้านบางหลัง (ช่องถนนตรงที่มีอาคารข้าง และค่าแฮชตรงเงื่อนไข)
   const garbageStop = (x, z) => hashXZ(x * 3 + 1, z * 5 + 2) < 0.34 && !!curbSide(x, z);
@@ -671,11 +781,11 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
 
   // ---------- ตัวละคร ----------
   const agents = { car: [], person: [], dog: [], cat: [] };
-  let targets = { car: 0, person: 0, dog: 0, cat: 0, bus: 0, taxi: 0, grab: 0, cargo: 0, garbage: 0 };
+  let targets = { car: 0, person: 0, dog: 0, cat: 0, bus: 0, taxi: 0, grab: 0, cargo: 0, garbage: 0, tuktuk: 0, songthaew: 0 };
   let boardings = 0, pickups = 0;   // สถิติสะสม: ผู้โดยสารขึ้นรถเมล์ / จุดเก็บขยะ
   let evShare = 0;   // สัดส่วนรถยนต์ไฟฟ้าในรถทั่วไป (เมืองคำนวณจากสถานีชาร์จ/นโยบาย)
 
-  const SPECIAL = ['bus', 'taxi', 'grab', 'rbike', 'rcar', 'cargo', 'garbage'];
+  const SPECIAL = ['bus', 'taxi', 'grab', 'rbike', 'rcar', 'cargo', 'garbage', 'tuktuk', 'songthaew'];
   // ไฟเลี้ยว: ไฟส้มกะพริบ 4 ดวง (หน้า-หลัง ซ้าย-ขวา) เปิดข้างที่จะเลี้ยวตั้งแต่ก่อนเข้าแยกจนพ้นโค้ง มอเตอร์ไซค์ใช้ขนาดเล็ก
   const blinkGeo = new THREE.BoxGeometry(1, 1, 1), blinkMat = new THREE.MeshBasicMaterial({ color: 0xffa000, toneMapped: false, fog: false });
   function addBlinkers(a) {
@@ -703,7 +813,9 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     let made, kind = 'walker', speed, lat;
     if (type === 'car') {
       kind = 'car'; lat = 0.15; speed = 0.95 + Math.random() * 0.2;
-      if (role === 'bus') { made = makeBus(); speed = 0.7 + Math.random() * 0.1; }
+      if (role === 'bus') { made = Math.random() < 0.22 ? makeDoubleDecker() : makeBus(); speed = 0.7 + Math.random() * 0.1; }
+      else if (role === 'tuktuk') { made = makeTuktuk(); speed = 0.75 + Math.random() * 0.15; }
+      else if (role === 'songthaew') { made = makeSongthaew(); speed = 0.8 + Math.random() * 0.1; }
       else if (role === 'taxi') { made = makeTaxiLike(false); speed = 0.9 + Math.random() * 0.15; }
       else if (role === 'grab') { const bk = Math.random() < 0.45; made = bk ? makeBike(true) : makeTaxiLike(true); speed = 1 + Math.random() * 0.2; if (bk) lat = 0.2; }
       else if (role === 'rbike') { made = makeBike(false, true); speed = 1.9 + Math.random() * 0.6; lat = 0.2; }
@@ -737,6 +849,8 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     let comply = r < 0.1 ? 1.12 + Math.random() * 0.18 : 0.9 + Math.random() * 0.15;   // 10% ขับเร็วเกินป้าย
     let vmax = 2.6, acc = 0.45 + Math.random() * 0.15, T = 0.45 + Math.random() * 0.25, len = 0.34;
     if (a.role === 'bus') { comply = 0.85; vmax = 1.3; acc = 0.28; T = 0.7; len = 0.6; }
+    else if (a.role === 'tuktuk') { comply = 0.85; vmax = 1.1; acc = 0.3; T = 0.6; len = 0.26; }
+    else if (a.role === 'songthaew') { comply = 0.85; vmax = 1.3; acc = 0.28; T = 0.7; len = 0.46; }
     else if (a.role === 'garbage') { comply = 0.7; vmax = 1.0; acc = 0.2; T = 0.8; len = 0.54; }
     else if (a.role === 'cargo') { comply = 0.85; vmax = 1.5; acc = 0.22; T = 0.8; len = 0.54; }   // รถบรรทุกหนัก เร่งช้า เว้นระยะมาก
     else if (a.role === 'ev') acc *= 1.35;                                                           // มอเตอร์ไฟฟ้าแรงบิดทันที
@@ -863,7 +977,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       }
     }
     // รถประจำการจากอู่: รถเมล์ แท็กซี่ แกร็บ
-    for (const role of ['bus', 'taxi', 'grab', 'cargo', 'garbage']) {
+    for (const role of ['bus', 'taxi', 'grab', 'cargo', 'garbage', 'tuktuk', 'songthaew']) {
       const tg = Math.min(targets[role] || 0, Math.floor(lists.car.length * 0.12));
       const have = agents.car.filter(a => a.role === role);
       if (have.length < tg) { const a = spawn('car', role); if (a) agents.car.push(a); }
@@ -1694,12 +1808,12 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       if (gap < minGap) minGap = gap;
     };
     // รถเมล์ที่ป้าย / รถขยะที่หน้าบ้าน: เบรกให้หยุดที่กลางช่อง รอรับ-เก็บสักครู่ แล้วออกตัวต่อ (ช่องที่เพิ่งจอดไปแล้วไม่จอดซ้ำ)
-    if ((a.role === 'bus' || a.role === 'garbage') && !a.crash) {
+    if ((a.role === 'bus' || a.role === 'songthaew' || a.role === 'garbage') && !a.crash) {
       const key = a.x * 4096 + a.z;
-      const serve = a.stopKey !== key && (a.role === 'bus' ? stops.has(key) : garbageStop(a.x, a.z));
+      const serve = a.stopKey !== key && (a.role !== 'garbage' ? stops.has(key) : garbageStop(a.x, a.z));
       if (serve && a.s < 0.52 && !(a.dwell > 0)) {
         follow(Math.max(0.03, 0.5 - a.s), 0);
-        if (v < 0.07 && a.s > 0.3) { a.dwell = a.role === 'bus' ? 3.4 : 2.6; a.stopKey = key; if (a.role === 'bus') boardings += 1 + ((Math.random() * 4) | 0); else pickups++; }
+        if (v < 0.07 && a.s > 0.3) { a.dwell = a.role !== 'garbage' ? 3.4 : 2.6; a.stopKey = key; if (a.role !== 'garbage') { boardings += 1 + ((Math.random() * 4) | 0); boardQ.push({ key, bus: a }); } else pickups++; }
       }
     }
     const obs = scanAhead(a, bucket, P, _obs);
@@ -1835,6 +1949,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       if (removed) agents[type] = arr.filter(a => !a.dead);
     }
 
+    updateWaiters(sdt, env.night || 0);
     updateAccident(dt, sdt, nowT);
     updateCrews(sdt, nowT);
     if (checkpoint) { checkpoint.t += sdt; const ph = Math.sin(nowT * 11) > 0; checkpoint.lr.visible = ph; checkpoint.lb.visible = !ph; }
@@ -1846,8 +1961,8 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     // ระยะ LOD ตามระดับกราฟิก: ใกล้ = ละเอียด, ไกลกว่า hide = ซ่อน, ไกลกว่า shadow = ไม่วาดเงา
     setLod({ near = 24, hide = 62, shadow = 30 } = {}) { NEAR2 = near * near; HIDE2 = hide * hide; SHADOW2 = shadow * shadow; },
     stats: () => ({ boardings, pickups, stops: stops.size }),
-    setTargets({ car = 0, person = 0, dog = 0, cat = 0, bus = 0, taxi = 0, grab = 0, cargo = 0, garbage = 0, ev = 0 }) {
-      targets = { car, person, dog, cat, bus, taxi, grab, cargo, garbage };
+    setTargets({ car = 0, person = 0, dog = 0, cat = 0, bus = 0, taxi = 0, grab = 0, cargo = 0, garbage = 0, tuktuk = 0, songthaew = 0, ev = 0 }) {
+      targets = { car, person, dog, cat, bus, taxi, grab, cargo, garbage, tuktuk, songthaew };
       evShare = ev;
     },
     counts() {

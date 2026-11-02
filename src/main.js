@@ -753,6 +753,39 @@ function noiseTex(base, specks, size = 256, repeat = 1) {
 
 const grassTex = noiseTex('#6f9f58', ['rgba(40,90,30,.25)', 'rgba(150,190,90,.22)', 'rgba(90,130,60,.25)', 'rgba(60,100,40,.2)'], 256, N / 5);
 const asphaltTex = noiseTex('#3b3f45', ['rgba(255,255,255,.07)', 'rgba(0,0,0,.12)', 'rgba(120,120,120,.1)'], 128, 1);
+// ผิวแอสฟัลต์ที่ต่อกันได้: วาดทุกอย่างซ้ำที่ขอบ (±ขนาดภาพ) เพื่อให้ช่องข้างเคียงต่อกันเรียบ ไม่เห็นเส้นตัดที่รอยต่อช่อง
+function roadTex(variant) {
+  const rnd = mulberry32(4242 + variant * 131), S = 256;
+  const t = canvasTex(S, S, (g, w, h) => {
+    const wrap = fn => { for (const ox of [-w, 0, w]) for (const oy of [-h, 0, h]) fn(ox, oy); };
+    g.fillStyle = '#3b3f45'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < w * h * 0.07; i++) {   // เม็ดหินในแอสฟัลต์
+      g.fillStyle = ['rgba(255,255,255,.07)', 'rgba(0,0,0,.13)', 'rgba(130,130,130,.1)', 'rgba(70,74,80,.2)'][Math.floor(rnd() * 4)];
+      const s = 1 + rnd() * 2.6, x = rnd() * w, y = rnd() * h; wrap((ox, oy) => g.fillRect(x + ox, y + oy, s, s));
+    }
+    if (variant === 0) return;
+    if (variant === 1) {   // รอยปะซ่อมถนน: สี่เหลี่ยมสีเข้มกว่าเล็กน้อย ขอบจาง
+      for (let k = 0; k < 2; k++) { const x = rnd() * w, y = rnd() * h, pw = 50 + rnd() * 60, ph = 36 + rnd() * 50;
+        wrap((ox, oy) => { g.fillStyle = 'rgba(25,27,31,.32)'; g.fillRect(x + ox, y + oy, pw, ph); g.strokeStyle = 'rgba(15,16,18,.35)'; g.lineWidth = 1.5; g.strokeRect(x + ox, y + oy, pw, ph); }); }
+    } else if (variant === 2) {   // รอยร้าว
+      g.strokeStyle = 'rgba(12,13,15,.55)'; g.lineWidth = 1.3;
+      for (let k = 0; k < 3; k++) { let x = rnd() * w, y = rnd() * h; const pts = [[x, y]];
+        for (let j = 0; j < 9; j++) { x += (rnd() - 0.4) * 28; y += (rnd() - 0.5) * 22; pts.push([x, y]); }
+        wrap((ox, oy) => { g.beginPath(); pts.forEach(([px, py], j) => (j ? g.lineTo(px + ox, py + oy) : g.moveTo(px + ox, py + oy))); g.stroke(); }); }
+    } else {   // คราบน้ำมัน + รอยยางไหม้
+      for (let k = 0; k < 4; k++) { const x = rnd() * w, y = rnd() * h, r = 16 + rnd() * 26;
+        wrap((ox, oy) => { const gr = g.createRadialGradient(x + ox, y + oy, 1, x + ox, y + oy, r); gr.addColorStop(0, 'rgba(8,9,12,.5)'); gr.addColorStop(0.6, 'rgba(20,22,28,.22)'); gr.addColorStop(1, 'rgba(20,22,28,0)'); g.fillStyle = gr; g.fillRect(x + ox - r, y + oy - r, r * 2, r * 2); }); }
+    }
+  });
+  return t;
+}
+// แผนที่ความขรุขระ: ค่าต่ำ (เงา) = แอ่งน้ำขัง ใช้เฉพาะตอนฝนตก ต่อกันได้เช่นกัน
+const puddleTex = canvasTex(256, 256, (g, w, h) => {
+  const rnd = mulberry32(777);
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h);
+  for (let k = 0; k < 7; k++) { const x = rnd() * w, y = rnd() * h, r = 14 + rnd() * 30;
+    for (const ox of [-w, 0, w]) for (const oy of [-h, 0, h]) { const gr = g.createRadialGradient(x + ox, y + oy, 1, x + ox, y + oy, r); gr.addColorStop(0, '#1a1a1a'); gr.addColorStop(0.7, '#3a3a3a'); gr.addColorStop(1, '#ffffff'); g.fillStyle = gr; g.fillRect(x + ox - r, y + oy - r, r * 2, r * 2); } }
+}, false);
 const gravelTex = noiseTex('#5e6064', ['rgba(255,255,255,.08)', 'rgba(0,0,0,.14)'], 128, 1);
 
 // ---------------------------------------------------------------
@@ -763,7 +796,7 @@ const zoneMat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 1, tr
 
 const M = {
   walk: std(0xb9b6ae, { roughness: 0.95 }),
-  road: new THREE.MeshStandardMaterial({ map: asphaltTex, roughness: 0.95 }),
+  road: new THREE.MeshStandardMaterial({ map: roadTex(0), roughness: 0.95 }),
   line: std(0xeadd8c, { roughness: 0.6 }),
   laneLine: std(0xf2f2ee, { roughness: 0.6 }),   // เส้นแบ่งช่องจราจรสีขาว (ถนน 4 เลน)
   shoulder: std(0x8e8f8c, { roughness: 0.95 }),   // ไหล่ทางหลวง
@@ -1063,7 +1096,9 @@ function updateSky(dt) {
 
   // เมฆและฝนบังแสงอาทิตย์
   const dim = 1 - 0.55 * W.cloud - 0.2 * W.rain;
-  sun.intensity = 2.3 * day * dim;
+  // แสงลอดช่องเมฆ: ฟ้ามีเมฆบางส่วน แดดสลับสว่าง-หรี่ตามเมฆที่เคลื่อนผ่าน
+  const breaks = 1 - 0.3 * Math.min(1, W.cloud * 1.4) * (1 - W.rain) * (0.5 - 0.5 * Math.sin(performance.now() / 4200 + 1.3 * Math.sin(performance.now() / 9300)));
+  sun.intensity = 2.3 * day * dim * breaks;
   const warm = THREE.MathUtils.clamp(1 - Math.abs(elev) / 0.3, 0, 1) * (1 - 0.7 * W.cloud);
   hemi.color.copy(C_HEMI_NIGHT).lerp(C_HEMI_DAY, day).lerp(C_HEMI_DUSK, warm * 0.45);
   hemi.groundColor.copy(C_GR_NIGHT).lerp(C_GR_DAY, day);
@@ -1079,8 +1114,10 @@ function updateSky(dt) {
   const sk = skyBox.update(hour, elev, ang, W, controls.target, sunTint);
   scene.background.copy(sk.horizon);
   scene.fog.color.copy(sk.horizon);
-  scene.fog.near = 70 - 52 * W.rain;
-  scene.fog.far = 170 - 80 * W.rain - 25 * W.cloud;
+  // หมอกเช้า: ใกล้รุ่งสาง (5-8 น.) หมอกหนาขึ้น โดยเฉพาะอากาศแจ่มใส (ฝนตก/เมฆมากมีหมอกอยู่แล้ว)
+  const mist = Math.exp(-(((hour - 6) / 1.3) ** 2)) * (1 - W.rain) * (0.6 + 0.4 * (1 - W.cloud));
+  scene.fog.near = (70 - 52 * W.rain - 38 * mist) * MAPK;
+  scene.fog.far = (170 - 80 * W.rain - 25 * W.cloud - 85 * mist) * MAPK;
 
   const night = 1 - day;
   lampLevel = Math.min(1, night + day * (0.35 * W.cloud + 0.45 * W.rain));
@@ -1089,8 +1126,13 @@ function updateSky(dt) {
   nightLevel = night;
 
   // ถนนเปียก: เข้มขึ้นและเงาสะท้อนมากขึ้น
-  M.road.roughness = 0.95 - 0.6 * W.wet;
-  M.road.color.setRGB(1 - 0.3 * W.wet, 1 - 0.3 * W.wet, 1 - 0.26 * W.wet);
+  const puddles = W.wet > 0.35;
+  for (const rm of [...M.roadVar, M.roadArc]) {
+    rm.roughness = 0.95 - 0.6 * W.wet;
+    rm.metalness = 0.25 * W.wet;
+    rm.color.setRGB(1 - 0.3 * W.wet, 1 - 0.3 * W.wet, 1 - 0.26 * W.wet);
+    if (puddles !== !!rm.roughnessMap) { rm.roughnessMap = puddles ? puddleTex : null; rm.needsUpdate = true; }
+  }
 
   // อุณหภูมิ: ร้อนสุดบ่าย เย็นลงตอนฝน
   tempC = 26 + 9 * THREE.MathUtils.clamp(elev, 0, 1) - 4.5 * W.rain - 2 * W.cloud;
@@ -1658,7 +1700,9 @@ function buildWaterPlant(bg) {
 // ---------------------------------------------------------------
 // อาคารแบบเลือกเอง (ร้านค้า ปั๊ม โรงเรียน โรงพยาบาล โรงไฟฟ้า/ประปาหลายขนาด ฯลฯ)
 // ---------------------------------------------------------------
+M.roadVar = [M.road, ...[1, 2, 3].map(v => new THREE.MeshStandardMaterial({ map: roadTex(v), roughness: 0.95 }))];   // 0 = เรียบ (ส่วนใหญ่), 1 = รอยปะ, 2 = รอยร้าว, 3 = คราบน้ำมัน
 Object.assign(M, {
+  furMail: std(0xc62828, { roughness: 0.5 }), furBin: std(0x2e7d32, { roughness: 0.7 }), furBooth: std(0xd32f2f, { roughness: 0.5 }),
   dirtRoad: std(0x8c6d47, { roughness: 1 }),
   roadArc: Object.assign(M.road.clone(), { side: THREE.DoubleSide }),   // ผิวทางโค้ง (แถบโค้งไม่มีด้านหน้า/หลังตายตัว)
   dirtArc: std(0x8c6d47, { roughness: 1, side: THREE.DoubleSide }),
@@ -2577,7 +2621,8 @@ function buildTile(x, z) {
     }
     if (t.ow && !(arms === 2 && !t.j)) delete t.ow;   // ทางเดียวมีได้เฉพาะช่องถนนที่มี 2 แขน (ตรงหรือโค้ง) และไม่ใช่ทางแยกพิเศษ
     const OW = t.ow || null;
-    const J = t.j || null, RM = kind === 'dirt' ? M.dirtRoad : M.road, RA = kind === 'dirt' ? M.dirtArc : M.roadArc;
+    const rvh = hash(x * 5 + 2, z * 11 + 7), RV = rvh < 0.78 ? 0 : rvh < 0.88 ? 1 : rvh < 0.95 ? 2 : 3;   // ช่องส่วนใหญ่เรียบ บางช่องมีรอยปะ/ร้าว/คราบน้ำมัน
+    const J = t.j || null, RM = kind === 'dirt' ? M.dirtRoad : M.roadVar[RV], RA = kind === 'dirt' ? M.dirtArc : M.roadArc;
     const rd = (dx, dz) => isType(x + dx, z + dz, 'road');
     // ทางโค้ง: ช่องที่ถนนหักมุมฉาก (มี 2 แขน คนละแกน) ปูผิวเป็นแนวโค้งแทนมุมตัด รถจะวิ่งตามแนวโค้งนี้ด้วย (ดู agents.js)
     const corner = !J && arms === 2 && rd(1, 0) !== rd(-1, 0) && rd(0, 1) !== rd(0, -1);
@@ -2682,6 +2727,17 @@ function buildTile(x, z) {
       const sx = r2 < 0.5 ? -1 : 1, sz = r < 0.2 ? -1 : 1;
       put(g, cylGeo, M.metal, sx * 0.45, 0.17, sz * 0.45, 0.012, 0.26, 0.012);
       put(g, boxGeo, M.lampGlow, sx * 0.45, 0.31, sz * 0.45, 0.05, 0.012, 0.035);
+    }
+    // สิ่งประดับบนทางเท้าของถนนตรง: ต้นไม้ริมทาง ตู้ไปรษณีย์ ถังขยะ ตู้โทรศัพท์ ธงประดับถนน (ระดับกราฟิกกลางขึ้นไป)
+    if (details >= 1 && (strX || strZ) && !J && !OW && kind !== 'highway' && kind !== 'dirt' && kind !== 'boulevard') {
+      const fh = hash(x * 11 + 3, z * 7 + 5), pick = hash(x * 3 + 7, z * 13 + 1), sd = fh < 0.5 ? -1 : 1;
+      const lat = 0.5 - 0.034, along = (((fh * 977) % 1) - 0.5) * 0.46, ry = strX ? 0 : Math.PI / 2;
+      const px = strX ? along : sd * lat, pz = strX ? sd * lat : along, rot = ry + (strX ? (sd > 0 ? 0 : Math.PI) : (sd > 0 ? Math.PI : 0));
+      if (pick < 0.2 && kind !== 'soi') addTree(g, px, pz, 0.5 + fh * 0.3, fh);
+      else if (pick < 0.27) { put(g, boxGeo, M.furMail, px, 0.1, pz, 0.04, 0.06, 0.03, rot); put(g, cylGeo, M.metal, px, 0.045, pz, 0.01, 0.05, 0.01); }
+      else if (pick < 0.37) { put(g, cylGeo, M.furBin, px, 0.07, pz, 0.036, 0.065, 0.036); put(g, cylGeo, M.metal, px, 0.108, pz, 0.04, 0.008, 0.04); }
+      else if (pick < 0.42) { put(g, boxGeo, M.furBooth, px, 0.1, pz, 0.045, 0.14, 0.045, rot); put(g, boxGeo, M.glassShop, px, 0.1, pz, 0.047, 0.09, 0.03, rot); }
+      else if (pick < 0.5) { put(g, cylGeo, M.metal, px, 0.13, pz, 0.008, 0.2, 0.008); put(g, boxGeo, band([0xc62828, 0x1565c0, 0xf9a825, 0x2e7d32][(fh * 9 | 0) % 4]), px + (strX ? 0 : -sd * 0.02), 0.19, pz + (strX ? -sd * 0.02 : 0), strX ? 0.012 : 0.03, 0.09, strX ? 0.03 : 0.012); }
     }
     // ไฟจราจร + ทางม้าลายที่ทางแยก, เส้นหยุดและป้ายบนถนนที่ติดทางแยก
     if (junc) {
@@ -5407,6 +5463,8 @@ function updateAgentTargets() {
   carDemand = cars * transitCut;
   agents.setTargets({
     bus: Math.min(ccache.bus * 3, 9), taxi: Math.min(ccache.taxi * 4, 12), grab: Math.min(ccache.grab * 5, 12),
+    tuktuk: s.pop >= 150 ? Math.min(6, Math.round(ccache.taxi * 1.5 + (ccache.doisuthep + ccache.nightbazaar + ccache.tapae) * 2 + (MAP_ID === 'chiangmai' ? 2 : 0))) : 0,
+    songthaew: MAP_ID === 'chiangmai' && s.pop >= 300 ? Math.min(5, 2 + Math.floor(s.pop / 3000)) : 0,
     garbage: s.pop >= 250 && h >= 6 && h < 11 ? Math.min(3, 1 + Math.floor(s.pop / 2500)) : 0,   // รถขยะออกเก็บช่วงเช้า
     cargo: ccache.freight && !law().noTruck ? Math.min(8, 2 + Math.round(s.trade.units * s.trade.cov / 150)) : 0, ev: s.evShare,
     car: Math.round(Math.min(cars, q.cars * 1.25) * transitCut),
@@ -5597,10 +5655,16 @@ function boatClick(e) {
 const _pv = new THREE.Matrix4(), _fr = new THREE.Frustum(), _sp = new THREE.Sphere(), _pvLast = new THREE.Matrix4();
 // ช่องที่อยู่นอกกล้องซ่อนทั้งช่อง (เผื่อขอบ ~2 ช่อง ให้เงาของตึกที่อยู่ริมจอยังทอดเข้ามาในจอได้)
 function cullTiles() {
+  const cp = camera.position, fogFar = scene.fog.far + 4;
   for (const g of meshes) {
     if (!g) continue;
     _sp.center.set(g.position.x, g.position.y + 0.6, g.position.z); _sp.radius = g.userData.cullR + 2;
-    g.visible = _fr.intersectsSphere(_sp);
+    g.visible = _fr.intersectsSphere(_sp) && cp.distanceTo(_sp.center) - _sp.radius < fogFar;
+  }
+  for (const m of bakeGroup.children) {   // ก้อนที่รวมไว้ (เมืองไกลๆ) ก็ตัดตามระยะหมอกเช่นกัน
+    if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
+    const bs = m.geometry.boundingSphere;
+    m.visible = cp.distanceTo(bs.center) - bs.radius < fogFar;
   }
 }
 let swayFrame = 0, levelT = 0.5;

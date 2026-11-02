@@ -58,6 +58,13 @@ const FRAG = /* glsl */`
   varying vec3 vDir;
   uniform vec3 uZen; uniform vec3 uHor; uniform vec3 uSunDir; uniform vec3 uSunCol; uniform float uSunAmt;
   uniform vec3 uGround;
+  uniform float uNight;
+  float hs(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+  float vn(vec3 p) {
+    vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(hs(i), hs(i + vec3(1,0,0)), f.x), mix(hs(i + vec3(0,1,0)), hs(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(hs(i + vec3(0,0,1)), hs(i + vec3(1,0,1)), f.x), mix(hs(i + vec3(0,1,1)), hs(i + vec3(1,1,1)), f.x), f.y), f.z);
+  }
   void main() {
     vec3 d = normalize(vDir);
     float h = clamp(d.y, -1.0, 1.0);
@@ -66,6 +73,15 @@ const FRAG = /* glsl */`
     float c = max(dot(d, normalize(uSunDir)), 0.0);
     col += uSunCol * (pow(c, 6.0) * 0.18 + pow(c, 48.0) * 0.35) * uSunAmt;
     col += uSunCol * smoothstep(0.9985, 0.9997, c) * 4.0 * uSunAmt;
+    // พระอาทิตย์ขึ้น/ตก: แสงส้มแผ่กว้างตามแนวขอบฟ้าด้านที่ดวงอาทิตย์อยู่
+    float low = 1.0 - smoothstep(0.0, 0.4, abs(uSunDir.y));
+    col += uSunCol * pow(c, 2.4) * 0.5 * low * uSunAmt;
+    col = mix(col, uSunCol * vec3(1.0, 0.6, 0.38), exp(-abs(h) * 6.0) * pow(c, 1.4) * 0.55 * low * uSunAmt);
+    // ทางช้างเผือก: แถบเอียงข้ามท้องฟ้า มีฝุ่นดาวและกลุ่มก๊าซ จางหายตามแสงจันทร์/เมฆ (uNight)
+    float band = exp(-pow(dot(d, normalize(vec3(0.35, 0.78, 0.52))) * 4.2, 2.0));
+    float dust = vn(d * 16.0) * 0.55 + vn(d * 42.0) * 0.45;
+    float neb = vn(d * 5.0 + 3.0);
+    col += (vec3(0.42, 0.5, 0.78) * band * dust * 0.5 + vec3(0.55, 0.3, 0.5) * band * neb * 0.14) * uNight * smoothstep(0.04, 0.3, h);
     gl_FragColor = vec4(col, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -79,7 +95,7 @@ export function createSky(scene) {
       uniforms: {
         uZen: { value: new THREE.Color(0x3f86e8) }, uHor: { value: new THREE.Color(0xa8d0f5) },
         uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Color(1, 0.9, 0.7) }, uSunAmt: { value: 1 },
-        uGround: { value: new THREE.Color(0x8fa890) },
+        uGround: { value: new THREE.Color(0x8fa890) }, uNight: { value: 0 },
       },
     })
   );
@@ -142,6 +158,7 @@ export function createSky(scene) {
     halo.material.opacity = 0.12 * (1 - W.cloud);
 
     const night = 1 - dayK;
+    u.uNight.value = Math.pow(night, 1.6) * (1 - W.cloud) * (1 - W.rain);
     starMat.opacity = Math.pow(night, 1.6) * (1 - W.cloud) * (1 - W.rain);
     stars.visible = starMat.opacity > 0.01;
     stars.position.copy(focus);
