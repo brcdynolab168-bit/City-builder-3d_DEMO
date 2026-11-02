@@ -119,6 +119,7 @@ const VARIANTS = {
     { k: 'basket', label: 'สนามบาสเก็ตบอล',   cost: 200,  upkeep: 3 },
     { k: 'fitness', label: 'ลานออกกำลังกาย',   cost: 190,  upkeep: 3 },
     { k: 'dog',    label: 'สวนสุนัข',           cost: 130,  upkeep: 2 },
+    { k: 'fishspot', label: 'ลานตกปลาริมน้ำ',  cost: 160, upkeep: 2, note: '3×2 ช่อง ต้องติดน้ำและติดถนน คนมาตกปลาฟรีช่วงเช้า-เย็น' },
     { k: 'plaza',  label: 'ลานน้ำพุ',          cost: 420,  upkeep: 6 },
     { k: 'sports', label: 'สนามกีฬา',          cost: 650,  upkeep: 9, jobs: 4 },
     { k: 'garden', label: 'สวนพฤกษศาสตร์',     cost: 1300, upkeep: 16, jobs: 8 },
@@ -204,7 +205,7 @@ const UNLOCK_LV = {
   'com:game': 2, 'com:pet': 2, 'com:lotus': 2, 'com:market': 2, 'com:dealer': 2, 'com:gold': 2, 'com:parking': 2, 'com:ev': 2,
   'com:bank': 3, 'com:mall': 3, 'com:pub': 3, 'com:tuner': 3,
   'ind:shindengen': 3, 'ind:keihin': 3, 'ind:honda': 3, 'ind:denso': 4, 'ind:toyota': 4, 'ind:bmw': 5,
-  'farm:barn': 2, 'farm:fish': 2, 'park:plaza': 2, 'park:sports': 2, 'park:garden': 3,
+  'farm:barn': 2, 'farm:fish': 2, 'park:fishspot': 1, 'park:plaza': 2, 'park:sports': 2, 'park:garden': 3,
   'power:wind': 2, 'power:bio': 2, 'power:thermal': 3, 'power:hydro': 3, 'water:big': 3,
   'service:hospital': 2, 'service:police': 2, 'service:fire': 2, 'service:taxi': 2, 'service:grab': 2, 'service:pea': 2, 'service:pwa': 2,
   'service:temple': 2, 'service:mosque': 2, 'service:church': 2, 'service:cemetery': 2,
@@ -2829,6 +2830,19 @@ function edgeRoads(R, side) { // side 0:+z 1:+x 2:-z 3:-x (ด้านหน้
   return n;
 }
 const perimRoads = R => edgeRoads(R, 0) + edgeRoads(R, 1) + edgeRoads(R, 2) + edgeRoads(R, 3);
+function edgeWater(R, side) {   // จำนวนช่องน้ำที่ติดด้านนั้นของพื้นที่ (side 0:+z 1:+x 2:-z 3:-x)
+  let n = 0;
+  const { x0, z0, fw, fd } = R;
+  if (side === 0 || side === 2) for (let i = 0; i < fw; i++) { if (isWaterTile(x0 + i, side === 0 ? z0 + fd : z0 - 1)) n++; }
+  else for (let j = 0; j < fd; j++) { if (isWaterTile(side === 1 ? x0 + fw : x0 - 1, z0 + j)) n++; }
+  return n;
+}
+function chooseWaterRot(x, z, W, D) {   // ลานตกปลา: หันด้านหน้า (สะพานไม้) ไปทางน้ำ
+  if (placeRot !== null) return placeRot;
+  let best = 0, bs = -1;
+  for (let r = 0; r < 4; r++) { const s = edgeWater(rectFor(x, z, W, D, r), r); if (s > bs) { bs = s; best = r; } }
+  return best;
+}
 function chooseRot(x, z, W, D) {
   if (placeRot !== null) return placeRot;
   let best = 0, bs = -1;
@@ -2842,7 +2856,8 @@ function chooseRot(x, z, W, D) {
 // ตรวจว่าวางอาคารใหญ่ที่ตำแหน่งนี้ได้ไหม คืน {R, ok, reason}
 function evalBig(tool, x, z) {
   const [W, D] = footFor(tool);
-  const R = rectFor(x, z, W, D, chooseRot(x, z, W, D));
+  const isFish = tool === 'park' && currentVar.park === 'fishspot';
+  const R = rectFor(x, z, W, D, isFish ? chooseWaterRot(x, z, W, D) : chooseRot(x, z, W, D));
   let reason = null, lo = 1e9, hi = -1e9;
   for (let dz = 0; dz < R.fd && !reason; dz++) for (let dx = 0; dx < R.fw; dx++) {
     const px = R.x0 + dx, pz = R.z0 + dz;
@@ -2863,6 +2878,7 @@ function evalBig(tool, x, z) {
     for (let dz = 0; dz < R.fd; dz++) for (let dx = 0; dx < R.fw; dx++) if (nearWater(R.x0 + dx, R.z0 + dz, 1)) wet = true;
     if (!wet) reason = 'toast.hydro';
   }
+  if (!reason && isFish) { if (edgeWater(R, R.rot) < 1) reason = 'toast.fish'; else if (!perimRoads(R)) reason = 'toast.fishroad'; }   // ต้องติดน้ำ และมีถนนให้คนเดินมา
   if (!reason && tool === 'service' && VARIANTS.service.find(v => v.k === currentVar.service)?.cmOnly && MAP_ID !== 'chiangmai') reason = 'toast.cmonly';
   if (!reason && tool === 'service' && currentVar.service === 'port') {   // ท่าเรือต้องติดแม่น้ำ/ทะเล
     let wet = false;
@@ -3299,7 +3315,7 @@ const later = (sec, fn) => { const at = curAt; sched.push({ t: sec, fn: at ? () 
 const roadAt = (x, z) => (Math.random() < 0.5 ? rowName(z) : colName(x));
 
 function civicCounts() {
-  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, pea: 0, pwa: 0, dohw: 0, gold: [], flammable: [], parking: 0, metro: 0, honda: 0, toyota: 0, bmw: 0, shindengen: 0, keihin: 0, denso: 0, temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0, ev: 0, freight: 0, doisuthep: 0, nightbazaar: 0, tapae: 0, concert: 0, stadium: 0, airport: 0, port: 0, cafe: 0, pharmacy: 0, game: 0, pet: 0 };
+  const c = { hospital: 0, hospital_p: 0, school: 0, school_p: 0, bus: 0, taxi: 0, grab: 0, bank: 0, pub: 0, tuner: 0, drag: 0, bu: 0, police: 0, fire: 0, pea: 0, pwa: 0, dohw: 0, gold: [], flammable: [], parking: 0, metro: 0, honda: 0, toyota: 0, bmw: 0, shindengen: 0, keihin: 0, denso: 0, temple: 0, mosque: 0, church: 0, market: 0, mall: 0, dealer: 0, fishing: 0, farm: 0, parks: 0, ev: 0, freight: 0, fishspot: 0, doisuthep: 0, nightbazaar: 0, tapae: 0, concert: 0, stadium: 0, airport: 0, port: 0, cafe: 0, pharmacy: 0, game: 0, pet: 0 };
   state.tiles.forEach((tl, i) => {
     if (!tl || tl.t === 'part' || (tl.cs && !tl.cs.to)) return;
     if (tl.t === 'service') c[tl.v] = (c[tl.v] || 0) + 1;
@@ -3307,7 +3323,7 @@ function civicCounts() {
     else if (tl.t === 'com' && c[tl.v] !== undefined) c[tl.v]++;
     else if (tl.t === 'farm') c.farm++;
     else if (tl.t === 'ind') { if (fixedVariant(tl)) c[tl.v] = (c[tl.v] || 0) + 1; }
-    else if (tl.t === 'park') c.parks += (tl.fw || 1) * (tl.fd || 1);
+    else if (tl.t === 'park') { c.parks += (tl.fw || 1) * (tl.fd || 1); if (tl.v === 'fishspot') c.fishspot++; }
     if (['res', 'com', 'ind', 'farm'].includes(tl.t) && (fixedVariant(tl) || tl.lv > 0)) c.flammable.push(i);
   });
   c.freight = (c.freight || 0) + 2 * (c.airport || 0) + 1.5 * (c.port || 0);   // สนามบิน/ท่าเรือช่วยขนส่งสินค้าเหมือนสถานีขนส่ง
@@ -3332,7 +3348,7 @@ function civicSnapshot() {
   const nd = calcNeeds({
     pop: s.pop, powerUse: s.powerUse, powerCap: s.powerCap, waterUse: s.waterUse, waterCap: s.waterCap,
     jobs: s.jobs, workers: demo.workers, hospitals: cc.hospital * bud().health + 0.6 * cc.hospital_p + 0.08 * cc.pharmacy, schools: cc.school * bud().edu + 0.7 * cc.school_p, universities: cc.bu, transit: cc.bus * 2 * bud().transit + cc.taxi + cc.grab,
-    police: cc.police * bud().police, fire: cc.fire * bud().fire, parks: cc.parks + 3 * cc.game, roads: s.roadCap * 7.8, liveCars: Math.round(carDemand), kids: demo.child + demo.youth,   // ใช้ความต้องการรถจริง ไม่ใช่รถที่วาดบนจอ (ไม่งั้นกราฟิกต่ำ = รถติดน้อยลงเอง)
+    police: cc.police * bud().police, fire: cc.fire * bud().fire, parks: cc.parks + 3 * cc.game + 2 * cc.fishspot, roads: s.roadCap * 7.8, liveCars: Math.round(carDemand), kids: demo.child + demo.youth,   // ใช้ความต้องการรถจริง ไม่ใช่รถที่วาดบนจอ (ไม่งั้นกราฟิกต่ำ = รถติดน้อยลงเอง)
     green: s.green, chargers: cc.ev, evCars: Math.round(carDemand * s.evShare), shops: s.jobsCom,
     cemeteries: cc.cemetery || 0, temples: cc.temple + cc.mosque + cc.church,
   });
@@ -3571,6 +3587,7 @@ const VENUE = {   // base = น้ำหนักพื้นฐาน, cat = �
   'com:parking': { base: 0.5, cat: 'other', time: 'day' }, 'service:metro': { base: 1.6, cat: 'transit', time: 'rush' }, 'service:bus': { base: 0.7, cat: 'transit', time: 'rush' },
   'service:cemetery': { base: 0.4, cat: 'worship', time: 'morning' },
   'service:doisuthep': { base: 1.3, cat: 'worship', time: 'day' }, 'service:nightbazaar': { base: 1.4, cat: 'shop', time: 'night' }, 'service:tapae': { base: 1.0, cat: 'fun', time: 'day' },
+  'park:fishspot': { base: 1.1, cat: 'fun', time: 'fish' },
   'service:concert': { base: 1.0, cat: 'fun', time: 'concert' }, 'service:stadium': { base: 0.8, cat: 'fun', time: 'concert' },
   'com:cafe': { base: 1.1, cat: 'food', time: 'morning' }, 'com:pharmacy': { base: 0.8, cat: 'health', time: 'day' },
   'com:game': { base: 0.9, cat: 'fun', time: 'eve' }, 'com:pet': { base: 0.7, cat: 'shop', time: 'day' },   // ญาติไปเยี่ยมหลุมช่วงเช้า
@@ -3594,6 +3611,7 @@ function venueW(key, hr, rel, v) {
     case 'temple': m = (0.08 + 0.92 * Math.max(bump(hr, 7, 1.4), bump(hr, 17, 1.2))) * (rel.bud / 0.9); break;
     case 'mosque': m = (0.08 + 0.92 * Math.max(bump(hr, 5.3, 0.7), bump(hr, 12.6, 0.9), bump(hr, 18.8, 0.8))) * (rel.mus / 0.05); break;
     case 'church': m = (state.day % 7 === 6 ? 0.15 + 0.85 * bump(hr, 9.5, 1.5) : 0.1 * bump(hr, 17, 2)) * (rel.chr / 0.02); break;
+    case 'fish': m = (0.08 + 0.92 * Math.max(bump(hr, 6.3, 1.6), bump(hr, 17.2, 1.8))) * (state.day % 7 >= 5 ? 1.4 : 1); break;   // ตกปลาเช้าตรู่และเย็น วันหยุดคนมากกว่า
     case 'concert': m = state.concert?.live && state.concert.live.at === v?.z * N + v?.x ? 22 : 0.03; break;   // คอนเสิร์ตกำลังแสดง: คนแห่มาที่นี่
     default: m = 1;
   }
@@ -3607,6 +3625,7 @@ function venueKeyOf(tl) {
   if (!tl || tl.t === 'part' || (tl.cs && !tl.cs.to)) return null;
   if (tl.t === 'com') { const k = 'com:' + (fixedVariant(tl) ? tl.v : 'zone'); return VENUE[k] && (fixedVariant(tl) || tl.lv > 0) ? k : null; }
   if (tl.t === 'service') { const k = 'service:' + tl.v; return VENUE[k] ? k : null; }
+  if (tl.t === 'park') { const k = 'park:' + (tl.v || 'park'); return VENUE[k] ? k : null; }
   return null;
 }
 function buildVenueList() {

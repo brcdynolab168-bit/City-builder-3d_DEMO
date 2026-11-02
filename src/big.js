@@ -17,7 +17,7 @@ export const FOOT = {
   'service:doisuthep': [3, 3], 'service:nightbazaar': [3, 2], 'service:tapae': [3, 2],
   'service:concert': [3, 3], 'service:stadium': [4, 3], 'service:airport': [5, 3], 'service:port': [4, 2],
   'farm:fish': [3, 2], 'farm:cricket': [2, 2], 'farm:rice': [3, 2], 'farm:crop': [2, 2], 'farm:barn': [3, 2], 'farm:orchard': [2, 2],
-  'park:plaza': [2, 2], 'park:play': [1, 1], 'park:sports': [2, 2], 'park:garden': [3, 3],
+  'park:fishspot': [3, 2], 'park:plaza': [2, 2], 'park:play': [1, 1], 'park:sports': [2, 2], 'park:garden': [3, 3],
   'park:fountain': [1, 1], 'park:flowers': [1, 1], 'park:pond': [1, 1], 'park:pavilion': [1, 1], 'park:picnic': [1, 1],
   'park:zen': [1, 1], 'park:basket': [1, 1], 'park:dog': [1, 1], 'park:forest': [1, 1], 'park:fitness': [1, 1],
 };
@@ -1491,6 +1491,43 @@ export function createBig(c) {
     miniCar(bg, 0.9, 0.55, Math.PI / 2, band(0xd32f2f), 1);   // รถตุ๊กตุ๊กจอดหน้าประตู
   }
 
+  // =============================================================
+  // ลานตกปลาริมน้ำ (3×2): สะพานไม้ยื่นลงน้ำ (ด้านหน้า +Z ต้องหันไปทางน้ำ) คนนั่งตกปลาพร้อมคันเบ็ด ร้านขายเหยื่อ ม้านั่ง ร่ม
+  // ตกปลาฟรี ไม่มีค่าเข้า
+  // =============================================================
+  function fishspot(bg) {
+    ground(bg, 3, 2, M.park);
+    put(bg, boxGeo, M.path, 0, y0 + 0.008, -0.2, 0.42, 0.01, 1.2);                                         // ทางเดินไปสะพานไม้
+    for (let k = 0; k < 6; k++) put(bg, boxGeo, k % 2 ? MT.wood : MT.woodDark, 0, y0 + 0.05, 0.5 + k * 0.2, 0.56, 0.025, 0.17);   // แผ่นพื้นสะพานไม้ (ยื่นพ้นขอบน้ำ)
+    for (const z of [0.55, 0.95, 1.35, 1.65]) for (const sx of [-1, 1]) put(bg, cylGeo, MT.woodDark, sx * 0.26, y0 - 0.1, z, 0.03, 0.34, 0.03);   // เสาตอม่อลงน้ำ
+    for (const sx of [-1, 1]) {                                                                              // ราวสะพาน
+      put(bg, boxGeo, MT.wood, sx * 0.28, y0 + 0.12, 1.08, 0.016, 0.016, 1.22);
+      for (const z of [0.55, 1.0, 1.45, 1.7]) put(bg, cylGeo, MT.woodDark, sx * 0.28, y0 + 0.085, z, 0.016, 0.09, 0.016);
+    }
+    // คนตกปลา 3 คน นั่งริมสะพาน เบ็ดยื่นออกไปเหนือน้ำ มีทุ่นสีแดง
+    const skin = [0xe0ac84, 0xc68642, 0xf1c9a0], shirt = [0x1e88e5, 0xe53935, 0x43a047];
+    [[-0.2, 1.1, 0], [0.2, 1.45, 1], [-0.2, 1.6, 2]].forEach(([x, z, c]) => {
+      put(bg, boxGeo, band(shirt[c]), x, y0 + 0.11, z, 0.075, 0.085, 0.06);                                // ตัว
+      put(bg, icoGeo, band(skin[c]), x, y0 + 0.17, z, 0.045, 0.045, 0.045);                                 // หัว
+      put(bg, coneGeo, band(0xf2d472), x, y0 + 0.2, z, 0.085, 0.035, 0.085);                                // หมวกฟาง
+      put(bg, boxGeo, MT.woodDark, x, y0 + 0.2, z + 0.2, 0.008, 0.008, 0.46).rotation.x = -0.35;            // คันเบ็ด
+      put(bg, boxGeo, M.white, x, y0 + 0.05, z + 0.43, 0.003, 0.3, 0.003);                                  // สายเบ็ด
+      put(bg, icoGeo, band(0xe53935), x, y0 - 0.1, z + 0.43, 0.03, 0.03, 0.03);                              // ทุ่น
+    });
+    // ร้านขายเหยื่อ ป้าย ถังปลา
+    put(bg, boxGeo, MT.wood, -1.0, y0 + 0.12, -0.5, 0.5, 0.24, 0.4);
+    put(bg, gableGeo(0.58, 0.46, 0.12), band(0x00796b), -1.0, y0 + 0.24, -0.5, 1, 1, 1, Math.PI / 2);
+    put(bg, boxGeo, M.door, -1.0, y0 + 0.08, -0.3, 0.12, 0.16, 0.01);
+    signAt(bg, t('sign.fishspot'), '#00695c', '#ffffff', -1.0, y0 + 0.21, -0.295, 0.44, 0.07, 26);
+    put(bg, cylGeo, MT.tire, -0.62, y0 + 0.05, -0.2, 0.1, 0.1, 0.1); put(bg, cylGeo, band(0x1565c0), -0.5, y0 + 0.05, -0.12, 0.1, 0.1, 0.1);   // ถังปลา
+    // ม้านั่ง ร่มกันแดด
+    bench(bg, 0.85, 0.2, -Math.PI / 2);
+    put(bg, cylGeo, M.pole, 1.05, y0 + 0.12, 0.45, 0.012, 0.24, 0.012);
+    put(bg, coneGeo, band(0xff7043), 1.05, y0 + 0.26, 0.45, 0.28, 0.07, 0.28);
+    tree(bg, 1.25, -0.6, 1.3, 0.4); tree(bg, -1.3, 0.6, 1.2, 0.7);
+    lamp(bg, 0.5, -0.15, 0.24);
+  }
+
   function freight(bg) {
     ground(bg, 3, 2, M.asphalt);
     put(bg, boxGeo, MT.wall, -0.9, y0 + 0.22, -0.4, 1.1, 0.44, 1.0);                     // โกดังสินค้า
@@ -1567,7 +1604,7 @@ export function createBig(c) {
     'service:temple': temple, 'service:church': church, 'service:mosque': mosque,
     'com:mall': mall, 'com:market': market, 'com:dealer': dealer, 'com:fishing': fishing,
     'farm:rice': rice, 'farm:crop': crop, 'farm:barn': barn, 'farm:orchard': orchard, 'farm:fish': fishFarm, 'farm:cricket': cricketFarm,
-    'park:plaza': plaza, 'park:play': playground, 'park:sports': sports, 'park:garden': garden,
+    'park:fishspot': fishspot, 'park:plaza': plaza, 'park:play': playground, 'park:sports': sports, 'park:garden': garden,
     'park:fountain': pFountain, 'park:flowers': pFlowers, 'park:pond': pPond, 'park:pavilion': pPavilion, 'park:picnic': pPicnic,
     'park:zen': pZen, 'park:basket': pBasket, 'park:dog': pDog, 'park:forest': pForest, 'park:fitness': pFitness,
   };

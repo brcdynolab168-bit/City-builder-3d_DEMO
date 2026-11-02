@@ -11,6 +11,11 @@ export const LANGS = [
 
 const D = {
   th: {
+    "v.park.fishspot": "ลานตกปลาริมน้ำ",
+    "v.park.fishspot.note": "3×2 ช่อง ต้องติดน้ำและติดถนน คนมาตกปลาฟรีช่วงเช้า-เย็น วันหยุดคนมากกว่า ช่วยให้ประชาชนพอใจ",
+    "sign.fishspot": "ลานตกปลา ฟรี",
+    "toast.fish": "ลานตกปลาต้องวางติดแม่น้ำ/ทะเล (ด้านหน้าหันไปทางน้ำ)",
+    "toast.fishroad": "ลานตกปลาต้องติดถนนอย่างน้อยหนึ่งด้านเพื่อให้คนเดินมาได้",
     "toast.over2": "ทางแยกต่างระดับต้องมีถนนตรงยาวอย่างน้อย 2 ช่องทั้งสองฝั่งตามแนวสะพาน (ไม่มีทางแยกหรือสะพานน้ำคั่น พื้นระดับใกล้กัน) รวม 5 ช่อง",
     "v.road.overpass.note": "วางทับสี่แยก: ถนนสายหลักข้ามสะพานยาว 5 ช่อง มีทางลาดสองฝั่ง (ต้องมีถนนตรงอีกฝั่งละ 2 ช่อง) ไม่ต้องรอไฟ จุรถได้มากสุด",
     "tab.budget": "งบประมาณ",
@@ -758,6 +763,11 @@ const D = {
     'daylen': '1 วันในเกม = 5 นาที',
   },
   en: {
+    "v.park.fishspot": "Waterside fishing spot",
+    "v.park.fishspot.note": "3×2 tiles, must touch water and a road. Free fishing for citizens at dawn and dusk, busier at weekends, and it keeps people happy",
+    "sign.fishspot": "FREE FISHING",
+    "toast.fish": "A fishing spot must touch a river or the sea (its front faces the water)",
+    "toast.fishroad": "A fishing spot needs a road on at least one side so people can walk there",
     "toast.over2": "A flyover needs 2 straight road tiles on each side along its axis (no junctions or water bridges, similar ground level), 5 tiles in total",
     "v.road.overpass.note": "Place on a 4-way crossing: the main road climbs a 5-tile bridge with ramps (needs 2 straight tiles each side), no signals, highest capacity",
     "tab.budget": "Budget",
@@ -1498,6 +1508,11 @@ const D = {
     'daylen': '1 in-game day = 5 minutes',
   },
   zh: {
+    "v.park.fishspot": "水边钓鱼场",
+    "v.park.fishspot.note": "3×2 格，必须临水且临路。市民在清晨和傍晚免费钓鱼，周末更热闹，能提升满意度",
+    "sign.fishspot": "免费钓鱼",
+    "toast.fish": "钓鱼场必须紧邻河流或海（正面朝向水面）",
+    "toast.fishroad": "钓鱼场至少一侧要临路，市民才能走过来",
     "toast.over2": "立交桥需要沿桥轴方向两侧各有至少 2 格笔直道路（无路口或跨水桥，地势相近），共 5 格",
     "v.road.overpass.note": "建在十字路口：主路爬上 5 格长的桥并有引桥（两侧各需 2 格直路），无需信号灯，通行量最大",
     "tab.budget": "预算",
