@@ -695,18 +695,18 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
       if (hashXZ(x, z) > 0.17) continue;
       const side = curbSide(x, z);
-      if (!side) continue;
+      if (!side || (roadKind(x, z) !== 'street' && roadKind(x, z) !== 'soi')) continue;   // ถนนใหญ่ทางเท้าแคบเกินศาลา
       let near = false;
       for (let dz = -2; dz <= 2 && !near; dz++) for (let dx = -2; dx <= 2; dx++) if ((dx || dz) && stops.has((x + dx) * 4096 + z + dz)) { near = true; break; }
       if (near) continue;   // ป้ายห่างกันอย่างน้อย 3 ช่อง
       stops.set(x * 4096 + z, side);
-      const wx = x - N / 2 + 0.5 + side[0] * 0.43, wz = z - N / 2 + 0.5 + side[1] * 0.43, gy = groundY(x, z) + 0.03;
+      const wx = x - N / 2 + 0.5 + side[0] * 0.44, wz = z - N / 2 + 0.5 + side[1] * 0.44, gy = groundY(x, z) + 0.03;
       const alongX = side[0] === 0;   // ป้ายอยู่ข้างถนนที่วิ่งตามแกน x
-      const L = 0.4, Wd = 0.16, H = 0.27;   // ศาลาต้องสูงกว่าคน (คนสูง ~0.17) และกว้างพอให้ยืนรอได้ 3 คน
+      const L = 0.4, Wd = 0.1, H = 0.27;   // ลึก 0.1 อยู่ในทางเท้า (0.385-0.495 จากกลางช่อง) ไม่ล้ำเลนถนนหรือที่ดินข้างทาง   // ศาลาต้องสูงกว่าคน (คนสูง ~0.17) และกว้างพอให้ยืนรอได้ 3 คน
       geos.push(part(boxGeo, 0x546e7a, wx, gy + H, wz, alongX ? L : Wd, 0.018, alongX ? Wd : L));                                      // หลังคา
       for (const k of [-1, 1]) for (const m of [-1, 1]) geos.push(part(boxGeo, 0x37474f, wx + (alongX ? k * (L / 2 - 0.012) : m * (Wd / 2 - 0.01)), gy + H / 2, wz + (alongX ? m * (Wd / 2 - 0.01) : k * (L / 2 - 0.012)), 0.014, H, 0.014));   // เสา 4 ต้น
-      geos.push(part(boxGeo, 0x78909c, wx - side[0] * (Wd / 2 - 0.006), gy + H * 0.62, wz - side[1] * (Wd / 2 - 0.006), alongX ? L - 0.03 : 0.008, H * 0.5, alongX ? 0.008 : L - 0.03));   // ผนังหลัง
-      geos.push(part(boxGeo, 0x8d6e63, wx - side[0] * 0.04, gy + 0.055, wz - side[1] * 0.04, alongX ? L * 0.7 : 0.04, 0.016, alongX ? 0.04 : L * 0.7));   // ม้านั่ง
+      geos.push(part(boxGeo, 0x78909c, wx + side[0] * (Wd / 2 - 0.006), gy + H * 0.62, wz + side[1] * (Wd / 2 - 0.006), alongX ? L - 0.03 : 0.008, H * 0.5, alongX ? 0.008 : L - 0.03));   // ผนังหลัง (ฝั่งอาคาร ด้านเปิดหันเข้าถนน)
+      geos.push(part(boxGeo, 0x8d6e63, wx + side[0] * 0.04, gy + 0.055, wz + side[1] * 0.04, alongX ? L * 0.7 : 0.04, 0.016, alongX ? 0.04 : L * 0.7));   // ม้านั่ง
       geos.push(part(boxGeo, 0x37474f, wx + (alongX ? L / 2 + 0.07 : 0), gy + 0.17, wz + (alongX ? 0 : L / 2 + 0.07), 0.012, 0.34, 0.012));                          // เสาป้าย
       geos.push(part(boxGeo, 0x1565c0, wx + (alongX ? L / 2 + 0.07 : 0), gy + 0.32, wz + (alongX ? 0 : L / 2 + 0.07), alongX ? 0.012 : 0.09, 0.09, alongX ? 0.09 : 0.012)); // ป้ายสีน้ำเงิน
       // คนยืนรอในศาลา 1-3 คน (โมเดลชิ้นเดียว ไม่ขยับ จนกว่ารถจะมาจอด)
