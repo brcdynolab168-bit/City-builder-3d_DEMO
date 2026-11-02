@@ -630,6 +630,29 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   let evShare = 0;   // สัดส่วนรถยนต์ไฟฟ้าในรถทั่วไป (เมืองคำนวณจากสถานีชาร์จ/นโยบาย)
 
   const SPECIAL = ['bus', 'taxi', 'grab', 'rbike', 'rcar', 'cargo'];
+  // ไฟเลี้ยว: ไฟส้มกะพริบ 4 ดวง (หน้า-หลัง ซ้าย-ขวา) เปิดข้างที่จะเลี้ยวตั้งแต่ก่อนเข้าแยกจนพ้นโค้ง มอเตอร์ไซค์ใช้ขนาดเล็ก
+  const blinkGeo = new THREE.BoxGeometry(1, 1, 1), blinkMat = new THREE.MeshBasicMaterial({ color: 0xffa000, toneMapped: false, fog: false });
+  function addBlinkers(a) {
+    const bus = a.role === 'bus', bike = a.isBike;
+    const hx = bike ? 0.028 : bus ? 0.098 : 0.082, hz = bike ? 0.1 : bus ? 0.275 : 0.172, y = bike ? 0.075 : bus ? 0.1 : 0.062, sz = bike ? 0.014 : 0.022;
+    a.bl = { L: [], R: [] };
+    for (const [sx, key] of [[1, 'L'], [-1, 'R']]) for (const fz of [1, -1]) {   // +x ของรถ = ซ้ายของทิศวิ่ง
+      const m = new THREE.Mesh(blinkGeo, blinkMat);
+      m.scale.set(sz, sz, sz * 0.6); m.position.set(sx * hx, y, fz * hz); m.visible = false; m.castShadow = false;
+      a.obj.add(m); a.bl[key].push(m);
+    }
+  }
+  function updateBlinkers(a, nowT) {
+    if (!a.bl) return;
+    const cross = (u, v) => u[0] * v[1] - u[1] * v[0];   // ทิศ v เทียบ u: บวก = ขวา, ลบ = ซ้าย (ตามแกน x ไปขวา z ลง)
+    let side = 0;
+    const notU = (u, v) => !(u[0] === -v[0] && u[1] === -v[1]);
+    if (a.n && (a.n[0] !== a.d[0] || a.n[1] !== a.d[1]) && notU(a.n, a.d)) side = cross(a.d, a.n) > 0 ? -1 : 1;
+    else if (a.pd && a.s < 0.5 && (a.pd[0] !== a.d[0] || a.pd[1] !== a.d[1]) && notU(a.pd, a.d)) side = cross(a.pd, a.d) > 0 ? -1 : 1;
+    const on = side !== 0 && Math.floor(nowT * 3.2 + a.phase) % 2 === 0;
+    for (const m of a.bl.L) m.visible = on && side === 1;
+    for (const m of a.bl.R) m.visible = on && side === -1;
+  }
   function createAgent(type, x, z, d, role = null) {
     let made, kind = 'walker', speed, lat;
     if (type === 'car') {
@@ -648,14 +671,14 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     else if (type === 'dog') { made = makeDog(); speed = 0.42 + Math.random() * 0.1; lat = 0.4; }
     else { made = makeCat(); speed = 0.36 + Math.random() * 0.1; lat = 0.41; }
     const a = {
-      type, kind, ...made, x, z, d, n: null,
+      type, kind, ...made, x, z, d, pd: d, n: null,
       s: Math.random() * 0.9, speed, speedNow: speed, lat,
       side: type === 'car' ? 1 : (Math.random() < 0.5 ? -1 : 1), // รถชิดซ้าย
       phase: Math.random() * 10, bob: 0, dead: false, crash: null,
       role, special: SPECIAL.includes(role), racer: role === 'rbike' || role === 'rcar', runRed: Math.random() < 0.75, ttl: 0,
     };
     a.n = pickNext(kind, x + d[0], z + d[1], d);
-    if (kind === 'car') setupDriver(a, x, z);
+    if (kind === 'car') { setupDriver(a, x, z); addBlinkers(a); }
     root.add(a.obj);
     return a;
   }
@@ -813,6 +836,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     while (a.s >= 1) {
       a.s -= 1;
       a.x += a.d[0]; a.z += a.d[1];
+      a.pd = a.d;   // ทิศที่เพิ่งเข้าช่องนี้มา (ต่างจากทิศออก = กำลังเลี้ยวในช่องนี้)
       a.d = a.n;
       if (!walkable(a.kind, a.x, a.z) || !walkable(a.kind, a.x + a.d[0], a.z + a.d[1])) return false;
       a.n = pickNext(a.kind, a.x + a.d[0], a.z + a.d[1], a.d);
@@ -858,13 +882,14 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     let px2 = px, pz2 = pz, lift = 0;
     if (a.kind === 'car' && !a.crash) {
       // ช่องที่ถนนหักมุมฉากปูผิวเป็นแนวโค้ง (รัศมี 0.5 รอบมุมช่อง) รถวิ่งตามแนวโค้งนั้น ไม่ตัดมุมผ่านกลางช่อง
-      const turning = (a.n[0] !== a.d[0] || a.n[1] !== a.d[1]) && !(a.n[0] === -a.d[0] && a.n[1] === -a.d[1]);
+      // เลี้ยวที่ครึ่งหลังของการเข้าช่องแยก (s ≥ 0.5): โค้งรอบมุมช่องแยกจากขอบทางเข้าไปจนถึงกลางช่อง
+      // ครึ่งแรกของช่องถัดไป (s < 0.5): โค้งต่อจนถึงขอบทางออก รัศมีเส้นกลาง 0.5 ช่อง รถชิดซ้ายจึงเลี้ยวซ้ายโค้งแคบ เลี้ยวขวาโค้งกว้าง
+      const notU = (u, v) => !(u[0] === -v[0] && u[1] === -v[1]);
+      const turning = (a.n[0] !== a.d[0] || a.n[1] !== a.d[1]) && notU(a.n, a.d);
+      const exiting = a.pd && (a.pd[0] !== a.d[0] || a.pd[1] !== a.d[1]) && notU(a.pd, a.d);
       let arc = null;
-      if (turning && a.s >= 0.5 && isCornerTile(bx, bz)) arc = { tx: bx, tz: bz, dd: a.n, e: [-a.d[0], -a.d[1]], phi: (a.s - 0.5) * (Math.PI / 2) };
-      else if (a.s < 0.5 && isCornerTile(a.x, a.z)) {
-        const e = DIRS.find(o => (o[0] !== a.d[0] || o[1] !== a.d[1]) && tileType(a.x + o[0], a.z + o[1]) === 'road');
-        if (e && !(e[0] === a.d[0] && e[1] === a.d[1])) arc = { tx: a.x, tz: a.z, dd: a.d, e, phi: (0.5 + a.s) * (Math.PI / 2) };
-      }
+      if (turning && a.s >= 0.5) arc = { tx: bx, tz: bz, dd: a.n, e: [-a.d[0], -a.d[1]], phi: (a.s - 0.5) * (Math.PI / 2) };
+      else if (exiting && a.s < 0.5) arc = { tx: a.x, tz: a.z, dd: a.d, e: [-a.pd[0], -a.pd[1]], phi: (0.5 + a.s) * (Math.PI / 2) };
       if (arc) {
         const { dd, e, phi } = arc, cs = Math.cos(phi), sn = Math.sin(phi);
         const cx = arc.tx - N / 2 + 0.5 + 0.5 * (dd[0] + e[0]), cz = arc.tz - N / 2 + 0.5 + 0.5 * (dd[1] + e[1]);
@@ -886,6 +911,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     const gy = groundY(a.x, a.z) * (1 - a.s) + groundY(bx, bz) * a.s;
     a.obj.position.set(px2, gy + ground + a.bob + lift, pz2);
     a.obj.rotation.y = yaw + (a.crash ? a.crash.yaw : 0);
+    if (a.bl) updateBlinkers(a, performance.now() / 1000);
     a.obj.rotation.z = a.crash ? a.crash.roll : 0;
     if (a.comply !== undefined && !a.crash) bodyMotion(a, b);
   }
@@ -1635,6 +1661,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       const cap = Math.sqrt(vc * vc + 2 * B * Math.max(0, 0.6 - a.s));
       if (v > cap) acc = Math.min(acc, (cap - v) / 0.3);
     }
+    else if (a.pd && (a.pd[0] !== a.d[0] || a.pd[1] !== a.d[1]) && !(a.pd[0] === -a.d[0] && a.pd[1] === -a.d[1]) && a.s < 0.55 && v > TURN_V * 1.15) acc = Math.min(acc, (TURN_V * 1.15 - v) / 0.3);   // ออกจากโค้ง: ค่อยๆ เร่ง ไม่พุ่งกลางโค้ง
     acc = Math.max(acc, -B_MAX);
     let nv = Math.max(0, v + acc * sdt);
     if (minGap < Infinity) nv = Math.min(nv, Math.max(0, minGap - S0 * 0.5) / sdt);   // กันทะลุคันหน้าตอนเร่งเวลาเกม
