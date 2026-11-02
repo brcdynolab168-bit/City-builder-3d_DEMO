@@ -890,8 +890,11 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       let arc = null;
       if (turning && a.s >= 0.5) arc = { tx: bx, tz: bz, dd: a.n, e: [-a.d[0], -a.d[1]], phi: (a.s - 0.5) * (Math.PI / 2) };
       else if (exiting && a.s < 0.5) arc = { tx: a.x, tz: a.z, dd: a.d, e: [-a.pd[0], -a.pd[1]], phi: (0.5 + a.s) * (Math.PI / 2) };
+      a.turnU = 0;
       if (arc) {
         const { dd, e, phi } = arc, cs = Math.cos(phi), sn = Math.sin(phi);
+        a.turnU = phi / (Math.PI / 2);   // 0..1 ตลอดโค้ง
+        a.turnLeft = (arc.dd === a.d ? a.pd && a.d[0] === a.pd[1] && a.d[1] === -a.pd[0] : a.n[0] === a.d[1] && a.n[1] === -a.d[0]) ? 1 : -1;   // +1 = เลี้ยวซ้าย (ซ้ายของทิศ (dx,dz) คือ (dz,-dx))
         const cx = arc.tx - N / 2 + 0.5 + 0.5 * (dd[0] + e[0]), cz = arc.tz - N / 2 + 0.5 + 0.5 * (dd[1] + e[1]);
         const qx = cx + 0.5 * (-dd[0] * cs - e[0] * sn), qz = cz + 0.5 * (-dd[1] * cs - e[1] * sn);
         const tx = 0.5 * (dd[0] * sn - e[0] * cs), tz = 0.5 * (dd[1] * sn - e[1] * cs), tl = Math.hypot(tx, tz) || 1;
@@ -920,7 +923,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
   // รถยนต์เอียงออกนอกโค้ง มอเตอร์ไซค์เอียงเข้าโค้ง; ค่อยๆ เข้าหาค่าเป้าหมายเหมือนมีโช้ค
   function bodyMotion(a, b) {
     const v = a.speedNow, turning = (a.n[0] !== a.d[0] || a.n[1] !== a.d[1]) && !(a.n[0] === -a.d[0] && a.n[1] === -a.d[1]);
-    const side = turning ? (a.n[0] === a.d[1] && a.n[1] === -a.d[0] ? 1 : -1) * b * (1 - b) * 4 : 0;   // +1 = เลี้ยวซ้าย
+    const side = a.turnU > 0 && a.turnU < 1 ? a.turnLeft * Math.sin(Math.PI * Math.min(1, a.turnU)) : 0;   // +1 = เลี้ยวซ้าย โยกตามความคืบหน้าของโค้งจริง (เดิมโยกเฉพาะท้ายช่อง)
     const pitchT = Math.max(-0.035, Math.min(0.05, -(a.accNow || 0) * (a.len > 0.5 ? 0.02 : 0.035)));
     const rollT = a.isBike ? -side * Math.min(0.55, 0.15 + v * v * 0.5) : side * Math.min(0.07, v * v * 0.06);
     a.bPitch = (a.bPitch || 0) + (pitchT - (a.bPitch || 0)) * 0.15;
@@ -1654,6 +1657,23 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
         follow(dist, 0);
         break;
       }
+    }
+    // เลี้ยวขวาต้องให้ทาง: เข้าแยกถึงขอบช่องแล้วยังไม่ได้ออกตัว ให้หยุดรอที่ขอบจนรถสวนที่จะมาถึงแยกภายใน ~2.4 วินาทีผ่านไป
+    a.yielding = false;
+    if (a.s < 0.5 && !a.racer && a.n[0] === -a.d[1] && a.n[1] === a.d[0] && a.pd) {
+      const Bx = a.x + a.d[0], Bz = a.z + a.d[1], Cx = Bx + a.d[0], Cz = Bz + a.d[1];
+      let tmin = Infinity;
+      for (const o of agents.car) {
+        if (o === a || o.crash || o.dead || o.d[0] !== -a.d[0] || o.d[1] !== -a.d[1]) continue;
+        // รถสวนที่เลี้ยวขวาไปคนละทาง (ตัดกับเราได้น้อย) ไม่ต้องรอ
+        if (o.n[0] === -o.d[1] && o.n[1] === o.d[0]) continue;
+        let dt = Infinity;
+        if (o.x === Bx && o.z === Bz) dt = o.s < 0.5 ? 0 : Infinity;            // กำลังผ่านกลางแยก (ยังไม่พ้นครึ่งช่อง)
+        else if (o.x === Cx && o.z === Cz) dt = (1 - o.s + 0.3) / Math.max(o.speedNow, 0.15);   // กำลังวิ่งเข้ามาจากอีกฝั่ง
+        if (dt < tmin) tmin = dt;
+      }
+      const clear = (0.55 + 0.35) / Math.max(0.25, Math.min(v + 0.15, 0.5));   // เวลาที่เราต้องใช้เคลียร์แยก (ออกตัวช้า + โค้งกว้าง)
+      if (tmin < Math.max(2.4, clear)) { a.yielding = true; follow(Math.max(0.03, 0.5 - a.s - 0.04), 0); }
     }
     // ชะลอก่อนเลี้ยว/กลับรถ
     if (a.n[0] !== a.d[0] || a.n[1] !== a.d[1]) {
