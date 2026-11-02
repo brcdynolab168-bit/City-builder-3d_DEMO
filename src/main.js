@@ -2504,8 +2504,16 @@ function addPuffs(wx, wy, wz, n = 9) {
 
 // ป้ายเวลาที่เหลือเหนือไซต์ก่อสร้าง (แสดงเมื่อเหลือเกิน 1 นาที) อัปเดตเมื่อตัวเลขนาทีเปลี่ยน
 const siteLabelMats = new Map();
+// ขนาดป้ายเวลา: โตตามระยะกล้องแต่มีเพดาน (ซูมใกล้ต้องเล็กลง ไม่ใหญ่เกินตึก) ซูมไกลยังอ่านออก
+function fitSiteLabel(e) {
+  const d = camera.position.distanceTo(e.label.getWorldPosition(_lblV));
+  const h = Math.min(0.17, Math.max(0.045, d * 0.0085));
+  e.label.scale.set(h * 4, h, 1);
+}
+const _lblV = new THREE.Vector3();
 function updateSiteLabel(e, sg) {
   if (!sg) return;
+  if (e.label) fitSiteLabel(e);   // ปรับขนาดป้ายตามระยะกล้องทุกเฟรม
   const left = Math.max(0, (1 - e.t.cs.p) * buildSecs(e.t) / Math.max(1, speed));
   const txt = left < 60 ? '' : t('pl.r.left', { n: left >= 3600 ? (left / 3600).toFixed(1) + ' ' + t('pl.r.hr') : Math.round(left / 60) + ' ' + t('pl.r.min') });
   if (e.labelTxt === txt) return;
@@ -2525,7 +2533,8 @@ function updateSiteLabel(e, sg) {
   }
   if (!e.label) { e.label = new THREE.Sprite(mat); e.label.renderOrder = 10; e.label.scale.set(1.3, 0.325, 1); e.label.userData.ownMat = false; sg.add(e.label); }
   e.label.material = mat; e.label.visible = true;
-  e.label.position.set(e.cx, e.H + 0.5, e.cz);
+  e.label.position.set(e.cx, e.H + 0.3, e.cz);
+  fitSiteLabel(e);
 }
 function animateConstruction(dt, time) {
   if (constructing.size) {
