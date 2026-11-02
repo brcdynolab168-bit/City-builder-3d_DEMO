@@ -11,6 +11,14 @@ export const LANGS = [
 
 const D = {
   th: {
+    "ph.open": "โหมดภาพถ่าย (P)",
+    "ph.time": "เวลา",
+    "ph.snap": "บันทึกภาพ",
+    "ph.close": "ออก (Esc)",
+    "ph.fail": "บันทึกภาพไม่สำเร็จ",
+    "tr.boardings": "ผู้โดยสารรถเมล์ขึ้นรถสะสม",
+    "tr.busstops": "จำนวนป้ายรถเมล์",
+    "tr.garbage": "จุดที่รถขยะเก็บแล้ว (สะสม)",
     "v.park.fishspot": "ลานตกปลาริมน้ำ",
     "v.park.fishspot.note": "3×2 ช่อง ต้องติดน้ำและติดถนน คนมาตกปลาฟรีช่วงเช้า-เย็น วันหยุดคนมากกว่า ช่วยให้ประชาชนพอใจ",
     "sign.fishspot": "ลานตกปลา ฟรี",
@@ -763,6 +771,7 @@ const D = {
     'daylen': '1 วันในเกม = 5 นาที',
   },
   en: {
+    
     "v.park.fishspot": "Waterside fishing spot",
     "v.park.fishspot.note": "3×2 tiles, must touch water and a road. Free fishing for citizens at dawn and dusk, busier at weekends, and it keeps people happy",
     "sign.fishspot": "FREE FISHING",
@@ -1508,6 +1517,7 @@ const D = {
     'daylen': '1 in-game day = 5 minutes',
   },
   zh: {
+    
     "v.park.fishspot": "水边钓鱼场",
     "v.park.fishspot.note": "3×2 格，必须临水且临路。市民在清晨和傍晚免费钓鱼，周末更热闹，能提升满意度",
     "sign.fishspot": "免费钓鱼",

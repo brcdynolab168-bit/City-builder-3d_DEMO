@@ -381,7 +381,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
         }
         det.push(part(boxGeo, 0x2b2b2b, 0, 0.115, -0.252, 0.12, 0.09, 0.008));
       } else {
-        const cab = kind === 'power' ? 0xf5f5f5 : kind === 'water' ? 0x1976d2 : kind === 'cargo' ? 0xe8e8e8 : 0x0d47a1;
+        const cab = kind === 'garbage' ? 0x2e7d32 : kind === 'power' ? 0xf5f5f5 : kind === 'water' ? 0x1976d2 : kind === 'cargo' ? 0xe8e8e8 : 0x0d47a1;
         body.push(part(boxGeo, cab, 0, 0.1, 0.17, 0.15, 0.1, 0.13));
         glass.push(part(boxGeo, 0xffffff, 0, 0.122, 0.236, 0.13, 0.05, 0.012));
         if (kind === 'power') {
@@ -394,6 +394,11 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
           body.push(part(boxGeo, 0x6f7882, 0, 0.082, -0.1, 0.16, 0.022, 0.34));
           body.push(part(cylGeo, 0xe8f1fa, 0, 0.14, -0.1, 0.115, 0.32, 0.115, Math.PI / 2, 0, 0));
           for (const z of [-0.2, -0.04]) body.push(part(cylGeo, 0x1976d2, 0, 0.14, z, 0.12, 0.03, 0.12, Math.PI / 2, 0, 0));
+        } else if (kind === 'garbage') {
+          body.push(part(boxGeo, 0x388e3c, 0, 0.14, -0.1, 0.16, 0.14, 0.34));                                          // ตัวถังบรรจุขยะ
+          body.push(part(boxGeo, 0x2e7d32, 0, 0.215, -0.1, 0.15, 0.015, 0.33));                                         // ฝาถัง
+          for (let k = 0; k < 4; k++) det.push(part(boxGeo, 0x1b5e20, 0, 0.14, -0.22 + k * 0.08, 0.164, 0.12, 0.012));
+          det.push(part(boxGeo, 0x263238, 0, 0.1, -0.272, 0.12, 0.06, 0.016));                                          // ช่องรับขยะท้ายรถ
         } else if (kind === 'cargo') {
           body.push(part(boxGeo, 0x1e5aa8, 0, 0.14, -0.08, 0.16, 0.14, 0.36));                                         // ตู้คอนเทนเนอร์
           for (let k = 0; k < 6; k++) det.push(part(boxGeo, 0x174a8c, 0, 0.14, -0.24 + k * 0.064, 0.164, 0.12, 0.01));   // ลอนตู้
@@ -602,7 +607,47 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       }
     }
     dirty = false;
+    rebuildStops();
   }
+  // ป้ายรถเมล์: ช่องถนนตรง (ไม่ใช่ทางแยก/ทางหลวง) ที่ข้างทางมีอาคาร กระจายห่างกันด้วยค่าแฮช แต่ละป้ายจำว่าอาคารอยู่ฝั่งไหน
+  const isBld = t => t === 'res' || t === 'com' || t === 'service' || t === 'part';
+  const stops = new Map();
+  let stopMesh = null;
+  const stopMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
+  function curbSide(x, z) {   // คืน [sx, sz] ทิศของอาคารข้างทาง หรือ null ถ้าไม่ใช่ช่องถนนตรงที่มีอาคารข้าง
+    if (tileType(x, z) !== 'road' || roadKind(x, z) === 'highway') return null;
+    const E = tileType(x + 1, z) === 'road', W = tileType(x - 1, z) === 'road', S = tileType(x, z + 1) === 'road', Nn = tileType(x, z - 1) === 'road';
+    if (E + W + S + Nn !== 2) return null;
+    if (E && W) return isBld(tileType(x, z - 1)) ? [0, -1] : isBld(tileType(x, z + 1)) ? [0, 1] : null;
+    if (S && Nn) return isBld(tileType(x - 1, z)) ? [-1, 0] : isBld(tileType(x + 1, z)) ? [1, 0] : null;
+    return null;
+  }
+  const hashXZ = (x, z) => { let h = (Math.imul(x, 374761393) ^ Math.imul(z, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  function rebuildStops() {
+    stops.clear();
+    if (stopMesh) { root.remove(stopMesh); stopMesh.geometry.dispose(); stopMesh = null; }
+    const geos = [];
+    for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
+      if (hashXZ(x, z) > 0.17) continue;
+      const side = curbSide(x, z);
+      if (!side) continue;
+      let near = false;
+      for (let dz = -2; dz <= 2 && !near; dz++) for (let dx = -2; dx <= 2; dx++) if ((dx || dz) && stops.has((x + dx) * 4096 + z + dz)) { near = true; break; }
+      if (near) continue;   // ป้ายห่างกันอย่างน้อย 3 ช่อง
+      stops.set(x * 4096 + z, side);
+      const wx = x - N / 2 + 0.5 + side[0] * 0.43, wz = z - N / 2 + 0.5 + side[1] * 0.43, gy = groundY(x, z) + 0.03;
+      const alongX = side[0] === 0;   // ป้ายอยู่ข้างถนนที่วิ่งตามแกน x
+      const L = 0.3, Wd = 0.1;
+      geos.push(part(boxGeo, 0x546e7a, wx, gy + 0.12, wz, alongX ? L : Wd, 0.012, alongX ? Wd : L));                                  // หลังคา
+      for (const k of [-1, 1]) geos.push(part(boxGeo, 0x37474f, wx + (alongX ? k * 0.13 : 0), gy + 0.06, wz + (alongX ? 0 : k * 0.13), 0.012, 0.12, 0.012));   // เสา
+      geos.push(part(boxGeo, 0x8d6e63, wx - side[0] * 0.03, gy + 0.035, wz - side[1] * 0.03, alongX ? 0.2 : 0.03, 0.02, alongX ? 0.03 : 0.2));   // ม้านั่ง
+      geos.push(part(boxGeo, 0x1565c0, wx + (alongX ? 0.19 : 0), gy + 0.115, wz + (alongX ? 0 : 0.19), 0.04, 0.05, 0.04));          // ป้ายสีน้ำเงิน
+      geos.push(part(boxGeo, 0x37474f, wx + (alongX ? 0.19 : 0), gy + 0.05, wz + (alongX ? 0 : 0.19), 0.01, 0.1, 0.01));
+    }
+    if (geos.length) { stopMesh = new THREE.Mesh(merge(geos), stopMat); stopMesh.castShadow = false; stopMesh.receiveShadow = true; root.add(stopMesh); }
+  }
+  // รถขยะจอดหน้าบ้านบางหลัง (ช่องถนนตรงที่มีอาคารข้าง และค่าแฮชตรงเงื่อนไข)
+  const garbageStop = (x, z) => hashXZ(x * 3 + 1, z * 5 + 2) < 0.34 && !!curbSide(x, z);
 
   // เลือกทิศถัดไปที่ทางแยก (ชอบตรงไป ไม่ย้อนกลับ เว้นแต่ทางตัน)
   // ช่องถนนที่หักมุมฉาก (2 แขนคนละแกน) = ช่องทางโค้ง ต้องตรงกับเงื่อนไขใน main.js
@@ -611,7 +656,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     const E = tileType(x + 1, z) === 'road', W = tileType(x - 1, z) === 'road', S = tileType(x, z + 1) === 'road', Nn = tileType(x, z - 1) === 'road';
     return E + W + S + Nn === 2 && E !== W && S !== Nn;
   };
-  function pickNext(kind, bx, bz, d) {
+  function pickNext(kind, bx, bz, d, bus = false) {
     const opts = [];
     for (const nd of DIRS) {
       if (nd[0] === -d[0] && nd[1] === -d[1]) continue;
@@ -620,16 +665,17 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     if (!opts.length) return [-d[0], -d[1]];
     const straight = opts.find(o => o[0] === d[0] && o[1] === d[1]);
     if (straight && kind === 'car' && overpassAt(bx, bz)) return straight;   // ทางแยกต่างระดับเลี้ยวไม่ได้ (คนละระดับ)
-    if (straight && Math.random() < 0.6) return straight;
+    if (straight && Math.random() < (bus ? 0.93 : 0.6)) return straight;   // รถเมล์วิ่งเป็นสายตรงยาว เลี้ยวนานๆ ครั้ง
     return opts[(Math.random() * opts.length) | 0];
   }
 
   // ---------- ตัวละคร ----------
   const agents = { car: [], person: [], dog: [], cat: [] };
-  let targets = { car: 0, person: 0, dog: 0, cat: 0, bus: 0, taxi: 0, grab: 0, cargo: 0 };
+  let targets = { car: 0, person: 0, dog: 0, cat: 0, bus: 0, taxi: 0, grab: 0, cargo: 0, garbage: 0 };
+  let boardings = 0, pickups = 0;   // สถิติสะสม: ผู้โดยสารขึ้นรถเมล์ / จุดเก็บขยะ
   let evShare = 0;   // สัดส่วนรถยนต์ไฟฟ้าในรถทั่วไป (เมืองคำนวณจากสถานีชาร์จ/นโยบาย)
 
-  const SPECIAL = ['bus', 'taxi', 'grab', 'rbike', 'rcar', 'cargo'];
+  const SPECIAL = ['bus', 'taxi', 'grab', 'rbike', 'rcar', 'cargo', 'garbage'];
   // ไฟเลี้ยว: ไฟส้มกะพริบ 4 ดวง (หน้า-หลัง ซ้าย-ขวา) เปิดข้างที่จะเลี้ยวตั้งแต่ก่อนเข้าแยกจนพ้นโค้ง มอเตอร์ไซค์ใช้ขนาดเล็ก
   const blinkGeo = new THREE.BoxGeometry(1, 1, 1), blinkMat = new THREE.MeshBasicMaterial({ color: 0xffa000, toneMapped: false, fog: false });
   function addBlinkers(a) {
@@ -662,6 +708,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       else if (role === 'grab') { const bk = Math.random() < 0.45; made = bk ? makeBike(true) : makeTaxiLike(true); speed = 1 + Math.random() * 0.2; if (bk) lat = 0.2; }
       else if (role === 'rbike') { made = makeBike(false, true); speed = 1.9 + Math.random() * 0.6; lat = 0.2; }
       else if (role === 'rcar') { made = glbWrap('sports') || makeCar(pick(['sedan', 'hatch'])); speed = 1.7 + Math.random() * 0.5; }
+      else if (role === 'garbage') { const tk = makeServiceTruck('garbage'); made = { obj: tk.obj, headMesh: tk.lr, tailMesh: tk.lr }; speed = 0.5 + Math.random() * 0.1; }
       else if (role === 'cargo') { const tk = makeServiceTruck('cargo'); made = { obj: tk.obj, headMesh: tk.lr, tailMesh: tk.lr }; }
       else if (Math.random() < 0.22) { made = makeBike(); role = 'bike'; speed = 1.1 + Math.random() * 0.25; lat = 0.2; }
       else if (Math.random() < evShare) { made = makeEV(); role = 'ev'; }
@@ -690,6 +737,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     let comply = r < 0.1 ? 1.12 + Math.random() * 0.18 : 0.9 + Math.random() * 0.15;   // 10% ขับเร็วเกินป้าย
     let vmax = 2.6, acc = 0.45 + Math.random() * 0.15, T = 0.45 + Math.random() * 0.25, len = 0.34;
     if (a.role === 'bus') { comply = 0.85; vmax = 1.3; acc = 0.28; T = 0.7; len = 0.6; }
+    else if (a.role === 'garbage') { comply = 0.7; vmax = 1.0; acc = 0.2; T = 0.8; len = 0.54; }
     else if (a.role === 'cargo') { comply = 0.85; vmax = 1.5; acc = 0.22; T = 0.8; len = 0.54; }   // รถบรรทุกหนัก เร่งช้า เว้นระยะมาก
     else if (a.role === 'ev') acc *= 1.35;                                                           // มอเตอร์ไฟฟ้าแรงบิดทันที
     else if (a.role === 'taxi') comply = 0.95 + Math.random() * 0.15;
@@ -815,7 +863,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       }
     }
     // รถประจำการจากอู่: รถเมล์ แท็กซี่ แกร็บ
-    for (const role of ['bus', 'taxi', 'grab', 'cargo']) {
+    for (const role of ['bus', 'taxi', 'grab', 'cargo', 'garbage']) {
       const tg = Math.min(targets[role] || 0, Math.floor(lists.car.length * 0.12));
       const have = agents.car.filter(a => a.role === role);
       if (have.length < tg) { const a = spawn('car', role); if (a) agents.car.push(a); }
@@ -839,7 +887,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       a.pd = a.d;   // ทิศที่เพิ่งเข้าช่องนี้มา (ต่างจากทิศออก = กำลังเลี้ยวในช่องนี้)
       a.d = a.n;
       if (!walkable(a.kind, a.x, a.z) || !walkable(a.kind, a.x + a.d[0], a.z + a.d[1])) return false;
-      a.n = pickNext(a.kind, a.x + a.d[0], a.z + a.d[1], a.d);
+      a.n = pickNext(a.kind, a.x + a.d[0], a.z + a.d[1], a.d, a.role === 'bus');
     }
     return true;
   }
@@ -1629,6 +1677,13 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     let v0 = desiredSpeed(a, lim) * wetSlow;
     if (hazards.size) { const hz = hazards.get(a.x * 4096 + a.z) ?? (a.s > 0.5 ? hazards.get(P[1].x * 4096 + P[1].z) : undefined); if (hz) v0 *= hz; }   // ถนนพัง/ท่อแตก รถชะลอ
     if (checkpoint && a.x === checkpoint.x && a.z === checkpoint.z) { v0 *= 0.3; if (a.s > 0.4 && a.s < 0.5 && !a.chk) { a.chk = true; checkpoint.stopped++; } }
+    // รถพยาบาลฉุกเฉินวิ่งมาจากด้านหลังบนถนนเส้นเดียวกัน: รถที่อยู่ข้างหน้าในระยะ 4 ช่องชิดซ้ายและชะลอให้
+    const am = accident?.amb;
+    a.ambYield = false;
+    if (am && !am.dead && !am.arrived && a !== am && a.d[0] === am.d[0] && a.d[1] === am.d[1]) {
+      const dx = a.x - am.x, dz = a.z - am.z, along = dx * a.d[0] + dz * a.d[1], lat = Math.abs(dx * a.d[1]) + Math.abs(dz * a.d[0]);
+      if (lat === 0 && along >= 0 && along <= 4) { v0 *= 0.3; a.lane = 0; a.ambYield = true; }
+    }
     v0 = Math.max(v0, 0.05);
     const A = a.acc * (1 - 0.25 * rain), B = B_COMF * (1 - 0.2 * rain), T = a.T * (1 + 0.4 * rain);   // ถนนเปียก: เร่ง/เบรกเบาลง เว้นระยะมากขึ้น
     const free = 1 - (v / v0) ** 4;
@@ -1638,6 +1693,15 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
       acc = Math.min(acc, A * (free - (want / Math.max(gap, 0.005)) ** 2));
       if (gap < minGap) minGap = gap;
     };
+    // รถเมล์ที่ป้าย / รถขยะที่หน้าบ้าน: เบรกให้หยุดที่กลางช่อง รอรับ-เก็บสักครู่ แล้วออกตัวต่อ (ช่องที่เพิ่งจอดไปแล้วไม่จอดซ้ำ)
+    if ((a.role === 'bus' || a.role === 'garbage') && !a.crash) {
+      const key = a.x * 4096 + a.z;
+      const serve = a.stopKey !== key && (a.role === 'bus' ? stops.has(key) : garbageStop(a.x, a.z));
+      if (serve && a.s < 0.52 && !(a.dwell > 0)) {
+        follow(Math.max(0.03, 0.5 - a.s), 0);
+        if (v < 0.07 && a.s > 0.3) { a.dwell = a.role === 'bus' ? 3.4 : 2.6; a.stopKey = key; if (a.role === 'bus') boardings += 1 + ((Math.random() * 4) | 0); else pickups++; }
+      }
+    }
     const obs = scanAhead(a, bucket, P, _obs);
     let lead = null, leadGap = Infinity;
     for (let i = 0; i < obs.length; i += 4) {
@@ -1684,6 +1748,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     else if (a.pd && (a.pd[0] !== a.d[0] || a.pd[1] !== a.d[1]) && !(a.pd[0] === -a.d[0] && a.pd[1] === -a.d[1]) && a.s < 0.55 && v > TURN_V * 1.15) acc = Math.min(acc, (TURN_V * 1.15 - v) / 0.3);   // ออกจากโค้ง: ค่อยๆ เร่ง ไม่พุ่งกลางโค้ง
     acc = Math.max(acc, -B_MAX);
     let nv = Math.max(0, v + acc * sdt);
+    if (a.dwell > 0) { a.dwell -= sdt; nv = 0; }   // กำลังจอดรับ-เก็บ
     if (minGap < Infinity) nv = Math.min(nv, Math.max(0, minGap - S0 * 0.5) / sdt);   // กันทะลุคันหน้าตอนเร่งเวลาเกม
     a.speedNow = nv;
     a.accNow = (nv - v) / sdt;   // ความเร่งจริง (ใช้ทำตัวรถก้ม/เงย)
@@ -1780,8 +1845,9 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     // จำนวนเป้าหมายแต่ละชนิด (ผู้เรียกคำนวณจากประชากร/เวลา/อากาศ)
     // ระยะ LOD ตามระดับกราฟิก: ใกล้ = ละเอียด, ไกลกว่า hide = ซ่อน, ไกลกว่า shadow = ไม่วาดเงา
     setLod({ near = 24, hide = 62, shadow = 30 } = {}) { NEAR2 = near * near; HIDE2 = hide * hide; SHADOW2 = shadow * shadow; },
-    setTargets({ car = 0, person = 0, dog = 0, cat = 0, bus = 0, taxi = 0, grab = 0, cargo = 0, ev = 0 }) {
-      targets = { car, person, dog, cat, bus, taxi, grab, cargo };
+    stats: () => ({ boardings, pickups, stops: stops.size }),
+    setTargets({ car = 0, person = 0, dog = 0, cat = 0, bus = 0, taxi = 0, grab = 0, cargo = 0, garbage = 0, ev = 0 }) {
+      targets = { car, person, dog, cat, bus, taxi, grab, cargo, garbage };
       evShare = ev;
     },
     counts() {
@@ -1793,7 +1859,7 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     startCheckpoint, endCheckpoint, checkpointActive: () => !!checkpoint, checkpointAge: () => (checkpoint ? checkpoint.t : 0),
     racers() { let n = 0, b = 0; for (const a of agents.car) if (a.racer && !a.crash) { n++; if (a.isBike) b++; } return { n, bike: b }; },
     update,
-    debugCars: () => agents.car,
+
     // ทดสอบ/สั่งให้เกิดอุบัติเหตุทันที
     triggerAccident() { return startAccident(); },
     takeEvents() { return events.splice(0, events.length); },

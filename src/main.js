@@ -4586,7 +4586,7 @@ function tabTransport(P) {
   const traffic = nd.list.find(n => n.k === 'traffic')?.v ?? 100;
   const stepper = (k, label, val) => `<div class="kv"><span>${escH(label)}</span><b><button class="rf" data-pol="${k}:-1">−</button> $${val} <button class="rf" data-pol="${k}:1">+</button></b></div>`;
   return sec(t('tr.title'), bar(t('need.traffic'), traffic, moodCol(traffic)) + bar(t('tr.cover'), 100 * s.transitCover, '#4db6ac', pc(s.transitCover))
-      + bar(t('tr.share'), 100 * s.transitShare / 0.6, '#81c784', pc(s.transitShare)) + kv(t('tr.cut'), '−' + pc(s.carCut)) + kv(t('tr.riders'), fmt(s.riders)))
+      + bar(t('tr.share'), 100 * s.transitShare / 0.6, '#81c784', pc(s.transitShare)) + kv(t('tr.cut'), '−' + pc(s.carCut)) + kv(t('tr.boardings'), fmt(agents.stats().boardings)) + kv(t('tr.busstops'), fmt(agents.stats().stops)) + kv(t('tr.garbage'), fmt(agents.stats().pickups)) + kv(t('tr.riders'), fmt(s.riders)))
     + sec(t('tr.stations'), kv(t('v.service.metro'), c.metro) + kv(t('v.service.bus'), c.bus) + kv(t('v.service.taxi') + ' / ' + t('v.service.grab'), c.taxi + ' / ' + c.grab))
     + sec(t('tr.park'), kv(t('tr.lots'), c.parking) + bar(t('tr.occ'), s.parkCap ? 100 * s.parkOcc / s.parkCap : 0, '#ffb74d', fmt(s.parkOcc) + ' / ' + fmt(s.parkCap))
       + kv(t('tr.parkinc'), '+' + fmt(s.parkIncome)) + kv(t('tr.fareinc'), '+' + fmt(s.fareIncome)))
@@ -5290,6 +5290,84 @@ function setUiHidden(h) {
   b.title = h ? t('ui.show') : t('ui.hide');
 }
 $('uiToggle').onclick = () => setUiHidden(!uiHidden);
+// ---------- โหมดภาพถ่าย: ซ่อน UI ทั้งหมด หยุดเวลา ปรับเวลา/อากาศ/ท้องฟ้า แล้วบันทึกภาพเป็นไฟล์ PNG (มีป้ายชื่อเมืองเล็กๆ มุมล่าง) ----------
+const photoBar = document.createElement('div');
+photoBar.id = 'photoBar';
+document.body.appendChild(photoBar);
+{
+  const st = document.createElement('style');
+  st.textContent = `#photoBar{position:fixed;left:50%;bottom:14px;transform:translate(-50%,calc(100% + 30px));z-index:12;display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 24px);padding:10px 14px;background:rgba(10,15,24,.92);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.18);border-radius:12px;color:#fff;box-shadow:0 12px 32px rgba(0,0,0,.5);transition:transform .25s;font-size:13px}
+body.photo #photoBar{transform:translate(-50%,0)}#photoBar label{display:flex;align-items:center;gap:8px}#photoBar input[type=range]{width:170px}#photoBar .pbtn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);color:#fff;border-radius:8px;padding:6px 11px;cursor:pointer;font-size:13px}#photoBar .pbtn:hover{background:rgba(255,255,255,.18)}#photoBar .pbtn.on{background:#f5a524;color:#1a1207;border-color:#f5a524}#photoBar .snap{background:#f5a524;color:#1a1207;font-weight:700;border-color:#f5a524}
+body.photo #topbar,body.photo #rail,body.photo #side,body.photo #dock,body.photo #bottomRight,body.photo #news,body.photo #popPanel,body.photo #fly,body.photo #toolTab,body.photo #uiToggle,body.photo #questPanel,body.photo #placePanel,body.photo #upg,body.photo #toast{display:none!important}`;
+  document.head.appendChild(st);
+}
+let photoOn = false, photoSpeed = 1, photoWeather = 'auto';
+function renderPhotoBar() {
+  const hr = Math.round(tod * 24 * 10) / 10;
+  photoBar.innerHTML = `<label>🕒 ${escH(t('ph.time'))} <input type="range" min="0" max="23.9" step="0.1" value="${hr}" data-ph="time"><b data-ph-hr>${String(Math.floor(hr)).padStart(2, '0')}:${String(Math.round((hr % 1) * 60)).padStart(2, '0')}</b></label>`
+    + ['auto', 'clear', 'cloudy', 'rain', 'storm'].map(w => `<button class="pbtn${photoWeather === w ? ' on' : ''}" data-phw="${w}">${escH(t('w.' + w))}</button>`).join('')
+    + `<button class="pbtn snap" data-ph="snap">📷 ${escH(t('ph.snap'))}</button><button class="pbtn" data-ph="close">✕ ${escH(t('ph.close'))}</button>`;
+}
+function setPhoto(on) {
+  if (on === photoOn || document.body.classList.contains('menu-open')) return;
+  photoOn = on;
+  document.body.classList.toggle('photo', on);
+  if (on) { photoSpeed = speed || 1; speed = 0; hideUpg(); placePanel.hide(); renderPhotoBar(); }
+  else { speed = photoSpeed; }
+}
+function snapPhoto() {
+  try {
+    composer && useBloom ? composer.render() : renderer.render(scene, camera);   // วาดซ้ำทันทีก่อนอ่านภาพ (บัฟเฟอร์ยังไม่ถูกล้าง)
+    const src = renderer.domElement, c = document.createElement('canvas');
+    c.width = src.width; c.height = src.height;
+    const g = c.getContext('2d');
+    g.drawImage(src, 0, 0);
+    const fs = Math.max(14, Math.round(c.height / 42));
+    g.font = `600 ${fs}px "Segoe UI","Leelawadee UI","Noto Sans Thai","Microsoft YaHei",sans-serif`;
+    const label = `${activeId ? (Saves.getSlot(activeId)?.name || 'Mini City') : 'Mini City'} · ${t('dow.' + (state.day % 7))} ${t('hud.day')} ${state.day} · ${clockText()}`;
+    const w = g.measureText(label).width + fs * 1.4;
+    g.fillStyle = 'rgba(10,15,24,.55)'; g.fillRect(fs * 0.6, c.height - fs * 2.3, w, fs * 1.7);
+    g.fillStyle = '#fff'; g.textBaseline = 'middle'; g.fillText(label, fs * 1.3, c.height - fs * 1.45);
+    c.toBlob(blob => {
+      if (!blob) return toast(t('ph.fail'));
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `mini-city-day${state.day}-${clockText().replace(':', '')}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      audio.sfx('place');
+      photoBar.classList.add('flash'); setTimeout(() => photoBar.classList.remove('flash'), 150);
+    }, 'image/png');
+  } catch (e) { console.warn('บันทึกภาพไม่สำเร็จ', e); toast(t('ph.fail')); }
+}
+photoBar.addEventListener('input', e => {
+  if (e.target.dataset.ph !== 'time') return;
+  const hr = +e.target.value;
+  tod = hr / 24; state.tod = tod;
+  photoBar.querySelector('[data-ph-hr]').textContent = String(Math.floor(hr)).padStart(2, '0') + ':' + String(Math.round((hr % 1) * 60)).padStart(2, '0');
+});
+photoBar.addEventListener('click', e => {
+  const w = e.target.closest('[data-phw]');
+  if (w) { photoWeather = w.dataset.phw; weather.setMode(photoWeather); renderPhotoBar(); return; }
+  const b = e.target.closest('[data-ph]');
+  if (!b) return;
+  if (b.dataset.ph === 'snap') snapPhoto();
+  else if (b.dataset.ph === 'close') setPhoto(false);
+});
+{
+  const btn = document.createElement('button');
+  btn.id = 'photoBtn'; btn.className = 'rbtn closed'; btn.textContent = '📷'; btn.style.fontSize = '19px';
+  btn.title = '';
+  btn.onclick = () => { audio.sfx('click'); setPhoto(true); };
+  document.getElementById('rail')?.appendChild(btn);
+  onLang(() => { btn.title = t('ph.open'); if (photoOn) renderPhotoBar(); });
+  btn.title = t('ph.open');
+}
+window.addEventListener('keydown', e => {
+  if (e.target.matches?.('input,textarea')) return;
+  if (e.key === 'Escape' && photoOn) { setPhoto(false); return; }
+  if ((e.key === 'p' || e.key === 'P') && !document.body.classList.contains('menu-open')) setPhoto(!photoOn);
+});
 window.addEventListener('keydown', e => {
   if (document.body.classList.contains('menu-open')) return;
   if (e.key === 'h' || e.key === 'H') setUiHidden(!uiHidden);
@@ -5329,6 +5407,7 @@ function updateAgentTargets() {
   carDemand = cars * transitCut;
   agents.setTargets({
     bus: Math.min(ccache.bus * 3, 9), taxi: Math.min(ccache.taxi * 4, 12), grab: Math.min(ccache.grab * 5, 12),
+    garbage: s.pop >= 250 && h >= 6 && h < 11 ? Math.min(3, 1 + Math.floor(s.pop / 2500)) : 0,   // รถขยะออกเก็บช่วงเช้า
     cargo: ccache.freight && !law().noTruck ? Math.min(8, 2 + Math.round(s.trade.units * s.trade.cov / 150)) : 0, ev: s.evShare,
     car: Math.round(Math.min(cars, q.cars * 1.25) * transitCut),
     person: Math.min(Math.round(people), q.people),
