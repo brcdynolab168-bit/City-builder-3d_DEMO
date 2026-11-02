@@ -193,7 +193,7 @@ const VARIANTS = {
     { k: 'boulevard', label: 'ถนนเกาะกลางสวน',      cost: 36, upkeep: 1.3 },
     { k: 'oneway',   label: 'ถนนทางเดียว',         cost: 4,  upkeep: 0.1, oneway: true },       // คลิกช่องถนนเพื่อสลับทิศ หรือลากตามทิศที่ต้องการ
     { k: 'roundabout', label: 'วงเวียน',            cost: 60, upkeep: 1, junction: 'round' },     // วางทับทางแยก 3 ทางขึ้นไป ไม่มีไฟจราจร รถไหลต่อเนื่อง
-    { k: 'overpass',  label: 'ทางแยกต่างระดับ',      cost: 260, upkeep: 3, junction: 'over' },     // วางทับทางแยก 4 ทาง: ถนนสายหลักข้ามสะพานเหนือถนนที่ตัด ไม่ต้องรอไฟ
+    { k: 'overpass',  label: 'ทางแยกต่างระดับ',      cost: 420, upkeep: 5, junction: 'over' },     // วางทับทางแยก 4 ทาง: ถนนสายหลักข้ามสะพานเหนือถนนที่ตัด ไม่ต้องรอไฟ
   ],
 };
 const DEFAULT_V = { res: 'zone', com: 'zone', ind: 'zone', power: 'gas', water: 'plant', service: 'school', park: 'park', farm: 'rice', road: 'street' };
@@ -709,6 +709,7 @@ const agents = createAgents({
   roadKind: (x, z) => { const k = roadKind(x, z); return k === 'dirt' ? 'street' : k === 'boulevard' ? 'avenue' : k; },
   speedLimit: speedLimitAt,
   oneWayAt: (x, z) => { const tl = tileAt(x, z); return tl?.t === 'road' && tl.ow ? tl.ow : null; },   // [dx, dz] ทิศที่วิ่งได้ทิศเดียว
+  overLiftAt: (cx, cz, ax) => overLiftAt(cx, cz, ax),   // ห่อไว้เพราะ overLiftAt ประกาศหลังจุดนี้
   overpassAt: (x, z) => { const tl = tileAt(x, z); return tl?.t === 'road' && tl.j === 'over' ? (tl.ax || 'x') : null; },   // ทิศของถนนที่ยกข้ามสะพาน
 });
 
@@ -2008,7 +2009,66 @@ const incidents = [];   // เหตุขัดข้องที่ยัง�
 // ---------------------------------------------------------------
 const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const ROAD_TOP = 0.06;
-const OVER_H = 0.24;   // ความสูงยอดสะพานของทางแยกต่างระดับ (ต้องตรงกับ agents.js)
+// ทางแยกต่างระดับ: ความสูงดาดฟ้า (หน่วยช่อง) ตามระยะ u จากกลางสะพานตามแนวถนน: ช่วงราบ |u| ≤ 0.9 แล้วลาดลง 1.6 ช่อง (นุ่มแบบ smoothstep) จนถึงพื้นที่ |u| = 2.5
+const OVER_H = 0.34, OVER_FLAT = 0.9, OVER_RAMP = 1.6;
+const overH = u => {
+  const a = Math.abs(u);
+  if (a <= OVER_FLAT) return OVER_H;
+  if (a >= OVER_FLAT + OVER_RAMP) return 0;
+  const k = (OVER_FLAT + OVER_RAMP - a) / OVER_RAMP;
+  return OVER_H * (3 * k * k - 2 * k * k * k);
+};
+// ความสูงที่รถควรถูกยกที่ตำแหน่งต่อเนื่อง (cx, cz) ในหน่วยช่อง (กลางช่อง = +0.5) เมื่อวิ่งตามแกน axis
+const overLiftAt = (cx, cz, axis) => {
+  const tx = Math.floor(cx), tz = Math.floor(cz);
+  for (let k = -2; k <= 2; k++) {
+    const xx = axis === 'x' ? tx + k : tx, zz = axis === 'x' ? tz : tz + k, tl = tileAt(xx, zz);
+    if (tl?.t === 'road' && tl.j === 'over' && (tl.ax || 'x') === axis) return overH(axis === 'x' ? cx - (xx + 0.5) : cz - (zz + 0.5));
+  }
+  return 0;
+};
+// ช่องถนนนี้เป็นทางลาดของสะพานไหม: คืน { ax, off } (off = ตำแหน่งตามแนวสะพานเทียบช่องกลาง −2..2) หรือ null
+function overRampInfo(x, z) {
+  for (const off of [-2, -1, 1, 2]) {
+    let c = tileAt(x - off, z);
+    if (c?.t === 'road' && c.j === 'over' && (c.ax || 'x') === 'x' && !isType(x, z - 1, 'road') && !isType(x, z + 1, 'road')) return { ax: 'x', off };
+    c = tileAt(x, z - off);
+    if (c?.t === 'road' && c.j === 'over' && (c.ax || 'x') === 'z' && !isType(x - 1, z, 'road') && !isType(x + 1, z, 'road')) return { ax: 'z', off };
+  }
+  return null;
+}
+// สะพานวางได้เมื่อช่องกลางเป็นสี่แยก และ 2 ช่องแต่ละฝั่งตามแนวแกนเป็นถนนตรง (ไม่มีทางแยก/สะพานน้ำ/ทางพิเศษ) พื้นระดับใกล้กัน
+function overpassValid(x, z, ax) {
+  if (roadArms(x, z) !== 4 || tileIsWater[idx(x, z)]) return false;
+  const along = ax === 'x' ? [[1, 0], [-1, 0]] : [[0, 1], [0, -1]], h0 = tileMaxH[idx(x, z)];
+  for (const k of [-2, -1, 1, 2]) {
+    const xx = ax === 'x' ? x + k : x, zz = ax === 'x' ? z : z + k;
+    const tl = tileAt(xx, zz);
+    if (!tl || tl.t !== 'road' || tl.j || tileIsWater[idx(xx, zz)]) return false;
+    if (roadArms(xx, zz) !== 2 || !along.every(([dx, dz]) => isType(xx + dx, zz + dz, 'road'))) return false;
+    if (Math.abs(tileMaxH[idx(xx, zz)] - h0) > 0.4) return false;
+  }
+  return true;
+}
+// วาดส่วนของสะพานในช่องหนึ่ง (off = ตำแหน่งตามแนวสะพาน): ช่องกลางเป็นแผ่นพื้นบางข้ามถนนที่ตัด ช่องอื่นเป็นทางลาดถมดินพร้อมกำแพงกันดิน
+function buildOverSpan(g, ax, off, W) {
+  const dg = new THREE.Group(); dg.rotation.y = ax === 'x' ? 0 : Math.PI / 2; g.add(dg);
+  const NSEG = 8, DW = Math.min(W, 0.8);
+  for (let i = 0; i < NSEG; i++) {
+    const tt = -0.5 + (i + 0.5) / NSEG, u = off + tt, h = overH(u), topY = 0.06 + h;
+    const sl = Math.atan((overH(u + 0.01) - overH(u - 0.01)) / 0.02), len = (1 / NSEG) / Math.cos(sl) * 1.1;
+    if (Math.abs(u) > 0.5) {   // ทางลาด/คอสะพาน: ตันถึงพื้น
+      const hh = Math.max(0.01, topY - 0.05 - 0.03);
+      put(dg, boxGeo, M.concrete, tt, 0.05 + hh / 2, 0, 1 / NSEG * 1.02, hh, DW + 0.05);
+    } else {   // เหนือถนนที่ตัด: แผ่นพื้นสะพาน
+      put(dg, boxGeo, M.concrete, tt, topY - 0.02, 0, len, 0.04, DW + 0.03);
+    }
+    put(dg, boxGeo, M.road, tt, topY - 0.001, 0, len, 0.012, DW - 0.06).rotation.z = sl;
+    for (const sd of [-1, 1]) put(dg, boxGeo, M.metal, tt, topY + 0.04, sd * (DW / 2 - 0.006), len, 0.04, 0.014).rotation.z = sl;   // ราวกันตก
+    if (i % 2 === 0) put(dg, boxGeo, M.line, tt, topY + 0.0045, 0, len * 0.55, 0.003, 0.02).rotation.z = sl;
+  }
+}
+
 
 function flatMesh(parent, mat, px, py, pz, sx, sz, ry = 0) {
   const m = new THREE.Mesh(planeGeo, mat);
@@ -2455,6 +2515,7 @@ function animateConstruction(dt, time) {
   }
 }
 
+const rebuildQ = [];   // ช่องที่ต้องสร้างใหม่หลังช่องปัจจุบันเสร็จ (buildTile ใช้ตัวแปรร่วม จึงเรียกซ้อนกันไม่ได้)
 function buildTile(x, z) {
   if (!inBounds(x, z)) return;
   dirtyChunk(x, z);
@@ -2500,7 +2561,11 @@ function buildTile(x, z) {
   } else if (t.t === 'road') {
     // ทางเท้า (ทางหลวง = ไหล่ทาง) + ผิวแอสฟัลต์กว้างตามประเภทถนน + เส้นจราจร
     const kind = roadKind(x, z), W = ROAD_W[kind], hw = W / 2, arms = roadArms(x, z), junc = arms >= 3;
-    if (t.j && ((t.j === 'round' && arms < 3) || (t.j === 'over' && arms < 4))) delete t.j;   // ถนนรอบข้างหายไป ทางแยกพิเศษก็กลับเป็นทางแยกธรรมดา
+    if (t.j && ((t.j === 'round' && arms < 3) || (t.j === 'over' && !overpassValid(x, z, t.ax || 'x')))) {   // ถนนรอบข้างเปลี่ยนไป ทางแยกพิเศษก็กลับเป็นทางแยกธรรมดา
+      const wasOver = t.j === 'over', oax = t.ax || 'x';
+      delete t.j; delete t.ax;
+      if (wasOver) for (const k of [-2, -1, 1, 2]) rebuildQ.push([oax === 'x' ? x + k : x, oax === 'x' ? z : z + k]);   // ทางลาดที่เคยเป็นของสะพานนี้ต้องวาดใหม่เป็นถนนปกติ (เลื่อนไปทำหลังช่องนี้สร้างเสร็จ ไม่ซ้อนกัน)
+    }
     if (t.ow && !(arms === 2 && !t.j)) delete t.ow;   // ทางเดียวมีได้เฉพาะช่องถนนที่มี 2 แขน (ตรงหรือโค้ง) และไม่ใช่ทางแยกพิเศษ
     const OW = t.ow || null;
     const J = t.j || null, RM = kind === 'dirt' ? M.dirtRoad : M.road, RA = kind === 'dirt' ? M.dirtArc : M.roadArc;
@@ -2569,19 +2634,9 @@ function buildTile(x, z) {
         if (dx !== 0) put(g, boxGeo, RM, dx * c, 0.05, 0, len, 0.02, nw); else put(g, boxGeo, RM, 0, 0.05, dz * c, nw, 0.02, len);
       }
     }
-    if (J === 'over') {
-      // ทางแยกต่างระดับ: ถนนแกน ax ยกเป็นสะพานโค้งข้ามถนนที่ตัด (ผิวสะพานเอียงลาดขึ้น-ลงภายในช่อง)
-      const dg = new THREE.Group(); dg.rotation.y = (t.ax || 'x') === 'x' ? 0 : Math.PI / 2; g.add(dg);
-      const H = OVER_H, NSEG = 10, DW = Math.min(W, 0.8);
-      for (let i = 0; i < NSEG; i++) {
-        const tc = -0.5 + (i + 0.5) / NSEG, h = H * (0.5 + 0.5 * Math.cos(2 * Math.PI * tc)), sl = Math.atan(-H * Math.PI * Math.sin(2 * Math.PI * tc));
-        const len = (1 / NSEG) / Math.cos(sl) * 1.08, by = 0.05 + h;
-        put(dg, boxGeo, M.concrete, tc, by, 0, len, 0.035, DW).rotation.z = sl;
-        put(dg, boxGeo, M.road, tc, by + 0.02, 0, len, 0.008, DW - 0.07).rotation.z = sl;
-        for (const sd of [-1, 1]) put(dg, boxGeo, M.metal, tc, by + 0.055, sd * (DW / 2 - 0.012), len, 0.04, 0.014).rotation.z = sl;
-        if (i % 2 === 0) put(dg, boxGeo, M.line, tc, by + 0.0255, 0, len * 0.6, 0.003, 0.02).rotation.z = sl;
-      }
-    }
+    // ทางแยกต่างระดับ: สะพานยาว 5 ช่องตามแนวถนนสายหลัก (กลาง = ข้ามถนนที่ตัด, ±1 ±2 = ทางลาดถมดินพร้อมกำแพงกันดิน)
+    const OVS = J === 'over' ? { ax: t.ax || 'x', off: 0 } : (arms === 2 ? overRampInfo(x, z) : null);
+    if (OVS) buildOverSpan(g, OVS.ax, OVS.off, W);
     for (const [dx, dz] of corner || J === 'round' ? [] : dirs) {
       if (!rd(dx, dz)) continue;
       const hx = dx !== 0, sg = dx || dz;
@@ -2713,6 +2768,7 @@ function buildTile(x, z) {
   g.userData.cullR = 1.6 + 0.75 * Math.max(t.fw || 1, t.fd || 1);   // รัศมีทดสอบกล้อง (อาคารหลายช่องใหญ่กว่า)
   tilesCullDirty = true;
   swayList = null;
+  if (rebuildQ.length) { const q = rebuildQ.splice(0); for (const [qx, qz] of q) buildTile(qx, qz); }
 }
 
 // รั้ว/ราวกันตกตามขอบช่องที่ติดน้ำ ขอบแผนที่ หรือหน้าผาเตี้ยๆ (ช่องข้างเคียงที่มีอะไรสร้างอยู่แล้วไม่ต้องมี)
@@ -2845,6 +2901,7 @@ function refresh(x, z) {
       buildTile(x + dx, z + dz);
     }
   }
+  for (let k = -2; k <= 2; k++) for (const [xx, zz] of [[x + k, z], [x, z + k]]) if ((xx !== x || zz !== z) && tileAt(xx, zz)?.j === 'over') buildTile(xx, zz);
   // เขตความเร็วเปลี่ยน: ตั้งป้ายใหม่บนถนนช่องนั้นและช่องติดกัน (ป้ายอยู่บนช่องที่รถเข้าเขต)
   const near = (px, pz) => Math.abs(px - x) + Math.abs(pz - z) <= 2;
   const redo = new Set();
@@ -2951,13 +3008,16 @@ function applyTool(x, z) {
     const need = JV === 'over' ? 4 : 3;
     if (roadArms(x, z) < need) { audio.sfx('error'); return toast(t(JV === 'over' ? 'toast.over' : 'toast.round')); }
     if (cur.j === JV) return;
+    const rankOf = k => ({ soi: 0, dirt: 0, street: 1, boulevard: 2, avenue: 2, highway: 3 }[k] ?? 1);
+    const axOk = JV === 'over' ? ['x', 'z'].filter(a => overpassValid(x, z, a)) : [];
+    if (JV === 'over' && !axOk.length) { audio.sfx('error'); return toast(t('toast.over2')); }
     const VJ = VARIANTS.road.find(v => v.k === currentVar.road);
     const rq = reqFailOf(VJ);
     if (rq) { audio.sfx('error'); return toast(t(rq[0], rq[1])); }
     if (state.money < VJ.cost) { audio.sfx('error'); return toast(t('toast.nomoney')); }
     state.money -= VJ.cost; gainXp(buildXp(VJ.cost));
     cur.j = JV;
-    if (JV === 'over') { const rank = k => ({ soi: 0, dirt: 0, street: 1, boulevard: 2, avenue: 2, highway: 3 }[k] ?? 1); cur.ax = Math.max(rank(roadKind(x + 1, z)), rank(roadKind(x - 1, z))) >= Math.max(rank(roadKind(x, z + 1)), rank(roadKind(x, z - 1))) ? 'x' : 'z'; }
+    if (JV === 'over') { const rx = Math.max(rankOf(roadKind(x + 1, z)), rankOf(roadKind(x - 1, z))), rz = Math.max(rankOf(roadKind(x, z + 1)), rankOf(roadKind(x, z - 1))); cur.ax = axOk.length === 1 ? axOk[0] : rx >= rz ? 'x' : 'z'; }
     countPlace('road');
     audio.sfx('place'); refresh(x, z); updateHUD();
     return;
@@ -3046,7 +3106,7 @@ function computeStats() {
     if (t.t === 'res') { resL.push([i % N, Math.floor(i / N), POP_PER[lv]]); s.pop += POP_PER[lv]; s.powerUse += POWER_USE.res[lv]; s.waterUse += WATER_USE.res[lv]; }
     else if (t.t === 'com') { s.jobsCom += JOBS_COM[lv]; s.powerUse += POWER_USE.com[lv]; s.waterUse += WATER_USE.com[lv]; s.comLv += lv; }
     else if (t.t === 'ind') { if (lv) tradeP.push({ key: 'ind:lv' + lv }); s.jobsInd += JOBS_IND[lv]; s.powerUse += POWER_USE.ind[lv]; s.waterUse += WATER_USE.ind[lv]; s.indLv += lv; }
-    else if (t.t === 'road') { s.roads++; s.roadCap += (ROAD_CAP[t.v || 'street'] ?? 1) * (t.j === 'over' ? 2.2 : t.j === 'round' ? 1.4 : 1) * (t.ow ? 1.3 : 1); if (t.j) s.roadUp += t.j === 'over' ? 3 : 1; s.roadUp += ROAD_UPKEEP[t.v] ?? 0.5; if (tileIsWater[i]) s.bridges++; if (!t.j && isJunction(i % N, Math.floor(i / N))) s.junctions++; }
+    else if (t.t === 'road') { s.roads++; s.roadCap += (ROAD_CAP[t.v || 'street'] ?? 1) * (t.j === 'over' ? 2.2 : t.j === 'round' ? 1.4 : 1) * (t.ow ? 1.3 : 1); if (t.j) s.roadUp += t.j === 'over' ? 5 : 1; s.roadUp += ROAD_UPKEEP[t.v] ?? 0.5; if (tileIsWater[i]) s.bridges++; if (!t.j && isJunction(i % N, Math.floor(i / N))) s.junctions++; }
     else if (t.t === 'park') { const PV = variantOf(t); s.parks += (t.fw || 1) * (t.fd || 1); s.waterUse += 1 + (t.fw ? t.fw * t.fd : 0); s.upkeep += PV?.upkeep ? PV.upkeep : 0; s.jobsCom += PV?.jobs || 0; }
     else if (t.t === 'power') { const V = variantOf(t), c = plantCap(t, i); s.plants++; s.powerCap += c; if (V.green) s.greenCap += c; s.upkeep += V.upkeep; }
     else if (t.t === 'water') { const V = variantOf(t); s.wplants++; s.waterCap += plantCap(t, i) * (V.k === 'well' ? 1 : 1 + 0.15 * weather.state.rain); s.upkeep += V.upkeep; } // ฝนตก น้ำดิบมากขึ้น (บ่อบาดาลไม่ขึ้นกับฝน)

@@ -11,6 +11,8 @@ export const LANGS = [
 
 const D = {
   th: {
+    "toast.over2": "ทางแยกต่างระดับต้องมีถนนตรงยาวอย่างน้อย 2 ช่องทั้งสองฝั่งตามแนวสะพาน (ไม่มีทางแยกหรือสะพานน้ำคั่น พื้นระดับใกล้กัน) รวม 5 ช่อง",
+    "v.road.overpass.note": "วางทับสี่แยก: ถนนสายหลักข้ามสะพานยาว 5 ช่อง มีทางลาดสองฝั่ง (ต้องมีถนนตรงอีกฝั่งละ 2 ช่อง) ไม่ต้องรอไฟ จุรถได้มากสุด",
     "tab.budget": "งบประมาณ",
     "bud.tax": "อัตราภาษี",
     "bud.taxrate": "อัตราภาษีเมือง",
@@ -756,6 +758,8 @@ const D = {
     'daylen': '1 วันในเกม = 5 นาที',
   },
   en: {
+    "toast.over2": "A flyover needs 2 straight road tiles on each side along its axis (no junctions or water bridges, similar ground level), 5 tiles in total",
+    "v.road.overpass.note": "Place on a 4-way crossing: the main road climbs a 5-tile bridge with ramps (needs 2 straight tiles each side), no signals, highest capacity",
     "tab.budget": "Budget",
     "bud.tax": "Tax rate",
     "bud.taxrate": "City tax rate",
@@ -1494,6 +1498,8 @@ const D = {
     'daylen': '1 in-game day = 5 minutes',
   },
   zh: {
+    "toast.over2": "立交桥需要沿桥轴方向两侧各有至少 2 格笔直道路（无路口或跨水桥，地势相近），共 5 格",
+    "v.road.overpass.note": "建在十字路口：主路爬上 5 格长的桥并有引桥（两侧各需 2 格直路），无需信号灯，通行量最大",
     "tab.budget": "预算",
     "bud.tax": "税率",
     "bud.taxrate": "城市税率",

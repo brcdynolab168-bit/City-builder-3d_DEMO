@@ -32,7 +32,7 @@ const TURN_V = 0.5, UTURN_V = 0.25;   // ความเร็วเลี้ย
 const LANE_LAT = { soi: [0.12], street: [0.15], avenue: [0.32, 0.11], highway: [0.35, 0.14] };
 const latHit = (p, q) => Math.abs(p - q) < 0.14;   // อยู่เลนเดียวกัน (ตัวรถกว้าง ~0.15)
 
-export function createAgents({ scene, N, tileType, groundY = () => 0, signal = () => null, roadKind = () => 'street', speedLimit = () => 50, overpassAt = () => null, oneWayAt = () => null }) {
+export function createAgents({ scene, N, tileType, groundY = () => 0, signal = () => null, roadKind = () => 'street', speedLimit = () => 50, overpassAt = () => null, oneWayAt = () => null, overLiftAt = () => 0 }) {
   const root = new THREE.Group();
   root.name = 'agents';
   scene.add(root);
@@ -611,7 +611,6 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
     const E = tileType(x + 1, z) === 'road', W = tileType(x - 1, z) === 'road', S = tileType(x, z + 1) === 'road', Nn = tileType(x, z - 1) === 'road';
     return E + W + S + Nn === 2 && E !== W && S !== Nn;
   };
-  const OVER_H = 0.24;   // ต้องตรงกับ OVER_H ใน main.js
   function pickNext(kind, bx, bz, d) {
     const opts = [];
     for (const nd of DIRS) {
@@ -875,10 +874,8 @@ export function createAgents({ scene, N, tileType, groundY = () => 0, signal = (
         px2 = qx + (tz / tl) * m * a.side; pz2 = qz + (-tx / tl) * m * a.side;
         yaw = Math.atan2(tx, tz);
       }
-      // ทางแยกต่างระดับ: รถที่วิ่งตามแกนสะพานถูกยกตามโค้งสะพานภายในช่อง
-      const ax = a.d[0] !== 0 ? 'x' : 'z';
-      if (a.s < 0.5) { if (overpassAt(a.x, a.z) === ax) lift = OVER_H * (0.5 + 0.5 * Math.cos(2 * Math.PI * a.s)); }
-      else if (overpassAt(bx, bz) === ax) lift = OVER_H * (0.5 + 0.5 * Math.cos(2 * Math.PI * (a.s - 1)));
+      // ทางแยกต่างระดับ (สะพาน 5 ช่อง): ยกรถตามความสูงดาดฟ้า ณ ตำแหน่งต่อเนื่องของรถ เมื่อวิ่งตามแนวสะพาน
+      lift = overLiftAt(a.x + 0.5 + a.d[0] * a.s, a.z + 0.5 + a.d[1] * a.s, a.d[0] !== 0 ? 'x' : 'z');
     }
     let ground = 0.06;
     if (a.kind !== 'car') {
