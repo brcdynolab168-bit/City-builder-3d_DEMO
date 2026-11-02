@@ -2534,9 +2534,17 @@ function buildTile(x, z) {
   if (t.t === 'road') {
     // เอียงผิวถนนตามความลาดของช่องข้างเคียง (ทางลาดขึ้นสะพานต่อเนื่อง ไม่เป็นขั้นบันได)
     const ys = (dx, dz) => (inBounds(x + dx, z + dz) ? tileY(x + dx, z + dz) : ty);
-    const sx = clamp((ys(1, 0) - ys(-1, 0)) / 2, -0.5, 0.5), sz = clamp((ys(0, 1) - ys(0, -1)) / 2, -0.5, 0.5);
-    g.rotation.z = Math.atan(sx);
-    g.rotation.x = -Math.atan(sz);
+    // ขอบช่อง = ค่าเฉลี่ยความสูงของช่องนี้กับช่องข้างเคียง (ทั้งสองช่องคำนวณได้ค่าเดียวกัน) ผิวถนนจึงต่อเนื่องไม่เป็นขั้น/ไม่มีรอยแยกที่รอยต่อ
+    const yE = ys(1, 0), yW = ys(-1, 0), yS = ys(0, 1), yN = ys(0, -1);
+    const rE = isType(x + 1, z, 'road'), rW = isType(x - 1, z, 'road'), rS = isType(x, z + 1, 'road'), rN = isType(x, z - 1, 'road');
+    // ถนนตรงตามแกนเดียว: ลาดเฉพาะตามแนวถนน ไม่เอียงข้างและไม่ปนความโค้งของอีกแกน ขอบหัวท้ายจึงตรงกับช่องต่อไปพอดี
+    const alongX = (rE || rW) && !rS && !rN, alongZ = (rS || rN) && !rE && !rW;
+    const sx = alongZ ? 0 : clamp((yE - yW) / 2, -0.5, 0.5), sz = alongX ? 0 : clamp((yS - yN) / 2, -0.5, 0.5);
+    const cxo = alongZ ? 0 : (yE - 2 * ty + yW) / 4, czo = alongX ? 0 : (yS - 2 * ty + yN) / 4;
+    g.position.y = ty + clamp(alongX ? cxo : alongZ ? czo : (cxo + czo) / 2, -0.2, 0.2);   // ยกกลางช่องให้ขอบตรงกับช่องข้างๆ
+    // เฉือนผิว (ไม่หมุน): ความสูงที่ขอบ = กลาง ± ความลาด/2 พอดี หมุนจะทำให้ขอบต่ำลงเล็กน้อยตามมุมและเกิดขั้นที่รอยต่อ
+    g.matrixAutoUpdate = false;
+    g.matrix.set(1, 0, 0, g.position.x, sx, 1, sz, g.position.y, 0, 0, 1, g.position.z, 0, 0, 0, 1);
   }
   swayList = [];
   const r = hash(x, z);
