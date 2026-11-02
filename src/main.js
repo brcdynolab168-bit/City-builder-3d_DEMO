@@ -2508,7 +2508,7 @@ function buildTile(x, z) {
         const a = a0 + da * i / n, c = Math.cos(a), s = Math.sin(a);
         for (const r of [r0, r1]) { pos.push(cx + r * c, 0.0605, cz + r * s); uv.push(cx + r * c + 0.5, cz + r * s + 0.5); }
       }
-      for (let i = 0; i < n; i++) { const k = i * 2; idxs.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+      for (let i = 0; i < n; i++) { const k = i * 2; idxs.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }   // วนทวนเข็มเมื่อมองจากด้านบน (หน้าผิวชี้ขึ้น) ไม่งั้นแสงคำนวณกลับด้านและผิวมืดกว่าถนนตรง
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
       geo.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
